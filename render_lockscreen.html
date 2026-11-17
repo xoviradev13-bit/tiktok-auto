@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      background: #08090d;
+      font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      color: #ffffff;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Wallpaper Background with ambient glows */
+    .wallpaper {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 80% 20%, rgba(138, 43, 226, 0.35) 0%, transparent 50%),
+        radial-gradient(circle at 20% 60%, rgba(0, 242, 254, 0.25) 0%, transparent 50%),
+        radial-gradient(circle at 50% 90%, rgba(254, 44, 85, 0.25) 0%, transparent 60%),
+        linear-gradient(180deg, #090a10 0%, #0d0f18 50%, #06070a 100%);
+      z-index: 0;
+    }
+
+    /* Dynamic grid & subtle grain overlay */
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: 0.6;
+      z-index: 1;
+    }
+
+    .screen-container {
+      position: relative;
+      z-index: 10;
+      width: 1080px;
+      height: 1920px;
+      display: flex;
+      flex-direction: column;
+      padding: 0 48px;
+    }
+
+    /* Top Status Bar */
+    .status-bar {
+      height: 120px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 24px;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .dynamic-island {
+      width: 280px;
+      height: 64px;
+      background: #000000;
+      border-radius: 40px;
+      margin: 0 auto;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Lock Screen Header: Date & Clock */
+    .lock-header {
+      margin-top: 60px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .lock-icon {
+      margin-bottom: 12px;
+      opacity: 0.85;
+    }
+
+    .date-display {
+      font-size: 38px;
+      font-weight: 600;
+      color: #e2e8f0;
+      letter-spacing: -0.5px;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .time-display {
+      font-size: 190px;
+      font-weight: 800;
+      line-height: 0.95;
+      letter-spacing: -6px;
+      margin: 8px 0 24px;
+      background: linear-gradient(180deg, #ffffff 30%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 4px 24px rgba(0, 0, 0, 0.7));
+    }
+
+    /* Notifications Stack */
+    .notifications-wrapper {
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .notif-section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 26px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #94a3b8;
+    }
+
+    .notif-badge {
+      background: #fe2c55;
+      color: #fff;
+      padding: 4px 16px;
+      border-radius: 20px;
+      font-size: 22px;
+      font-weight: 800;
+      box-shadow: 0 0 16px rgba(254, 44, 85, 0.6);
+    }
+
+    /* Glassmorphism Notification Card */
+    .notif-card {
+      background: rgba(26, 30, 46, 0.65);
+      backdrop-filter: blur(40px);
+      -webkit-backdrop-filter: blur(40px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 36px;
+      padding: 26px 30px;
+      box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6),
+        inset 0 1px 1px rgba(255, 255, 255, 0.25);
+      display: flex;
+      gap: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Hero Telegram Highlight Card */
+    .notif-card.hero-telegram {
+      background: linear-gradient(135deg, rgba(34, 158, 217, 0.25) 0%, rgba(20, 30, 50, 0.75) 100%);
+      border: 2px solid rgba(34, 158, 217, 0.65);
+      box-shadow: 0 20px 50px rgba(34, 158, 217, 0.35),
+        0 0 30px rgba(34, 158, 217, 0.2),
+        inset 0 1px 2px rgba(255, 255, 255, 0.5);
+    }
+
+    .notif-card.hero-telegram::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #229ed9, #00f2fe, #ffe600, #229ed9);
+    }
+
+    .app-icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .app-icon.telegram {
+      background: linear-gradient(135deg, #2aabee 0%, #229ed9 100%);
+    }
+
+    .app-icon.tiktok {
+      background: #000000;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .notif-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .notif-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .app-name {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      color: #e2e8f0;
+    }
+
+    .notif-time {
+      font-size: 22px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    .notif-title {
+      font-size: 31px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.25;
+      letter-spacing: -0.3px;
+      margin-bottom: 6px;
+    }
+
+    .notif-desc {
+      font-size: 25px;
+      line-height: 1.35;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+
+    .highlight-gold {
+      color: #ffd700;
+      font-weight: 800;
+      text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+    }
+
+    .highlight-cyan {
+      color: #00f2fe;
+      font-weight: 700;
+    }
+
+    .highlight-pink {
+      color: #ff2c55;
+      font-weight: 700;
+    }
+
+    /* Bottom Controls: Flashlight & Camera */
+    .bottom-bar {
+      margin-top: auto;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+    }
+
+    .quick-btn {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .home-indicator {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 240px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="wallpaper"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="screen-container">
+
+    <!-- Dynamic Island -->
+    <div class="dynamic-island"></div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div>9:41</div>
+      <div class="status-icons">
+        <!-- 5G Signal -->
+        <svg width="26" height="20" viewBox="0 0 26 20" fill="#ffffff">
+          <rect x="0" y="14" width="4" height="6" rx="1" />
+          <rect x="7" y="10" width="4" height="10" rx="1" />
+          <rect x="14" y="5" width="4" height="15" rx="1" />
+          <rect x="21" y="0" width="4" height="20" rx="1" />
+        </svg>
+        <!-- Wifi -->
+        <svg width="26" height="20" viewBox="0 0 26 20" fill="#ffffff">
+          <path
+            d="M13 15a3 3 0 100 6 3 3 0 000-6zm-7.07-4.93a10 10 0 0114.14 0l-2.12 2.12a7 7 0 00-9.9 0L5.93 10.07zM1.69 5.83a16 16 0 0122.62 0l-2.12 2.12a13 13 0 00-18.38 0L1.69 5.83z" />
+        </svg>
+        <!-- Battery -->
+        <svg width="34" height="18" viewBox="0 0 34 18" fill="none">
+          <rect x="1" y="1" width="27" height="16" rx="4" stroke="#ffffff" stroke-width="2" />
+          <rect x="4" y="4" width="21" height="10" rx="2" fill="#ffffff" />
+          <path d="M30 6v6c1 0 2-1 2-2V8c0-1-1-2-2-2z" fill="#ffffff" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Lock Header -->
+    <div class="lock-header">
+      <div class="lock-icon">
+        <svg width="24" height="28" viewBox="0 0 24 28" fill="#ffffff" opacity="0.8">
+          <path
+            d="M19 10h-1V7a6 6 0 00-12 0v3H5a3 3 0 00-3 3v12a3 3 0 003 3h14a3 3 0 003-3V13a3 3 0 00-3-3zm-11-3a4 4 0 018 0v3H8V7zm12 18a1 1 0 01-1 1H5a1 1 0 01-1-1V13a1 1 0 011-1h14a1 1 0 011 1v12z" />
+        </svg>
+      </div>
+      <div class="date-display">Thursday, November 13</div>
+      <div class="time-display">09:41</div>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="notifications-wrapper">
+      <div class="notif-section-title">
+        <span>Notifications</span>
+        <span class="notif-badge">Viral Alert 🔥</span>
+      </div>
+
+      <!-- Notification 1: Telegram 10K Followers Hero -->
+      <div class="notif-card hero-telegram">
+        <div class="app-icon telegram">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="#ffffff">
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z" />
+          </svg>
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="app-name">Telegram Bot</span>
+            <span class="notif-time">now</span>
+          </div>
+          <div class="notif-title">🎉 10,000 Followers Reached!</div>
+          <div class="notif-desc">Profile <span class="highlight-gold">@TechViral_US</span> hit <span
+              class="highlight-gold">10,240 followers</span>! 🚀 Ready for Creator Rewards monetization!</div>
+        </div>
+      </div>
+
+      <!-- Notification 2: TikTok Views Explosion -->
+      <div class="notif-card">
+        <div class="app-icon tiktok">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#ffffff">
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.48 6.3 6.3 0 0 0 1.86-4.47V8.71a8.21 8.21 0 0 0 4.91 1.62v-3.64z"
+              fill="#00f2fe" />
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.48 6.3 6.3 0 0 0 1.86-4.47V8.71a8.21 8.21 0 0 0 4.91 1.62v-3.64z"
+              fill="#fe2c55" style="mix-blend-mode: screen; transform: translate(1px, 1px);" />
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.48 6.3 6.3 0 0 0 1.86-4.47V8.71a8.21 8.21 0 0 0 4.91 1.62v-3.64z"
+              fill="#ffffff" style="mix-blend-mode: screen;" />
+          </svg>
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="app-name">TikTok Studio</span>
+            <span class="notif-time">2m ago</span>
+          </div>
+          <div class="notif-title">Your video is going viral! 📈</div>
+          <div class="notif-desc">"Psychology Fact #42" reached <span class="highlight-cyan">584,200 views</span> and
+            <span class="highlight-pink">49.2K likes</span> in the last 2 hours.
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification 3: TikTok Follower Spike -->
+      <div class="notif-card">
+        <div class="app-icon tiktok">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#ffffff">
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.48 6.3 6.3 0 0 0 1.86-4.47V8.71a8.21 8.21 0 0 0 4.91 1.62v-3.64z" />
+          </svg>
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="app-name">TikTok</span>
+            <span class="notif-time">6m ago</span>
+          </div>
+          <div class="notif-title">+2,419 new followers</div>
+          <div class="notif-desc"><span class="highlight-cyan">@alex_mmo, @creator_flow</span> and 2,417 others started
+            following you.</div>
+        </div>
+      </div>
+
+      <!-- Notification 4: Scheduled Video Published -->
+      <div class="notif-card">
+        <div class="app-icon tiktok">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="#ffffff">
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.48 6.3 6.3 0 0 0 1.86-4.47V8.71a8.21 8.21 0 0 0 4.91 1.62v-3.64z" />
+          </svg>
+        </div>
+        <div class="notif-content">
+          <div class="notif-header">
+            <span class="app-name">ShortsStack Auto-Pilot</span>
+            <span class="notif-time">15m ago</span>
+          </div>
+          <div class="notif-title">✅ Batch Upload Complete (4/4)</div>
+          <div class="notif-desc">Successfully published to 4 GPMLogin profiles with 0 shadowban flags.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="bottom-bar">
+      <div class="quick-btn">
+        <!-- Flashlight -->
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="#ffffff">
+          <path d="M6 2h12v3l-4 4v11a2 2 0 01-2 2h-0a2 2 0 01-2-2V9L6 5V2z" />
+        </svg>
+      </div>
+      <div class="quick-btn">
+        <!-- Camera -->
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="#ffffff">
+          <path
+            d="M12 9a3 3 0 100 6 3 3 0 000-6zm-8-3h3.17l1.83-2h6l1.83 2H20a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2zm8 11a5 5 0 100-10 5 5 0 000 10z" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Home Indicator -->
+    <div class="home-indicator"></div>
+
+  </div>
+
+</body>
+
+</html>

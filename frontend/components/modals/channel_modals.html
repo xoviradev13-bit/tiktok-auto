@@ -1,0 +1,676 @@
+<div class="modal" id="channelDetailModal">
+    <div class="modal-content glass-panel modal-channel-detail">
+        <!-- Modal Header / Hero Banner -->
+        <div class="channel-detail-hero">
+            <div class="channel-hero-cover"></div>
+            <div class="channel-hero-content">
+                <div class="channel-hero-avatar-wrap">
+                    <img id="detailChannelAvatar" src="" alt="Avatar" class="channel-hero-avatar">
+                    <div id="detailAvatarFallback" class="channel-hero-avatar-fallback">
+                        <i class="fa-brands fa-youtube"></i>
+                    </div>
+                </div>
+                <div class="channel-hero-meta">
+                    <div class="channel-hero-title-row">
+                        <h2 id="detailChannelTitle" class="channel-hero-title">--</h2>
+                        <span id="detailChannelActiveBadge" class="badge badge-success">--</span>
+                    </div>
+                    <div class="channel-hero-sub-row">
+                        <span id="detailChannelHandle" class="channel-hero-handle">--</span>
+                        <div class="channel-id-chip">
+                            <span id="detailChannelId">--</span>
+                            <button type="button" class="btn-copy-mini" id="btnCopyDetailId" title="Sao chép ID">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                        </div>
+                        <span id="detailChannelCountry" class="channel-country-pill">--</span>
+                        <span id="detailChannelJoined" class="channel-joined-pill"><i
+                                class="fa-regular fa-calendar"></i> --</span>
+                    </div>
+                </div>
+                <div class="channel-hero-actions">
+                    <a id="detailChannelYtLink" href="#" target="_blank" rel="noopener"
+                        class="btn btn-secondary btn-sm">
+                        <i class="fa-brands fa-youtube text-danger"></i> Mở YouTube
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-sm has-tooltip tooltip-bottom"
+                        id="btnRefreshChannelStats" data-tooltip="Cập nhật số liệu mới nhất"
+                        title="Cập nhật số liệu mới nhất" onclick="refreshActiveChannelStats(this)">
+                        <i class="fa-solid fa-arrows-rotate text-cyan"></i> Cập nhật kênh
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnToggleSaveFromDetail">
+                        <i class="fa-solid fa-bookmark"></i> <span id="detailSaveBtnText">Lưu Kênh</span>
+                    </button>
+                </div>
+            </div>
+            <button type="button" class="modal-corner-close" onclick="closeChannelDetailModal()" title="Đóng">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="modal-body channel-detail-body">
+            <!-- 8 Quick KPI Stat Cards -->
+            <div class="detail-kpi-grid">
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-blue"><i class="fa-solid fa-users"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Subscribers</span>
+                        <span class="detail-kpi-val" id="detailSubs">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-cyan"><i class="fa-solid fa-video"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Tổng Số Video</span>
+                        <span class="detail-kpi-val" id="detailVideos">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-purple"><i class="fa-solid fa-eye"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Lượt Xem TB</span>
+                        <span class="detail-kpi-val" id="detailAvgViews">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-indigo"><i class="fa-solid fa-chart-line"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Tổng Lượt Xem</span>
+                        <span class="detail-kpi-val" id="detailTotalViews">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-gold"><i class="fa-solid fa-fire"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Tỷ Lệ View/Sub</span>
+                        <span class="detail-kpi-val" id="detailRatio">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-green"><i class="fa-solid fa-calendar-check"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Tần Suất Đăng</span>
+                        <span class="detail-kpi-val" id="detailCadence">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-pink"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Video Mới Nhất</span>
+                        <span class="detail-kpi-val" id="detailLastUpload">--</span>
+                    </div>
+                </div>
+                <div class="detail-kpi-card">
+                    <div class="detail-kpi-icon bg-emerald"><i class="fa-solid fa-signal"></i></div>
+                    <div class="detail-kpi-info">
+                        <span class="detail-kpi-label">Trạng Thái Kênh</span>
+                        <span class="detail-kpi-val" id="detailStatus">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Details Section: Description & Tags/Topics -->
+            <div class="detail-sections-row">
+                <!-- Left: Description -->
+                <div class="detail-card detail-description-card">
+                    <div class="detail-card-header">
+                        <h4><i class="fa-solid fa-align-left text-primary"></i> Mô Tả & Giới Thiệu Kênh</h4>
+                    </div>
+                    <div class="detail-description-box" id="detailDescription">
+                        Chưa có mô tả cho kênh này.
+                    </div>
+                </div>
+
+                <!-- Right: Tags & Topics -->
+                <div class="detail-card detail-tags-card">
+                    <div class="detail-card-header">
+                        <h4><i class="fa-solid fa-tags text-cyan"></i> Thẻ Từ Khóa</h4>
+                    </div>
+                    <div class="detail-tags-wrap" id="detailKeywordsList">
+                        <span class="detail-no-data">Không có thẻ từ khóa nào</span>
+                    </div>
+
+                    <div class="detail-card-header mt-3">
+                        <h4><i class="fa-solid fa-layer-group text-purple"></i> Phân Loại Chủ Đề
+                        </h4>
+                    </div>
+                    <div class="detail-tags-wrap" id="detailTopicsList">
+                        <span class="detail-no-data">Không có chủ đề phân loại</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Videos List (if any) -->
+            <div class="detail-card mt-3" id="detailRecentVideosSection">
+                <div class="detail-card-header">
+                    <h4><i class="fa-solid fa-film text-gold"></i> Các Video Đăng Tải Gần Đây</h4>
+                    <span class="badge badge-info" id="detailRecentVideosCount">0 Video</span>
+                </div>
+                <div class="detail-recent-videos-list" id="detailRecentVideosList">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- Similar Channels List Below -->
+            <div class="detail-card mt-4 similar-channels-section">
+                <div class="detail-card-header">
+                    <div>
+                        <h4><i class="fa-solid fa-shapes text-cyan"></i> Danh Sách Kênh Tương Đồng Cùng Ngách</h4>
+                        <p class="panel-sub" style="margin: 2px 0 0 0; font-size: 12px;">Các kênh có chủ đề, từ
+                            khóa, quốc gia hoặc tần suất đăng bài tương đồng</p>
+                    </div>
+                    <span class="badge badge-info" id="similarChannelsBadge">0 Kênh gợi ý</span>
+                </div>
+                <div class="similar-channels-grid mt-3" id="similarChannelsGrid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer detail-modal-footer">
+            <button class="btn btn-secondary" onclick="closeChannelDetailModal()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cài Đặt Chi Tiết Kênh -->
+<div class="modal" id="channelSettingsModal">
+    <div class="modal-content glass-panel modal-lg">
+        <div class="modal-header">
+            <div>
+                <h3><i class="fa-solid fa-sliders text-primary"></i> Cài Đặt Kênh: <span id="modalChannelTitleHeader"
+                        class="text-accent"></span></h3>
+                <p class="modal-sub" id="modalChannelIdSub"></p>
+            </div>
+            <button type="button" class="close-btn has-tooltip" onclick="closeChannelSettingsModal()"
+                data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="settingChannelId">
+
+            <!-- Quick Link & Copy Actions Bar -->
+            <div class="channel-quick-actions-bar mb-3">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="openCurrentChannelYouTube()">
+                    <i class="fa-brands fa-youtube text-danger"></i> Mở Kênh YouTube
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="copyCurrentChannelUrl()">
+                    <i class="fa-solid fa-copy"></i> Sao Chép URL
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnModalScanNow"
+                    onclick="scanCurrentChannelNow(this)">
+                    <i class="fa-solid fa-bolt"></i> Quét Kênh Này Ngay
+                </button>
+                <button type="button" class="btn btn-sm btn-danger" id="btnModalUnsaveChannel"
+                    onclick="deleteChannelFromModal(this)" title="Bỏ lưu kênh khỏi danh sách theo dõi">
+                    <i class="fa-solid fa-trash-can"></i> Bỏ lưu
+                </button>
+            </div>
+
+            <div class="modal-form-grid">
+                <div class="form-group full-width">
+                    <label><i class="fa-solid fa-tag"></i> Gắn Tên Hiển Thị:</label>
+                    <input type="text" id="settingDisplayName" class="input-field"
+                        placeholder="Ví dụ: Kênh Podcast US #01 (Chủ đề Tài chính)...">
+                    <small class="form-hint">Đặt tên gợi nhớ để phân loại thay vì tên gốc của kênh.</small>
+                </div>
+
+                <div class="form-group full-width">
+                    <label><i class="fa-solid fa-shield-halved"></i> Gắn Proxy Riêng Cho Kênh (Tùy chọn):</label>
+                    <input type="text" id="settingCustomProxy" class="input-field"
+                        placeholder="http://user:pass@ip:port hoặc ip:port">
+                    <small class="form-hint">Dùng proxy riêng cho kênh này nếu IP chính bị chặn hoặc cần xoay
+                        IP.</small>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fa-solid fa-folder-arrow-down"></i> Thư Mục Lưu Video Tải Về:</label>
+                    <div style="display:flex; gap:6px; align-items:center;" class="mt-1">
+                        <input type="text" id="settingDownloadDir" class="input-field"
+                            placeholder="Mặc định: data/downloads" style="flex:1;">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="browseFolderForInput('settingDownloadDir')"
+                            data-tooltip="Chọn thư mục trên máy tính"
+                            style="height:42px; padding:0 12px; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-folder-open text-cyan"></i> Chọn Thư Mục
+                        </button>
+                    </div>
+                    <small class="form-hint">Đường dẫn thư mục lưu file MP4 gốc trên máy tính.</small>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fa-solid fa-wand-magic-sparkles"></i> Thư Mục Lưu Video Render:</label>
+                    <div style="display:flex; gap:6px; align-items:center;" class="mt-1">
+                        <input type="text" id="settingRenderDir" class="input-field"
+                            placeholder="Mặc định: data/rendered" style="flex:1;">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="browseFolderForInput('settingRenderDir')" data-tooltip="Chọn thư mục trên máy tính"
+                            style="height:42px; padding:0 12px; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-folder-open text-cyan"></i> Chọn Thư Mục
+                        </button>
+                    </div>
+                    <small class="form-hint">Đường dẫn thư mục lưu video đã render chuẩn hóa.</small>
+                </div>
+
+                <div class="form-group full-width"
+                    style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); padding:12px 14px; border-radius:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-weight:700; font-size:13px; margin:0;"><i
+                                class="fa-solid fa-cloud-arrow-down text-primary"></i> Giới Hạn Video Tải Khi Quét
+                            Thủ Công:</label>
+                        <span id="settingMaxManualVideosBadge" class="badge badge-primary"
+                            style="font-size:12px; font-weight:700;">5 video/lần</span>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="number" id="settingMaxManualVideos" class="input-field" min="1" max="50" value="5"
+                            placeholder="5"
+                            style="width:130px; font-weight:700; font-size:15px; color:#ef4444; text-align:center;"
+                            oninput="var b = document.getElementById('settingMaxManualVideosBadge'); if(b) b.textContent = (this.value ? this.value : '5') + ' video/lần';">
+                        <span style="font-size:13px; color:var(--text-muted); font-weight:600;">video tối đa / lần
+                            quét</span>
+                    </div>
+                    <small class="form-hint" style="margin-top:6px; margin-bottom:0;">
+                        Áp dụng riêng cho các lần quét thủ công (nút <strong>"Quét Kênh Này Ngay"</strong>). Mặc
+                        định bằng giới hạn chu kỳ tự động (5 video) trừ khi bạn chỉnh sửa/cập nhật. Khi chạy trong
+                        Chiến Dịch (Campaign), hệ thống vẫn giữ nguyên giới hạn toàn cục.
+                    </small>
+                </div>
+
+                <!-- Download Format & Duration Filter per Channel -->
+                <div class="form-group full-width"
+                    style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; margin-top: 6px;">
+                    <label style="font-size:13px; font-weight:700;"><i class="fa-solid fa-filter text-gold"></i> Bộ
+                        Lọc Định Dạng & Thời Lượng Tải Riêng Cho Kênh:</label>
+                    <p class="form-hint" style="margin-top:2px; font-size:11px;">Cài đặt riêng cho kênh này (ưu tiên
+                        cao nhất: Kênh &rarr; Chiến dịch &rarr; Toàn cục).</p>
+
+                    <div
+                        style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin-top:10px;">
+                        <label
+                            style="display:flex; align-items:flex-start; gap:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 12px; border-radius:8px; cursor:pointer; user-select:none;">
+                            <input type="checkbox" id="settingChannelIncludeShorts" checked
+                                onchange="onToggleFormatCheckbox(this,'settingChannelIncludeShorts','settingChannelIncludeLongform','settingChannelMinDuration')"
+                                style="width:16px; height:16px; margin-top:2px; accent-color:#f59e0b; cursor:pointer;">
+                            <div>
+                                <div style="font-size:12px; font-weight:600; color:var(--text-primary);"><i
+                                        class="fa-brands fa-youtube text-danger"></i> Tải YouTube Shorts (≤ 3p)
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted);">Xuất 1 clip full, không chèn
+                                    chữ Part</div>
+                            </div>
+                        </label>
+                        <label
+                            style="display:flex; align-items:flex-start; gap:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:8px 12px; border-radius:8px; cursor:pointer; user-select:none;">
+                            <input type="checkbox" id="settingChannelIncludeLongform" checked
+                                onchange="onToggleFormatCheckbox(this,'settingChannelIncludeShorts','settingChannelIncludeLongform','settingChannelMinDuration')"
+                                style="width:16px; height:16px; margin-top:2px; accent-color:#f59e0b; cursor:pointer;">
+                            <div>
+                                <div style="font-size:12px; font-weight:600; color:var(--text-primary);"><i
+                                        class="fa-solid fa-film text-cyan"></i> Tải Video Dài (> 3p)</div>
+                                <div style="font-size:11px; color:var(--text-muted);">Áp dụng giới hạn thời lượng
+                                    bên dưới</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="modal-form-grid mt-2" style="grid-template-columns: 1fr 1fr; gap:12px;">
+                        <div>
+                            <label style="font-size:12px; font-weight:600;"><i class="fa-solid fa-clock-rotate-left"
+                                    style="color:#f59e0b;"></i> Thời lượng tải tối thiểu (giây):</label>
+                            <input type="number" id="settingChannelMinDuration" class="input-field mt-1" value="0"
+                                placeholder="0" min="0" max="14400" onchange="validateMinDurationInput(this)"
+                                onblur="validateMinDurationInput(this)" style="width:100%; height:40px;">
+                            <small class="form-hint" style="color:var(--text-muted); font-size:11px;">Chỉ áp dụng
+                                cho video dài (Tối thiểu 180s / 3 phút)</small>
+                        </div>
+                        <div>
+                            <label style="font-size:12px; font-weight:600;"><i class="fa-solid fa-hourglass-end"
+                                    style="color:#ef4444;"></i> Thời lượng tải tối đa (giây):</label>
+                            <input type="number" id="settingChannelMaxDuration" class="input-field mt-1"
+                                placeholder="Để trống = theo chiến dịch/toàn cục" max="14400"
+                                style="width:100%; height:40px;">
+                            <small class="form-hint" style="color:var(--text-muted); font-size:11px;">Bỏ qua video
+                                quá dài (tránh render lâu)</small>
+                        </div>
+                    </div>
+
+                    <!-- Chế Độ Xuất Biến Thể & Chiến Lược Hook Tâm Lý Cho Kênh Nguồn -->
+                    <div class="form-group full-width p-3 mt-3"
+                        style="grid-column: 1 / -1; width: 100%; background:rgba(168, 85, 247, 0.05); border-radius:var(--radius-sm); border:1px solid rgba(168, 85, 247, 0.25); padding:14px 16px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label style="font-size:13px; font-weight:700; color:var(--text-primary); margin:0;">
+                                <i class="fa-solid fa-bolt text-purple" style="color:#c084fc;"></i> Chế Độ Xuất Clip
+                                &amp; Chiến Lược Hook Tâm Lý:
+                            </label>
+                            <span class="badge"
+                                style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:10px; font-weight:700;">Ưu
+                                Tiên (Channel &gt; Campaign)</span>
+                        </div>
+                        <small class="form-hint"
+                            style="color:var(--text-muted); font-size:11px; display:block; margin-top:3px;">
+                            Định hướng AI cắt video và tạo câu mở đầu giật gân theo tâm lý người xem TikTok để tối
+                            đa tỷ lệ giữ chân (Retention) &amp; Viral.
+                        </small>
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px;">
+                            <div>
+                                <label
+                                    style="font-size:11.5px; color:var(--text-secondary); display:block; margin-bottom:3px;">
+                                    <i class="fa-solid fa-film text-purple"></i> Chế Độ Xuất Biến Thể:
+                                </label>
+                                <select id="settingChannelVariantMode" class="custom-select"
+                                    style="width:100%; height:38px;" onchange="syncChannelVariantModeUI(this.value)">
+                                    <option value="inherit" selected>-- 🔗 Kế Thừa Từ Chiến Dịch (Mặc Định) --
+                                    </option>
+                                    <option value="single">✂️ 1 Clip Tốt Nhất (Tập Trung 1 Góc Hook)</option>
+                                    <option value="variants">🧪 3 Biến Thể A/B/C (A/B Testing Độc Lập)</option>
+                                </select>
+                            </div>
+                            <div id="settingChannelHookAngleWrap">
+                                <label
+                                    style="font-size:11.5px; color:var(--text-secondary); display:block; margin-bottom:3px;">
+                                    <i class="fa-solid fa-bullseye text-cyan"></i> Chiến Lược Hook Tâm Lý:
+                                </label>
+                                <select id="settingChannelHookAngle" class="custom-select"
+                                    style="width:100%; height:38px;">
+                                    <option value="inherit" selected>-- 🔗 Kế Thừa Từ Chiến Dịch (Mặc Định) --
+                                    </option>
+                                    <option value="auto">🎯 Tự Động (AI tự chọn góc kịch tính nhất)</option>
+                                    <option value="curiosity">🔍 Góc Tò Mò (Curiosity: "Lý do 90% người trẻ thất
+                                        bại...")</option>
+                                    <option value="controversy">⚡ Góc Tranh Luận (Controversy: "Sự thật trần trụi
+                                        về...")</option>
+                                    <option value="climax">🔥 Góc Cao Trào (Climax: "Khoảnh khắc làm thay đổi tất
+                                        cả...")</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Thông báo khi chọn 3 biến thể -->
+                        <div id="settingChannelVariantsNoticeWrap"
+                            style="display:none; font-size:11.5px; color:#c084fc; background:rgba(168,85,247,0.12); padding:8px 10px; border-radius:5px; border:1px dashed rgba(168,85,247,0.35); line-height:1.4; margin-top:10px;">
+                            <i class="fa-solid fa-sparkles text-cyan"></i> <strong>A/B/C Testing:</strong> Mỗi video
+                            từ kênh này sẽ tự động xuất 3 biến thể độc lập (VarA: Tò Mò, VarB: Tranh Luận, VarC: Cao
+                            Trào) kèm 3 bản nhạc BGM khác nhau để rải đều qua các nick TikTok.
+                        </div>
+                    </div>
+
+                    <!-- Phụ đề AI Section Cho Kênh Nguồn -->
+                    <!-- ================= BẬT LỒNG TIẾNG AI (KÊNH) ================= -->
+                    <div class="form-group full-width"
+                        style="grid-column: 1 / -1; width: 100%; background:rgba(192,132,252,0.06); padding:16px; border-radius:var(--radius-md); border:1px solid rgba(192,132,252,0.25); margin-bottom:12px;">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <label
+                                style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--text-primary); cursor:pointer; margin:0;">
+                                <input type="checkbox" id="settingChannelNarrationSwitch" checked
+                                    onchange="document.getElementById('settingChannelNarrationWrap').style.display = this.checked ? 'flex' : 'none';">
+                                <span><i class="fa-solid fa-microphone-lines" style="color:#c084fc;"></i> Bật Lồng
+                                    Tiếng AI</span>
+                            </label>
+                            <span class="badge"
+                                style="background:rgba(192,132,252,0.2); color:#c084fc; font-size:10px; font-weight:700;">AI
+                                Voice</span>
+                        </div>
+                        <small class="form-hint"
+                            style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:2px;">
+                            Dùng AI viết lại kịch bản tóm tắt hấp dẫn và thu âm lồng tiếng mới cho toàn bộ video,
+                            thay thế hoàn toàn âm thanh gốc.
+                        </small>
+
+                        <div id="settingChannelNarrationWrap"
+                            style="display:flex; flex-direction:column; gap:12px; margin-top:14px; padding-top:12px; border-top:1px dashed rgba(192,132,252,0.25);">
+                            <!-- Edge-TTS Config -->
+                            <div id="settingChannelEdgeTtsWrap"
+                                style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div id="settingChannelNarrationLangCol">
+                                    <div style="display:flex; align-items:center; margin-bottom:6px; height:20px;">
+                                        <label style="font-size:11px; color:var(--text-muted); margin:0;">Ngôn ngữ kịch
+                                            bản:</label>
+                                    </div>
+                                    <select id="settingChannelNarrationLanguage" class="custom-select"
+                                        style="font-size:11.5px; height:36px; width:100%;"
+                                        onchange="updateVoiceDropdownOptions('settingChannelVoiceGender', this.value, 'inherit', true)">
+                                        <option value="inherit" selected>-- 🔗 Theo Cài Đặt Chiến Dịch (Mặc Định) --
+                                        </option>
+                                        <option value="vi">🇻🇳 Tiếng Việt</option>
+                                        <option value="en">🇺🇸 English (US)</option>
+                                        <option value="ja">🇯🇵 日本語</option>
+                                        <option value="ko">🇰🇷 한국어</option>
+                                        <option value="de">🇩🇪 Deutsch</option>
+                                        <option value="es">🇪🇸 Español</option>
+                                        <option value="fr">🇫🇷 Français</option>
+                                        <option value="original">🌐 Tự động nhận diện</option>
+                                    </select>
+                                </div>
+                                <div id="settingChannelEdgeTtsVoiceCol">
+                                    <div
+                                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; height:20px;">
+                                        <label style="font-size:11px; color:var(--text-muted); margin:0;">Giọng đọc
+                                            Edge-TTS:</label>
+                                        <button type="button" class="btn-voice-preview"
+                                            onclick="playVoicePreview('settingChannelVoiceGender', 'settingChannelNarrationLanguage', this)"
+                                            title="Nghe thử">
+                                            <i class="fa-solid fa-volume-high"></i>
+                                        </button>
+                                    </div>
+                                    <select id="settingChannelVoiceGender" class="custom-select"
+                                        style="font-size:11.5px; height:36px; width:100%;">
+                                        <option value="male" selected>👦 Giọng Nam Chuẩn</option>
+                                        <option value="female">👧 Giọng Nữ Truyền Cảm</option>
+                                        <option value="vi-VN-NamMinhNeural">Nam Minh (Phóng sự đại án)</option>
+                                        <option value="vi-VN-HoaiMyNeural">Hoài My (Truyền cảm tin tức)</option>
+                                        <option value="en-US-ChristopherNeural">Christopher (US Storytelling)
+                                        </option>
+                                        <option value="en-US-JennyNeural">Jenny (US Nữ cuốn hút)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+<div id="settingChannelDisableNarrationWrap"
+                                style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; padding-top:4px;">
+                                <label
+                                    style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
+                                    <input type="checkbox" id="settingChannelDisableNarrationForShorts" checked
+                                        style="width:15px; height:15px; accent-color:#c084fc;">
+                                    <span>Tắt lồng tiếng cho Shorts (&le;3p)</span>
+                                </label>
+                                <label
+                                    style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); cursor:pointer;">
+                                    <input type="checkbox" id="settingChannelKeepOriginalScriptForShorts" checked
+                                        style="width:15px; height:15px; accent-color:#c084fc;">
+                                    <span>Giữ âm thanh gốc cho Shorts</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 mt-3"
+                        style="background:rgba(0,0,0,0.25); border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.06);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label
+                                style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:#fff; cursor:pointer; margin:0;">
+                                <input type="checkbox" id="settingChannelSubtitleSwitch" checked
+                                    onchange="document.getElementById('settingChannelSubtitleSettingsWrap').style.display = this.checked ? '' : 'none'; if(this.checked){ document.getElementById('settingChannelDisableSubtitleForShorts').checked=true; } else { document.getElementById('settingChannelDisableSubtitleForShorts').checked=false; }">
+                                <span><i class="fa-solid fa-closed-captioning" style="color:var(--accent-gold);"></i> Tự
+                                    Động Nhận Diện &amp; Tạo Phụ Đề
+                                    AI</span>
+                            </label>
+                            <span class="badge badge-gold" style="font-size:10px;">Tăng Retention</span>
+                        </div>
+                        <div id="settingChannelSubtitleSettingsWrap">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px;">
+                                <div>
+                                    <label style="font-size:11.5px; color:var(--text-secondary);">Phong cách chữ phụ
+                                        đề:</label>
+                                    <select id="settingChannelSubtitleStyle" class="custom-select mt-1"
+                                        style="width:100%; height:40px;">
+                                        <option value="inherit" selected>-- 🔗 Theo Cài Đặt Chiến Dịch / Toàn Cục --
+                                        </option>
+                                        <option value="karaoke_yellow">Highlight Chữ Vàng Neon (Từng Từ)</option>
+                                        <option value="classic_white">Trắng Viền Đen Bold (Cổ điển)</option>
+                                        <option value="tiktok_gradient">Gradient Cyan &amp; Hồng (TikTok Aesthetic)
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size:11.5px; color:var(--text-secondary);">Vị trí hiển thị
+                                        chữ:</label>
+                                    <select id="settingChannelSubtitlePosition" class="custom-select mt-1"
+                                        style="width:100%; height:40px;">
+                                        <option value="inherit" selected>-- 🔗 Theo Cài Đặt Chiến Dịch / Toàn Cục --
+                                        </option>
+                                        <option value="center">🛡️ Chính Giữa (Universal Safe Zone - Khuyên dùng)
+                                        </option>
+                                        <option value="bottom">📐 1/3 Dưới (Lower-Third Safe Zone)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="settingChannelDisableSubtitleWrap" class="mt-2"
+                                style="border-top:1px dashed rgba(255,255,255,0.08); padding-top:8px;">
+                                <label
+                                    style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); cursor:pointer; user-select:none;">
+                                    <input type="checkbox" id="settingChannelDisableSubtitleForShorts" checked
+                                        style="width:15px; height:15px; accent-color:#f59e0b; cursor:pointer;">
+                                    <span>Tắt phụ đề cho Shorts (Hầu hết Shorts đã có sẵn phụ đề)</span>
+                                </label>
+                                <small
+                                    style="color:var(--text-muted); font-size:11px; display:block; margin-top:2px; margin-left:23px;">
+                                    Tránh đè 2 lớp chữ khi video Shorts gốc đã có phụ đề. (Không ảnh hưởng đến video
+                                    AI Story vì AI Story luôn có phụ đề Neon riêng).
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group full-width settings-toggles-card">
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <span class="toggle-label"><i class="fa-solid fa-power-off"></i> Trạng Thái Hoạt
+                                Động</span>
+                            <span class="toggle-desc">
+                                <strong>Hoạt động:</strong> Tự động lấy video & render video từ kênh này.<br>
+                                <strong>Không hoạt động:</strong> Dừng hoàn toàn, không lấy video và không render từ
+                                kênh này.
+                            </span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="settingIsActive" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <span class="toggle-label"><i class="fa-solid fa-cloud-arrow-down"></i> Tự Động Tải
+                                Video Mới:</span>
+                            <span class="toggle-desc">Khi phát hiện video mới qua RSS, tự động tải MP4 về thư
+                                mục.</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="settingAutoDownload" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <span class="toggle-label"><i class="fa-solid fa-scissors"></i> Tự Động Render AI</span>
+                            <span class="toggle-desc">Tự động lật hình, đổi tốc độ và cắt chuẩn TikTok 9:16 ngay khi
+                                tải xong.</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="settingAutoRender" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+            <button type="button" class="btn btn-outline-danger btn-sm has-tooltip tooltip-top-right"
+                id="btnModalClearHistory" onclick="clearChannelHistoryFromModal(this)"
+                data-tooltip="Xóa bộ nhớ chống trùng lặp & file cũ để quét tải lại kênh này từ đầu"
+                title="Xóa bộ nhớ chống trùng lặp & file cũ để quét tải lại kênh này từ đầu">
+                <i class="fa-solid fa-rotate-left"></i> Đặt Lại Lịch Sử Kênh
+            </button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" onclick="closeChannelSettingsModal()">Hủy</button>
+                <button class="btn btn-primary" id="btnSaveChannelSettings" onclick="saveChannelSettings(this)">
+                    <i class="fa-solid fa-floppy-disk"></i> Lưu Cài Đặt
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: TẠO THƯ MỤC NHẠC CHỦ ĐỀ MỚI -->
+
+
+<div class="modal" id="modalChannelVideos">
+    <div class="modal-content glass-panel"
+        style="max-width: 860px; height: 90vh; max-height: 92vh; display:flex; flex-direction:column; overflow:hidden;">
+        <div class="modal-header" style="position:relative; flex-shrink:0;">
+            <div>
+                <h3 id="modalChannelVideosTitle"><i class="fa-solid fa-film text-cyan"></i> Video Kênh Nguồn</h3>
+                <p class="modal-sub" id="modalChannelVideosSub">Danh sách video của kênh ID</p>
+            </div>
+            <button type="button" class="close-btn" onclick="closeChannelVideosModal()" title="Đóng"
+                style="position:absolute; top:14px; right:18px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body"
+            style="padding: 18px 22px; overflow-y:auto; flex:1; min-height: 480px; max-height:calc(92vh - 130px);"
+            id="modalChannelVideosBody">
+            <div class="text-center py-4 text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp danh sách
+                video...</div>
+        </div>
+        <div class="modal-footer"
+            style="padding: 12px 20px; display:flex; justify-content:space-between; align-items:center; border-top: 1px solid rgba(255,255,255,0.06); flex-shrink:0;">
+            <span style="font-size:12px; color:var(--text-muted);" id="modalChannelVideosStats">0 Video</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top"
+                    onclick="exportCurrentChannelVideosCsv()" data-tooltip="Xuất danh sách video của kênh ra file CSV">
+                    <i class="fa-solid fa-file-csv" style="color:var(--accent-cyan);"></i> Xuất CSV
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeChannelVideosModal()">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FLOATING AUDIO PREVIEW BAR -->
+<div id="audioPreviewDock" class="audio-preview-dock" style="display: none;">
+    <div class="audio-preview-dock-content">
+        <div class="audio-preview-dock-thumb-wrap">
+            <img id="audioDockThumb" src="" alt="Thumbnail" class="audio-dock-thumb" style="display: none;">
+            <div id="audioDockIconFallback" class="audio-dock-icon-fallback">
+                <i class="fa-solid fa-music"></i>
+            </div>
+            <div class="audio-dock-equalizer" id="audioDockEqualizer">
+                <span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+        <div class="audio-preview-dock-info">
+            <div class="audio-dock-tag"><i class="fa-solid fa-headphones text-cyan"></i> ĐANG NGHE THỬ</div>
+            <div id="audioDockTitle" class="audio-dock-title" title="...">Đang kết nối âm thanh...</div>
+            <div id="audioDockSub" class="audio-dock-sub">YouTube Audio</div>
+        </div>
+        <div class="audio-preview-dock-controls">
+            <button type="button" class="btn-dock-action" id="btnDockPlayPause" onclick="toggleDockPlayPause()"
+                title="Phát / Dừng">
+                <i class="fa-solid fa-pause"></i>
+            </button>
+            <button type="button" class="btn-dock-action" onclick="closeAudioPreviewDock()" title="Đóng nghe thử">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+    <!-- Iframe container for YouTube audio preview playback fallback -->
+    <div id="audioDockYtContainer"
+        style="position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; overflow: hidden; bottom: 0; left: 0;">
+    </div>
+</div>
+
+<!-- MODAL: BÁO CÁO A/B TESTING BIẾN THỂ (GAP 3 & GAP 5) -->

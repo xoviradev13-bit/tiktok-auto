@@ -1,0 +1,28 @@
+account,profile_id,status,message,timestamp
+thenguyenfiner@gmail.com,de1bbb33-6373-4553-9b38-ff84a6e63ab7,FAILED,Login timed out,2026-11-12 00:42:39
+thenguyenfiner@gmail.com,de1bbb33-6373-4553-9b38-ff84a6e63ab7,FAILED,TikTok error: Incorrect account or password. 5 attempts remaining. Try again.,2026-11-12 00:46:31
+TerenceVeeneman91287@outlook.com,fed5a84e-faa1-4ded-bf5d-f8264d1586b0,FAILED,[RATE_LIMITED] Maximum number of attempts reached. Try again later.,2026-11-12 00:53:46
+TerenceVeeneman91287@outlook.com,1e31cd7c-6edc-40d9-a0ae-47187336c8d8,FAILED,"Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator(""button[type=\""submit\""], button:has-text(\""Log in\""), button:has-text(\""Đăng nhập\""), button:has-text(\""Tiếp tục\""), button:has-text(\""Continue\"")"").first
+    - locator resolved to <button disabled type=""submit"" data-e2e=""login-button"" class=""eyszama1 tiktok-1xtyg4r-de495bb3--Button-de495bb3--StyledButton ebef5j00"">…</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is not enabled
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is not enabled
+    - retrying click action
+      - waiting 100ms
+    57 × waiting for element to be visible, enabled and stable
+       - element is not enabled
+     - retrying click action
+       - waiting 500ms
+",2026-11-12 00:56:03
+TerenceVeeneman91287@outlook.com,1e31cd7c-6edc-40d9-a0ae-47187336c8d8,FAILED,[RATE_LIMITED] Bạn truy cập dịch vụ của chúng tôi quá thường xuyên.,2026-11-12 00:57:06
+ceowapp@gmail.com,3b0abb19-5e41-4d4b-96cc-c16bc6104927,FAILED,[WRONG_PASSWORD] Username or password doesn't match our records. Try again.,2026-11-12 00:59:00
+ceowapp@gmail.com,3b0abb19-5e41-4d4b-96cc-c16bc6104927,FAILED,[WRONG_PASSWORD] Incorrect account or password. 5 attempts remaining. Try again.,2026-11-12 01:02:40
+ceowapp@gmail.com,3b0abb19-5e41-4d4b-96cc-c16bc6104927,FAILED,Login timed out,2026-11-12 01:06:20
+hnam47958@gmail.com,b6fd5d36-5cda-4763-aae9-b10794e710bd,FAILED,Login timed out,2026-11-12 01:39:45
+NicholasJohnsonT42629@outlook.com,b1955c20-2323-43a8-8c6c-fabf31483df1,FAILED,Login timed out,2026-11-12 01:47:52

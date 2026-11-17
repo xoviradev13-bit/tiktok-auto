@@ -1,0 +1,915 @@
+import sqlite3
+import json
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+from backend.config import DB_PATH
+
+def get_connection():
+    conn = sqlite3.connect(DB_PATH, timeout=60.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 60000")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -64000")
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA mmap_size = 268435456")
+    except Exception:
+        pass
+    return conn
+
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode = WAL")
+        cursor.execute("PRAGMA synchronous = NORMAL")
+    except Exception:
+        pass
+    
+    # Bảng kênh YouTube theo dõi
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id TEXT UNIQUE,
+        title TEXT,
+        url TEXT,
+        subscriber_count INTEGER DEFAULT 0,
+        video_count INTEGER DEFAULT 0,
+        avg_views INTEGER DEFAULT 0,
+        upload_cadence_days REAL DEFAULT 0,
+        last_upload_date TEXT,
+        is_active INTEGER DEFAULT 1,
+        auto_download INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Migration columns cho channels nếu chưa có
+    cursor.execute("PRAGMA table_info(channels)")
+    existing_cols = {row["name"] for row in cursor.fetchall()}
+    new_cols = {
+        "display_name": "TEXT DEFAULT ''",
+        "custom_proxy": "TEXT DEFAULT ''",
+        "download_dir": "TEXT DEFAULT ''",
+        "render_dir": "TEXT DEFAULT ''",
+        "auto_render": "INTEGER DEFAULT 1",
+        "bgm_folder": "TEXT DEFAULT ''",
+        "bgm_volume": "REAL DEFAULT 0.15",
+        "min_video_duration": "INTEGER DEFAULT NULL",
+        "max_video_duration": "INTEGER DEFAULT NULL",
+        "include_shorts": "INTEGER DEFAULT NULL",
+        "include_longform": "INTEGER DEFAULT NULL",
+        "disable_subtitle_for_shorts": "INTEGER DEFAULT 1",
+        "hook_angle": "TEXT DEFAULT 'auto'",
+        "generate_variants": "INTEGER DEFAULT 0",
+        "subtitle_enabled": "INTEGER DEFAULT NULL",
+        "subtitle_style": "TEXT DEFAULT ''",
+        "subtitle_position": "TEXT DEFAULT ''",
+        "max_manual_videos": "INTEGER DEFAULT NULL",
+        "narration_enabled": "INTEGER DEFAULT 1",
+        "narration_language": "TEXT DEFAULT 'inherit'",
+        "voice_gender": "TEXT DEFAULT 'inherit'",
+        "narration_style": "TEXT DEFAULT 'inherit'",
+        "disable_narration_for_shorts": "INTEGER DEFAULT 1",
+        "keep_original_script_for_shorts": "INTEGER DEFAULT 1",
+        "ken_burns_enabled": "INTEGER DEFAULT 1",
+        "endcard_enabled": "INTEGER DEFAULT 1",
+        "use_ai_images": "INTEGER DEFAULT 0",
+        "image_style": "TEXT DEFAULT 'cinematic'",
+        "visual_source": "TEXT DEFAULT 'ai'",
+        "ai_image_model": "TEXT DEFAULT 'flux'",
+        "ai_video_model": "TEXT DEFAULT 'fal_ltx'",
+        "stock_provider": "TEXT DEFAULT 'all'",
+        "auto_upload": "INTEGER DEFAULT 1",
+        "tts_engine": "TEXT DEFAULT 'edge-tts'",
+        "elevenlabs_voice_id": "TEXT DEFAULT ''",
+        "elevenlabs_model": "TEXT DEFAULT 'eleven_multilingual_v2'",
+        "source_mode": "TEXT DEFAULT 'hybrid'",
+        "local_folder_path": "TEXT DEFAULT ''",
+        "target_platforms": "TEXT DEFAULT 'tiktok'",
+        "youtube_profile_ids": "TEXT DEFAULT ''",
+        "facebook_profile_ids": "TEXT DEFAULT ''",
+    }
+    for col, col_type in new_cols.items():
+        if col not in existing_cols:
+            try:
+                cursor.execute(f"ALTER TABLE channels ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+    # Mặc định tắt phụ đề cho Shorts là 1 (checked) cho kênh
+    try:
+        cursor.execute("UPDATE channels SET disable_subtitle_for_shorts = 1 WHERE disable_subtitle_for_shorts = 0 OR disable_subtitle_for_shorts IS NULL")
+    except Exception:
+        pass
+
+    # Bảng video tải về và xử lý
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS videos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id TEXT,
+        yt_video_id TEXT UNIQUE,
+        title TEXT,
+        original_url TEXT,
+        duration INTEGER DEFAULT 0,
+        download_path TEXT,
+        rendered_path TEXT,
+        ai_hook TEXT,
+        ai_title TEXT,
+        ai_tags TEXT,
+        status TEXT DEFAULT 'pending', -- pending, downloaded, rendering, rendered, uploaded, error
+        error_message TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Bảng Lịch sử tải video vĩnh viễn (Chống tải trùng lặp ngay cả khi đã xóa file MP4 trên máy tính)
+    try:
+        cursor.execute("ALTER TABLE videos ADD COLUMN platform TEXT")
+    except Exception:
+        pass
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS download_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        yt_video_id TEXT UNIQUE,
+        channel_id TEXT,
+        title TEXT,
+        downloaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dl_hist_vid ON download_history(yt_video_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dl_hist_cid ON download_history(channel_id)")
+
+    # Tự động đồng bộ các video đã có từ bảng videos vào download_history
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO download_history (yt_video_id, channel_id, title, downloaded_at)
+            SELECT yt_video_id, channel_id, title, created_at FROM videos 
+            WHERE yt_video_id IS NOT NULL AND yt_video_id != ''
+        ''')
+    except Exception:
+        pass
+
+    # Bảng Profile GPMLogin và chỉ số TikTok
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS gpm_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        gpm_id TEXT UNIQUE,
+        name TEXT,
+        raw_proxy TEXT,
+        tiktok_username TEXT,
+        tiktok_nickname TEXT DEFAULT '',
+        tiktok_uid TEXT DEFAULT '',
+        sec_uid TEXT DEFAULT '',
+        followers_count INTEGER DEFAULT 0,
+        total_views INTEGER DEFAULT 0,
+        eligible_10k INTEGER DEFAULT 0,
+        notify_status TEXT DEFAULT 'tracking',
+        last_checked TEXT,
+        status TEXT DEFAULT 'active',
+        status_reason TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Migration columns cho gpm_profiles nếu chưa có
+    cursor.execute("PRAGMA table_info(gpm_profiles)")
+    existing_gpm_cols = {row["name"] for row in cursor.fetchall()}
+    for col in ["tiktok_nickname", "tiktok_uid", "sec_uid", "browser_type", "platform", "channel_handle", "fb_page_id"]:
+        if col not in existing_gpm_cols:
+            try:
+                cursor.execute(f"ALTER TABLE gpm_profiles ADD COLUMN {col} TEXT DEFAULT ''")
+            except Exception:
+                pass
+    if "status_reason" not in existing_gpm_cols:
+        try:
+            cursor.execute("ALTER TABLE gpm_profiles ADD COLUMN status_reason TEXT DEFAULT ''")
+        except Exception:
+            pass
+    if "notify_status" not in existing_gpm_cols:
+        try:
+            cursor.execute("ALTER TABLE gpm_profiles ADD COLUMN notify_status TEXT DEFAULT 'tracking'")
+            cursor.execute("UPDATE gpm_profiles SET notify_status = 'sent' WHERE eligible_10k = 1 OR followers_count >= 10000")
+            cursor.execute("UPDATE gpm_profiles SET notify_status = 'tracking' WHERE notify_status IS NULL OR notify_status = ''")
+        except Exception:
+            pass
+
+    # Bảng Kênh / Trang con của mỗi profile (YouTube channels, Facebook pages)
+    # TikTok luôn 1:1 nên không cần vào bảng này — chỉ YouTube (1:N) và Facebook (1:N)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS profile_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        gpm_id TEXT NOT NULL,
+        platform TEXT NOT NULL CHECK(platform IN ('youtube', 'facebook')),
+        channel_id TEXT NOT NULL,
+        channel_name TEXT DEFAULT '',
+        channel_url TEXT DEFAULT '',
+        is_default INTEGER DEFAULT 0,
+        followers_count INTEGER DEFAULT 0,
+        notify_status TEXT DEFAULT 'tracking',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(gpm_id, platform, channel_id)
+    )
+    ''')
+
+    try:
+        cursor.execute("ALTER TABLE profile_channels ADD COLUMN followers_count INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE profile_channels ADD COLUMN notify_status TEXT DEFAULT 'tracking'")
+    except Exception:
+        pass
+
+    # Bảng Lịch trình đăng bài (Upload Tasks)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS upload_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id INTEGER,
+        gpm_profile_id INTEGER,
+        title TEXT,
+        tags TEXT,
+        status TEXT DEFAULT 'queued', -- queued, processing, completed, failed
+        scheduled_time TEXT,
+        uploaded_at TEXT,
+        error_message TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (video_id) REFERENCES videos(id),
+        FOREIGN KEY (gpm_profile_id) REFERENCES gpm_profiles(id)
+    )
+    ''')
+
+    # Migration columns cho upload_tasks nếu chưa có
+    cursor.execute("PRAGMA table_info(upload_tasks)")
+    existing_ut_cols = {row["name"] for row in cursor.fetchall()}
+    for col, col_type in [
+        ("video_path", "TEXT DEFAULT ''"),
+        ("part_number", "INTEGER DEFAULT 1"),
+        ("retry_count", "INTEGER DEFAULT 0"),
+        ("retry_after", "TEXT"),
+        ("processing_started_at", "TEXT"),
+        ("variant_tag", "TEXT DEFAULT ''"),
+        ("hook_copy", "TEXT DEFAULT ''"),
+        ("views_count", "INTEGER DEFAULT 0"),
+        ("views_3s_count", "INTEGER DEFAULT 0"),
+        ("completion_rate", "REAL DEFAULT 0.0"),
+        ("post_url", "TEXT DEFAULT ''"),
+        ("platform", "TEXT DEFAULT 'tiktok'"),
+    ]:
+        if col not in existing_ut_cols:
+            try:
+                cursor.execute(f"ALTER TABLE upload_tasks ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+    # Bảng Nhật ký hệ thống (Logs)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS system_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        level TEXT DEFAULT 'INFO',
+        message TEXT,
+        details TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Bảng Cấu hình chung (Key-Value)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    ''')
+
+    # Bảng Kênh Telegram nhận thông báo (hỗ trợ nhiều kênh, bật/tắt độc lập và phân loại thông báo)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS telegram_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        notify_10k INTEGER DEFAULT 1,
+        notify_issues INTEGER DEFAULT 1,
+        notify_daily_report INTEGER DEFAULT 1,
+        daily_report_time TEXT DEFAULT '21:00',
+        last_daily_report TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Migration columns cho telegram_channels nếu chưa có
+    cursor.execute("PRAGMA table_info(telegram_channels)")
+    existing_tg_cols = {row["name"] for row in cursor.fetchall()}
+    new_tg_cols = {
+        "notify_10k": "INTEGER DEFAULT 1",
+        "notify_issues": "INTEGER DEFAULT 1",
+        "notify_daily_report": "INTEGER DEFAULT 1",
+        "daily_report_time": "TEXT DEFAULT '21:00'",
+        "last_daily_report": "TEXT DEFAULT ''",
+    }
+    for col, col_type in new_tg_cols.items():
+        if col not in existing_tg_cols:
+            try:
+                cursor.execute(f"ALTER TABLE telegram_channels ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+    # Đảm bảo các giá trị NULL được chuẩn hóa về mặc định
+    try:
+        cursor.execute("UPDATE telegram_channels SET notify_10k = 1 WHERE notify_10k IS NULL")
+        cursor.execute("UPDATE telegram_channels SET notify_issues = 1 WHERE notify_issues IS NULL")
+        cursor.execute("UPDATE telegram_channels SET notify_daily_report = 1 WHERE notify_daily_report IS NULL")
+        cursor.execute("UPDATE telegram_channels SET daily_report_time = '21:00' WHERE daily_report_time IS NULL OR daily_report_time = ''")
+        cursor.execute("UPDATE telegram_channels SET last_daily_report = '' WHERE last_daily_report IS NULL")
+    except Exception:
+        pass
+
+    # Tự động nạp kênh mặc định từ cấu hình cũ nếu bảng telegram_channels còn trống
+    try:
+        cursor.execute("SELECT COUNT(*) AS cnt FROM telegram_channels")
+        row_cnt = cursor.fetchone()
+        if row_cnt and row_cnt["cnt"] == 0:
+            cursor.execute("SELECT value FROM settings WHERE key = 'TELEGRAM_CHAT_ID'")
+            setting_chat = cursor.fetchone()
+            seed_chat = setting_chat["value"].strip() if setting_chat and setting_chat["value"] else ""
+            if not seed_chat:
+                import os
+                seed_chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+            if seed_chat:
+                cursor.execute(
+                    "INSERT INTO telegram_channels (name, chat_id, is_active, notify_10k, notify_issues, notify_daily_report, daily_report_time) VALUES (?, ?, 1, 1, 1, 1, '21:00')",
+                    ("Kênh Mặc Định", seed_chat)
+                )
+    except Exception:
+        pass
+
+    # Bảng Chiến dịch tự động hóa (Auto-Pilot Campaigns)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        channel_id TEXT,
+        gpm_profile_id INTEGER,
+        preset_name TEXT DEFAULT 'TikTok Beta Chuẩn 9:16',
+        video_duration INTEGER DEFAULT 65,
+        speed_factor REAL DEFAULT 1.03,
+        flip_horizontal INTEGER DEFAULT 1,
+        daily_limit INTEGER DEFAULT 3,
+        post_schedule TEXT DEFAULT '11:30, 18:00, 20:30',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (channel_id) REFERENCES channels(channel_id),
+        FOREIGN KEY (gpm_profile_id) REFERENCES gpm_profiles(id)
+    )
+    ''')
+
+    # Migration columns cho campaigns nếu chưa có
+    cursor.execute("PRAGMA table_info(campaigns)")
+    existing_camp_cols = {row["name"] for row in cursor.fetchall()}
+    new_camp_cols = {
+        "channel_ids": "TEXT DEFAULT ''",
+        "gpm_profile_ids": "TEXT DEFAULT ''",
+        "distribution_mode": "TEXT DEFAULT 'round_robin'",
+        "download_dir": "TEXT DEFAULT ''",
+        "render_dir": "TEXT DEFAULT ''",
+        "subtitle_enabled": "INTEGER DEFAULT 0",
+        "subtitle_style": "TEXT DEFAULT 'karaoke_yellow'",
+        "aspect_ratio": "TEXT DEFAULT '9:16_blur'",
+        "post_frequency": "TEXT DEFAULT 'daily'",
+        "post_interval_days": "INTEGER DEFAULT 1",
+        "post_days_of_week": "TEXT DEFAULT 'mon,tue,wed,thu,fri,sat,sun'",
+        "random_delay_minutes": "INTEGER DEFAULT 10",
+        "warmup_mode": "INTEGER DEFAULT 0",
+        "ai_provider": "TEXT DEFAULT 'default'",
+        "ai_model": "TEXT DEFAULT 'default'",
+        "min_video_duration": "INTEGER DEFAULT NULL",
+        "max_video_duration": "INTEGER DEFAULT NULL",
+        "add_part_label": "INTEGER DEFAULT 1",
+        "clips_per_video": "INTEGER DEFAULT 3",
+        "bgm_folder": "TEXT DEFAULT ''",
+        "bgm_volume": "REAL DEFAULT 0.15",
+        "min_post_interval_minutes": "INTEGER DEFAULT 60",
+        "include_shorts": "INTEGER DEFAULT 1",
+        "include_longform": "INTEGER DEFAULT 1",
+        "disable_subtitle_for_shorts": "INTEGER DEFAULT 1",
+        "subtitle_position": "TEXT DEFAULT 'center'",
+        "auto_engagement_enabled": "INTEGER DEFAULT 0",
+        "auto_pin_comment": "INTEGER DEFAULT 1",
+        "pin_comment_delay_mins": "INTEGER DEFAULT 3",
+        "auto_reply_comments": "INTEGER DEFAULT 1",
+        "reply_comments_delay_mins": "INTEGER DEFAULT 20",
+        "narration_enabled": "INTEGER DEFAULT 1",
+        "narration_language": "TEXT DEFAULT 'original'",
+        "voice_gender": "TEXT DEFAULT 'male'",
+        "narration_style": "TEXT DEFAULT 'giat_gan'",
+        "disable_narration_for_shorts": "INTEGER DEFAULT 1",
+        "keep_original_script_for_shorts": "INTEGER DEFAULT 1",
+        "ken_burns_enabled": "INTEGER DEFAULT 1",
+        "endcard_enabled": "INTEGER DEFAULT 1",
+        "use_ai_images": "INTEGER DEFAULT 0",
+        "image_style": "TEXT DEFAULT 'cinematic'",
+        "visual_source": "TEXT DEFAULT 'ai'",
+        "ai_image_model": "TEXT DEFAULT 'flux'",
+        "ai_video_model": "TEXT DEFAULT 'fal_ltx'",
+        "stock_provider": "TEXT DEFAULT 'all'",
+        "auto_upload": "INTEGER DEFAULT 1",
+        "tts_engine": "TEXT DEFAULT 'edge-tts'",
+        "elevenlabs_voice_id": "TEXT DEFAULT ''",
+        "elevenlabs_model": "TEXT DEFAULT 'eleven_multilingual_v2'",
+        "split_source_type": "TEXT DEFAULT 'local'",
+        "split_folder": "TEXT DEFAULT 'data/gameplay'",
+        "split_keywords": "TEXT DEFAULT 'minecraft parkour, satisfying asmr, subway surfers'",
+        "split_provider": "TEXT DEFAULT 'all'",
+    }
+    for col, col_type in new_camp_cols.items():
+        if col not in existing_camp_cols:
+            try:
+                cursor.execute(f"ALTER TABLE campaigns ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+
+    # Mặc định tắt phụ đề cho Shorts là 1 (checked) cho chiến dịch
+    try:
+        cursor.execute("UPDATE campaigns SET disable_subtitle_for_shorts = 1 WHERE disable_subtitle_for_shorts = 0 OR disable_subtitle_for_shorts IS NULL")
+    except Exception:
+        pass
+
+    # Bảng Lịch sử hoạt động riêng cho từng chiến dịch (Campaign Run Logs)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS campaign_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER,
+        level TEXT DEFAULT 'INFO',
+        action TEXT DEFAULT 'system',
+        message TEXT,
+        details TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+    )
+    ''')
+
+    # Bảng Nhiệm vụ Tương tác 30 Phút Vàng (Golden 30-Minute Engagement Protocol)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS engagement_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        upload_task_id INTEGER,
+        campaign_id INTEGER,
+        gpm_profile_id INTEGER,
+        post_url TEXT DEFAULT '',
+        task_type TEXT NOT NULL, -- 'pin_comment' hoặc 'reply_comments'
+        status TEXT DEFAULT 'pending', -- pending, processing, completed, skipped, failed
+        scheduled_time TEXT,
+        executed_at TEXT,
+        payload TEXT DEFAULT '', -- JSON text lưu trữ câu hỏi mồi, các reply đã gửi, ngôn ngữ
+        error_message TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (upload_task_id) REFERENCES upload_tasks(id),
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+        FOREIGN KEY (gpm_profile_id) REFERENCES gpm_profiles(id)
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_engagement_tasks_status ON engagement_tasks(status, scheduled_time)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_engagement_tasks_profile ON engagement_tasks(gpm_profile_id, status)")
+
+    # Bảng Theo dõi mức sử dụng AI Models & Chi phí (AI Usage Tracking)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS ai_usage_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        task TEXT NOT NULL,
+        video_id TEXT DEFAULT '',
+        prompt_tokens INTEGER DEFAULT 0,
+        completion_tokens INTEGER DEFAULT 0,
+        total_tokens INTEGER DEFAULT 0,
+        estimated_cost REAL DEFAULT 0.0,
+        duration_ms INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'success',
+        error_message TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Các chỉ mục tối ưu hóa hiệu năng cao cho hàng ngàn bản ghi & đa luồng
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_status_sched ON upload_tasks(status, scheduled_time)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_profile_status ON upload_tasks(gpm_profile_id, status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_video_part ON upload_tasks(video_id, part_number)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_video_id ON upload_tasks(video_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_status ON upload_tasks(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_upload_tasks_uploaded_at ON upload_tasks(uploaded_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaign_logs_camp_id ON campaign_logs(campaign_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaign_logs_created ON campaign_logs(created_at DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs(created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_channel_status ON videos(channel_id, status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_yt_id ON videos(yt_video_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_channels_active ON channels(is_active, auto_download)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gpm_profiles_gpm_id ON gpm_profiles(gpm_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gpm_profiles_platform ON gpm_profiles(platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gpm_profiles_browser_type ON gpm_profiles(browser_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gpm_profiles_status ON gpm_profiles(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_gpm_profiles_followers ON gpm_profiles(followers_count DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_profile_channels_gpm ON profile_channels(gpm_id, platform)")
+
+    conn.commit()
+    conn.close()
+
+def log_event(level: str, message: str, details: str = ""):
+    # 1. Ghi vào SQLite system_logs
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO system_logs (level, message, details) VALUES (?, ?, ?)",
+            (level, message, details)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[DB LOG ERROR] {e}")
+
+    # 2. Ghi song song vào file app.log chi tiết
+    try:
+        from backend.logger import get_logger
+        l = get_logger("system")
+        lvl = (level or "INFO").upper()
+        formatted_msg = message
+        if details:
+            formatted_msg += f" | Chi tiết: {details}"
+        if lvl in ("ERROR", "CRITICAL"):
+            l.error(formatted_msg)
+        elif lvl == "WARNING":
+            l.warning(formatted_msg)
+        elif lvl == "DEBUG":
+            l.debug(formatted_msg)
+        else:
+            l.info(formatted_msg)
+    except Exception:
+        pass
+
+def log_campaign_event(campaign_id: Optional[int], level: str, action: str, message: str, details: str = ""):
+    if not campaign_id:
+        return
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO campaign_logs (campaign_id, level, action, message, details) VALUES (?, ?, ?, ?, ?)",
+            (campaign_id, level, action, message, details)
+        )
+        cursor.execute(
+            "INSERT INTO system_logs (level, message, details) VALUES (?, ?, ?)",
+            (level, f"[Chiến dịch #{campaign_id}] {message}", details)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[CAMPAIGN LOG ERROR] {e}")
+
+    # Ghi song song vào file app.log chi tiết
+    try:
+        from backend.logger import get_logger
+        l = get_logger("system")
+        lvl = (level or "INFO").upper()
+        formatted_msg = f"[Chiến dịch #{campaign_id}] {message}"
+        if details:
+            formatted_msg += f" | Chi tiết: {details}"
+        if lvl in ("ERROR", "CRITICAL"):
+            l.error(formatted_msg)
+        elif lvl == "WARNING":
+            l.warning(formatted_msg)
+        elif lvl == "DEBUG":
+            l.debug(formatted_msg)
+        else:
+            l.info(formatted_msg)
+    except Exception:
+        pass
+
+def get_setting(key: str, default: str = "") -> str:
+    """Lấy giá trị cấu hình từ bảng settings an toàn"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        conn.close()
+        return str(row["value"]) if row and row["value"] is not None else default
+    except Exception:
+        return default
+
+def set_setting(key: str, value: str):
+    """Lưu hoặc cập nhật giá trị cấu hình vào bảng settings an toàn"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value) if value is not None else "")
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        pass
+
+def get_follower_thresholds() -> Dict[str, int]:
+    """Lấy cấu hình ngưỡng follower/sub để gửi cảnh báo và đánh dấu chuẩn điều kiện cho từng nền tảng"""
+    try:
+        t_tiktok = int(get_setting("follower_threshold_tiktok", "10000") or 10000)
+    except Exception:
+        t_tiktok = 10000
+    try:
+        t_youtube = int(get_setting("follower_threshold_youtube", "1000") or 1000)
+    except Exception:
+        t_youtube = 1000
+    try:
+        t_facebook = int(get_setting("follower_threshold_facebook", "1000") or 1000)
+    except Exception:
+        t_facebook = 1000
+
+    return {
+        "tiktok": max(1, t_tiktok),
+        "youtube": max(1, t_youtube),
+        "facebook": max(1, t_facebook),
+    }
+
+def recalculate_profiles_eligibility():
+    """Cập nhật lại cờ eligible_10k cho tất cả profiles theo cấu hình ngưỡng hiện tại"""
+    try:
+        thresholds = get_follower_thresholds()
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, gpm_id, platform, followers_count FROM gpm_profiles")
+        profiles = cursor.fetchall()
+        for p in profiles:
+            plat = (p["platform"] or "tiktok").lower()
+            th = thresholds.get(plat, thresholds.get("tiktok", 10000))
+            f_count = p["followers_count"] or 0
+            
+            # Kiểm tra xem có kênh/trang con nào thuộc profile này đạt ngưỡng không
+            cursor.execute("SELECT MAX(followers_count) as max_f FROM profile_channels WHERE gpm_id = ?", (p["gpm_id"],))
+            ch_row = cursor.fetchone()
+            max_ch_f = (ch_row["max_f"] if ch_row and ch_row["max_f"] is not None else 0)
+            
+            effective_f = max(f_count, max_ch_f)
+            is_eligible = 1 if effective_f >= th else 0
+            cursor.execute("UPDATE gpm_profiles SET eligible_10k = ? WHERE id = ?", (is_eligible, p["id"]))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log_event("WARNING", f"Lỗi recalculate_profiles_eligibility: {e}")
+
+def record_ai_usage(
+    provider: str,
+    model: str,
+    task: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: Optional[int] = None,
+    estimated_cost: float = 0.0,
+    duration_ms: int = 0,
+    video_id: str = "",
+    status: str = "success",
+    error_message: str = ""
+):
+    """Ghi nhận một lượt gọi AI Model vào bảng ai_usage_logs"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        actual_total_tokens = total_tokens if total_tokens is not None else (prompt_tokens + completion_tokens)
+        cursor.execute('''
+            INSERT INTO ai_usage_logs (
+                provider, model, task, video_id,
+                prompt_tokens, completion_tokens, total_tokens,
+                estimated_cost, duration_ms, status, error_message
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            provider, model, task, video_id,
+            prompt_tokens, completion_tokens, actual_total_tokens,
+            estimated_cost, duration_ms, status, error_message
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[AI USAGE LOG ERROR] {e}")
+
+def get_ai_usage_stats(limit: int = 100) -> Dict[str, Any]:
+    """Lấy thống kê tổng quan và nhật ký sử dụng AI Models"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        # 1. Thống kê tổng quan
+        cursor.execute('''
+            SELECT 
+                COUNT(*) as total_calls,
+                COALESCE(SUM(total_tokens), 0) as total_tokens,
+                COALESCE(SUM(prompt_tokens), 0) as total_prompt_tokens,
+                COALESCE(SUM(completion_tokens), 0) as total_completion_tokens,
+                COALESCE(SUM(estimated_cost), 0.0) as total_cost_usd
+            FROM ai_usage_logs
+        ''')
+        summary = dict(cursor.fetchone() or {})
+
+        # 2. Thống kê hôm nay
+        cursor.execute('''
+            SELECT 
+                COUNT(*) as calls_today,
+                COALESCE(SUM(total_tokens), 0) as tokens_today,
+                COALESCE(SUM(estimated_cost), 0.0) as cost_today_usd
+            FROM ai_usage_logs
+            WHERE date(created_at, 'localtime') = date('now', 'localtime')
+        ''')
+        today_summary = dict(cursor.fetchone() or {})
+
+        # 3. Phân chia theo Provider / Model
+        cursor.execute('''
+            SELECT 
+                provider,
+                model,
+                COUNT(*) as calls,
+                COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+                COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+                COALESCE(SUM(total_tokens), 0) as total_tokens,
+                ROUND(COALESCE(SUM(estimated_cost), 0.0), 6) as cost_usd,
+                ROUND(COALESCE(AVG(duration_ms), 0), 0) as avg_duration_ms,
+                MAX(task) as task
+            FROM ai_usage_logs
+            GROUP BY provider, model
+            ORDER BY calls DESC
+        ''')
+        by_provider = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            d["cost_vnd"] = round(d["cost_usd"] * 25400, 0)
+            by_provider.append(d)
+
+        # 4. Danh sách log gần nhất
+        cursor.execute('''
+            SELECT * FROM ai_usage_logs
+            ORDER BY id DESC
+            LIMIT ?
+        ''', (limit,))
+        recent_logs = [dict(row) for row in cursor.fetchall()]
+
+        conn.close()
+
+        # Quy đổi ước tính USD sang VND (tỉ giá tạm tính 25,400)
+        total_vnd = summary.get("total_cost_usd", 0.0) * 25400
+        today_vnd = today_summary.get("cost_today_usd", 0.0) * 25400
+
+        try:
+            import backend.config as cfg
+            active_provider = getattr(cfg, "AI_PROVIDER", "deepseek")
+            active_model = getattr(cfg, "DEEPSEEK_MODEL", "deepseek-chat")
+            if active_provider == "gemini":
+                active_model = getattr(cfg, "GEMINI_MODEL", "gemini-2.5-flash")
+            elif active_provider == "openai":
+                active_model = getattr(cfg, "OPENAI_MODEL", "gpt-4o-mini")
+        except Exception:
+            active_provider = "deepseek"
+            active_model = "deepseek-chat"
+
+        stats_dict = {
+            **summary,
+            "today_calls": today_summary.get("calls_today", 0),
+            "today_tokens": today_summary.get("tokens_today", 0),
+            "cost_today_usd": today_summary.get("cost_today_usd", 0.0),
+            "total_cost_vnd": round(total_vnd, 0),
+            "cost_today_vnd": round(today_vnd, 0),
+            "active_provider": active_provider,
+            "active_model": active_model
+        }
+
+        return {
+            "stats": stats_dict,
+            "summary": stats_dict,
+            "model_breakdown": by_provider,
+            "by_provider": by_provider,
+            "recent_logs": recent_logs
+        }
+    except Exception as e:
+        print(f"[AI STATS ERROR] {e}")
+        return {
+            "stats": {"total_calls": 0, "total_tokens": 0, "total_cost_usd": 0.0, "total_cost_vnd": 0, "today_calls": 0, "today_tokens": 0},
+            "summary": {"total_calls": 0, "total_tokens": 0, "total_cost_usd": 0.0, "total_cost_vnd": 0},
+            "model_breakdown": [],
+            "by_provider": [],
+            "recent_logs": []
+        }
+
+def clear_ai_usage_logs() -> bool:
+    """Xóa sạch nhật ký sử dụng AI"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM ai_usage_logs")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def is_save_by_channel_folder_enabled() -> bool:
+    """Kiểm tra xem tính năng lưu video theo thư mục riêng từng kênh có đang bật không (mặc định bật)"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = 'save_by_channel_folder'")
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return True
+        return bool(row["value"] == "1" or row["value"] is True or str(row["value"]).lower() == "true")
+    except Exception:
+        return True
+
+def get_linked_profile_ids(cursor, profile_id: int) -> List[int]:
+    """
+    Tìm tất cả các ID profile (trong bảng gpm_profiles) cùng đăng nhập vào 1 tài khoản mạng xã hội
+    (ví dụ: 1 profile bên GPMLogin và 1 profile bên GenLogin cùng đăng nhập 1 kênh YouTube, TikTok hoặc Facebook).
+    Dựa trên:
+    - YouTube: channel_id (UC...) hoặc channel_handle (@handle)
+    - TikTok: tiktok_uid (UID 19 số) hoặc tiktok_username
+    - Facebook: fb_page_id hoặc tiktok_username (UID cá nhân)
+    - Hoặc channel_id trong bảng profile_channels
+    """
+    if not profile_id:
+        return []
+    try:
+        cursor.execute("""
+            SELECT id, gpm_id, platform, tiktok_username, tiktok_uid, channel_handle, fb_page_id
+            FROM gpm_profiles WHERE id = ?
+        """, (profile_id,))
+        p = cursor.fetchone()
+        if not p:
+            return [profile_id]
+
+        plat = (p["platform"] or "tiktok").lower()
+        gpm_id = p["gpm_id"]
+        u_name = (p["tiktok_username"] or "").strip().lower().lstrip("@")
+        u_uid = (p["tiktok_uid"] or "").strip()
+        c_handle = (p["channel_handle"] or "").strip().lower()
+        fb_id = (p["fb_page_id"] or "").strip()
+
+        # Lấy thêm các channel_id từ profile_channels của gpm_id này
+        cursor.execute("SELECT channel_id FROM profile_channels WHERE gpm_id = ?", (gpm_id,))
+        ch_ids = [r[0].strip() for r in cursor.fetchall() if r[0] and r[0].strip()]
+
+        linked_ids = {profile_id}
+
+        # 1. Tìm theo channel_id trong profile_channels (nếu có)
+        if ch_ids:
+            ph = ",".join("?" for _ in ch_ids)
+            cursor.execute(f"""
+                SELECT gp.id FROM profile_channels pc
+                JOIN gpm_profiles gp ON pc.gpm_id = gp.gpm_id
+                WHERE pc.channel_id IN ({ph})
+            """, tuple(ch_ids))
+            for r in cursor.fetchall():
+                linked_ids.add(r[0])
+
+        # 2. Tìm theo các trường định danh trong gpm_profiles
+        conditions = []
+        params = []
+
+        if u_uid and len(u_uid) > 3:
+            conditions.append("tiktok_uid = ?")
+            params.append(u_uid)
+
+        if plat == "youtube":
+            if c_handle and len(c_handle) > 2:
+                conditions.append("LOWER(channel_handle) = ?")
+                params.append(c_handle)
+            if u_name and len(u_name) > 2:
+                conditions.append("LOWER(REPLACE(tiktok_username, '@', '')) = ?")
+                params.append(u_name)
+        elif plat == "facebook":
+            if fb_id and len(fb_id) > 3:
+                conditions.append("fb_page_id = ?")
+                params.append(fb_id)
+            if u_name and len(u_name) > 3:
+                conditions.append("tiktok_username = ?")
+                params.append(u_name)
+        elif plat == "tiktok":
+            if u_name and len(u_name) > 2:
+                conditions.append("LOWER(REPLACE(tiktok_username, '@', '')) = ?")
+                params.append(u_name)
+
+        if conditions:
+            sql = f"SELECT id FROM gpm_profiles WHERE platform = ? AND ({' OR '.join(conditions)})"
+            cursor.execute(sql, (plat, *params))
+            for r in cursor.fetchall():
+                linked_ids.add(r[0])
+
+        return sorted(list(linked_ids))
+    except Exception as e:
+        log_event("WARNING", f"Lỗi tìm linked profiles cho #{profile_id}: {e}")
+        return [profile_id]
+
+# Khởi tạo DB ngay khi nạp module
+init_db()
+

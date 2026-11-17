@@ -1,0 +1,5 @@
+account,password,proxy,email,email_password,2fa_secret
+tiktok_user_1,MyStrongPass123!,,user1@hotmail.com,HotmailPass456!,
+tiktok_user_2,MyStrongPass123!,http://user:pass@123.45.67.89:8080,user2@outlook.com,OutlookPass789!,
+user3@gmail.com,MyGmailPass123!,,,MyGmailAppPass!,
+user4_totp,MyPass123!,,,,JBSWY3DPEHPK3PXP

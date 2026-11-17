@@ -1,0 +1,8 @@
+{
+  "omocaptcha_api_key": "PKG_CLQ3O0RB80UYLBE4I2TWGCHBGUVBPSN7RMWR1BDCF1ETEKY09KG63HMW62YJLD1794417691",
+  "delay_between_accounts": 3.0,
+  "captcha_timeout": 120,
+  "keep_open": false,
+  "default_imap_host": "",
+  "default_imap_port": 993
+}

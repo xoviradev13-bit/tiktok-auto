@@ -1,0 +1,246 @@
+import sys
+import os
+import time
+import threading
+import webbrowser
+import uvicorn
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ShortsStack.AutoTool.App.1.0")
+    except Exception:
+        pass
+try:
+    import webview
+except ImportError:
+    webview = None
+
+# Đảm bảo đường dẫn thư mục hiện tại nằm trong sys.path
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+import socket
+from backend.config import SERVER_HOST, SERVER_PORT
+from backend.database import init_db, log_event
+from backend.logger import get_logger
+
+logger = get_logger("main")
+
+def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex((host, port)) == 0
+
+def kill_process_on_port(port: int):
+    """Tự động giải phóng cổng nếu có tiến trình cũ chiếm dụng (NIST SP 800-218 / Command Injection Prevention)"""
+    try:
+        import subprocess
+        output = subprocess.check_output(["netstat", "-ano"], text=True, stderr=subprocess.DEVNULL)
+        target = f":{port}"
+        for line in output.strip().split("\n"):
+            parts = line.strip().split()
+            if len(parts) >= 5 and "LISTENING" in parts and any(target in p for p in parts[:2]):
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) > 0:
+                    subprocess.run(["taskkill", "/F", "/PID", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(0.5)
+    except Exception:
+        pass
+
+def start_server():
+    """Khởi động máy chủ FastAPI Local"""
+    config = uvicorn.Config("backend.app:app", host=SERVER_HOST, port=SERVER_PORT, log_level="warning")
+    server = uvicorn.Server(config)
+    server.run()
+
+def apply_native_window_icon(window_title: str):
+    """Gán icon thương hiệu ShortsStack vào thanh tiêu đề Native Window (thay thế icon Python)"""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from backend.config import APP_ICON_PATH, BASE_DIR
+
+    icon_paths = [
+        str(APP_ICON_PATH),
+        str(BASE_DIR / "logo" / "app-logo.ico"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "logo", "app-logo.ico")),
+    ]
+    icon_file = next((p for p in icon_paths if os.path.isfile(p)), None)
+    if not icon_file:
+        return
+
+    WM_SETICON = 0x0080
+    ICON_SMALL = 0
+    ICON_BIG = 1
+    IMAGE_ICON = 1
+    LR_LOADFROMFILE = 0x00000010
+    LR_DEFAULTSIZE = 0x00000040
+
+    user32 = ctypes.windll.user32
+    h_icon = user32.LoadImageW(None, icon_file, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
+    if not h_icon:
+        return
+
+    def _apply():
+        for _ in range(40):
+            time.sleep(0.15)
+            hwnd = user32.FindWindowW(None, window_title)
+            if hwnd:
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon)
+                break
+
+    threading.Thread(target=_apply, daemon=True).start()
+
+def find_app_window() -> int:
+    """Tìm HWND của cửa sổ ShortsStack (kể cả khi đang bị ẩn trong System Tray)"""
+    if sys.platform != "win32":
+        return 0
+    import ctypes
+    user32 = ctypes.windll.user32
+    found_hwnd = [0]
+
+    def enum_cb(hwnd, lparam):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length > 0:
+            buff = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buff, length + 1)
+            if "ShortsStack" in buff.value or "ShortsFarm" in buff.value or "TikTok Auto Farm" in buff.value:
+                found_hwnd[0] = hwnd
+                return False  # Dừng quét khi đã tìm thấy
+        return True
+
+    ENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    user32.EnumWindows(ENUMPROC(enum_cb), 0)
+    return found_hwnd[0]
+
+def acquire_single_instance_lock() -> bool:
+    """
+    Đảm bảo chỉ có DUY NHẤT 1 instance ShortsStack chạy cùng lúc trên Windows.
+    - Nếu đã có cửa sổ Desktop App đang mở: đưa cửa sổ lên trước và kích hoạt.
+    - Nếu phát hiện tiến trình ngầm cũ không có cửa sổ Desktop (hoặc port bị giữ):
+      tự động giải phóng tiến trình cũ để cửa sổ Desktop App mới mở lên cho người dùng,
+      tuyệt đối KHÔNG mở tràn sang trình duyệt web.
+    """
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    mutex_name = "Global\\ShortsStack_App_Mutex"
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+    handle = kernel32.CreateMutexW(None, False, mutex_name)
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        hwnd = find_app_window()
+        if hwnd:
+            print("[INSTANCE] Cửa sổ Desktop App đã mở sẵn. Đang đưa lên màn hình...")
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            user32.SetForegroundWindow(hwnd)
+            return False
+        else:
+            print("[INSTANCE] Phát hiện tiến trình cũ chạy ngầm không có cửa sổ Desktop. Đang giải phóng để mở Desktop App...")
+            kernel32.CloseHandle(handle)
+            kill_process_on_port(SERVER_PORT)
+            time.sleep(0.6)
+            handle = kernel32.CreateMutexW(None, False, mutex_name)
+
+    globals()["_single_instance_mutex"] = handle
+    return True
+
+if __name__ == "__main__":
+    if not acquire_single_instance_lock():
+        sys.exit(0)
+    init_db()
+    log_event("INFO", "Khởi động ứng dụng Desktop ShortsStack...")
+
+    # Giải phóng port nếu bị kẹt từ phiên trước
+    if is_port_in_use(SERVER_PORT, SERVER_HOST):
+        print(f"[PORT] Cổng {SERVER_PORT} đang bận, đang tự động giải phóng...")
+        kill_process_on_port(SERVER_PORT)
+
+    # Khởi động bộ lập lịch chạy ngầm theo cấu hình đã lưu
+    from backend.scheduler import scheduler
+    from backend.database import get_connection
+    scheduler.load_settings()
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = 'scheduler_running'")
+        row = cursor.fetchone()
+        conn.close()
+        should_run = (row[0] == "1") if row else True
+    except Exception:
+        should_run = True
+
+    if should_run:
+        scheduler.start()
+        print("[SCHEDULER] Auto-Pilot da khoi dong tu dong.")
+    else:
+        scheduler.stop()
+        print("[SCHEDULER] Auto-Pilot dang o trang thai TAM DUNG theo cau hinh nguoi dung.")
+
+    # Khởi chạy server FastAPI trong background thread
+    server_thread = threading.Thread(target=start_server, daemon=True)
+    server_thread.start()
+
+    # Chờ server FastAPI sẵn sàng nhận kết nối thay vì sleep cố định
+    start_wait = time.time()
+    server_ready = False
+    while time.time() - start_wait < 15:
+        if is_port_in_use(SERVER_PORT, SERVER_HOST):
+            server_ready = True
+            break
+        time.sleep(0.2)
+    if not server_ready:
+        print(f"[WARN] Server FastAPI mất quá 15s để khởi động trên port {SERVER_PORT}.")
+    else:
+        time.sleep(0.3)
+    dashboard_url = f"http://{SERVER_HOST}:{SERVER_PORT}"
+    print(f"\n=======================================================")
+    print(f"🚀 SHORTSSTACK & AI ENGINE ĐANG CHẠY TẠI:")
+    print(f"👉 {dashboard_url}")
+    print(f"=======================================================\n")
+
+    # Kiểm tra cờ khởi động ẩn vào Khay Hệ Thống (ví dụ khi Windows tự mở máy)
+    is_minimized_boot = "--minimized" in sys.argv or "--tray" in sys.argv
+
+    # Khởi tạo System Tray Icon (chạy độc lập trên background thread)
+    from backend.modules.tray_manager import setup_tray
+
+    # Chạy giao diện Desktop trên Main Thread (Bắt buộc cho Windows GUI)
+    if webview:
+        try:
+            window_title = "ShortsStack & AI Video Engine"
+            window = webview.create_window(
+                window_title,
+                dashboard_url,
+                width=1380,
+                height=860,
+                min_size=(1024, 700),
+                hidden=is_minimized_boot,
+                maximized=not is_minimized_boot
+            )
+            # Kết nối cửa sổ với System Tray
+            setup_tray(window)
+            apply_native_window_icon(window_title)
+            if is_minimized_boot:
+                print("🔒 [BOOT] Khởi động ngầm thành công. Ứng dụng đang chạy trong Khay Hệ Thống.")
+            webview.start()
+            sys.exit(0)
+        except Exception as e:
+            print(f"[UI] Không thể mở pywebview window: {e}. Đang chuyển sang trình duyệt...")
+
+    # Fallback nếu không dùng pywebview: Mở trình duyệt mặc định và giữ main thread sống
+    setup_tray(window=None)
+    if not is_minimized_boot:
+        webbrowser.open(dashboard_url)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n[STOP] Đã dừng ứng dụng.")
+
