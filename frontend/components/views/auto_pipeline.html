@@ -1,170 +1,176 @@
-            <section id="tab-auto-pipeline" class="tab-pane active">
-                <!-- Master Automation Banner -->
-                <div class="auto-master-banner mb-4">
-                    <div class="master-status-left">
-                        <div class="master-pulse-icon" id="masterSchedulerLed"></div>
-                        <div>
-                            <div class="master-title-row">
-                                <h3 id="masterSchedulerTitle">HỆ THỐNG TỰ ĐỘNG: ĐANG HOẠT ĐỘNG</h3>
-                                <span class="badge badge-success" id="masterSchedulerBadge">Auto-Pilot Active</span>
-                            </div>
-                            <p class="panel-sub" style="margin:0;" id="masterSchedulerDesc">Chu kỳ quét RSS (15 phút)
-                                &rarr; Tự động tải MP4
-                                &rarr; AI Render 9:16 Beta &rarr; Tự đăng lên tài khoản</p>
-                        </div>
-                    </div>
-                    <div class="master-status-right"
-                        style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <button class="btn btn-secondary has-tooltip" id="btnToggleSchedulerMaster"
-                            onclick="toggleMasterScheduler(this)"
-                            data-tooltip="Tạm dừng / Bật chạy ngầm tự động (15p/lần)">
-                            <i class="fa-solid fa-pause"></i> <span>Tạm Dừng</span>
-                        </button>
-                        <button class="btn btn-primary has-tooltip" id="btnScanAllMaster"
-                            onclick="scanAllChannelsPipeline(this)"
-                            data-tooltip="Quét tìm video mới ngay lập tức không cần chờ">
-                            <i class="fa-solid fa-bolt"></i> <span>Quét Ngay</span>
-                        </button>
-                        <button class="btn btn-accent has-tooltip tooltip-left" onclick="openNewCampaignModal()"
-                            data-tooltip="Tạo luồng tự động: Kênh YouTube → Thư mục & Edit → Dàn Account"
-                            style="background:linear-gradient(135deg, #8b5cf6 0%, #00f2fe 100%); color:#0a0d14; font-weight:700;">
-                            <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch</span>
-                        </button>
-                        <button class="btn btn-secondary has-tooltip tooltip-left" id="btnSchedulerConfig"
-                            onclick="openSchedulerSettingsModal()"
-                            data-tooltip="Cấu hình chu kỳ quét, bật/tắt RSS & cài đặt tự động ngầm">
-                            <i class="fa-solid fa-sliders"></i> <span>Cài Đặt</span>
-                        </button>
+<section id="tab-auto-pipeline" class="tab-pane active">
+    <!-- Master Automation Banner -->
+    <div class="auto-master-banner mb-4">
+        <div class="master-status-left">
+            <div class="master-pulse-icon" id="masterSchedulerLed"></div>
+            <div>
+                <div class="master-title-row">
+                    <h3 id="masterSchedulerTitle">HỆ THỐNG TỰ ĐỘNG: ĐANG HOẠT ĐỘNG</h3>
+                    <span class="badge badge-success" id="masterSchedulerBadge">Auto-Pilot Active</span>
+                </div>
+                <p class="panel-sub" style="margin:0;" id="masterSchedulerDesc">Chu kỳ quét RSS (15 phút)
+                    &rarr; Tự động tải MP4
+                    &rarr; AI Render 9:16 Beta &rarr; Tự đăng lên tài khoản</p>
+            </div>
+        </div>
+        <div class="master-status-right" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-secondary has-tooltip" id="btnToggleSchedulerMaster"
+                onclick="toggleMasterScheduler(this)" data-tooltip="Tạm dừng / Bật chạy ngầm tự động (15p/lần)">
+                <i class="fa-solid fa-pause"></i> <span>Tạm Dừng</span>
+            </button>
+            <button class="btn btn-primary has-tooltip" id="btnScanAllMaster" onclick="scanAllChannelsPipeline(this)"
+                data-tooltip="Quét tìm video mới ngay lập tức không cần chờ">
+                <i class="fa-solid fa-bolt"></i> <span>Quét Ngay</span>
+            </button>
+            <button class="btn btn-accent has-tooltip tooltip-left" onclick="openNewCampaignModal()"
+                data-tooltip="Tạo luồng tự động: Kênh YouTube → Thư mục & Edit → Dàn Account"
+                style="background:linear-gradient(135deg, #8b5cf6 0%, #00f2fe 100%); color:#0a0d14; font-weight:700;">
+                <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch</span>
+            </button>
+            <button class="btn btn-secondary has-tooltip tooltip-left" id="btnSchedulerConfig"
+                onclick="openSchedulerSettingsModal()"
+                data-tooltip="Cấu hình chu kỳ quét, bật/tắt RSS & cài đặt tự động ngầm">
+                <i class="fa-solid fa-sliders"></i> <span>Cài Đặt</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 4-Stage Visual Steps Indicator -->
+    <div class="glass-panel mb-4">
+        <div class="panel-header">
+            <div>
+                <h3><i class="fa-solid fa-diagram-project text-cyan"></i> Quy Trình Tự Động Hóa
+                </h3>
+                <p class="panel-sub">Video mới sẽ di chuyển liên tục qua 4 công đoạn hoàn toàn tự động</p>
+            </div>
+            <div class="scheduler-badge-wrap">
+                <span class="badge badge-cyan" id="pipelineSchedulerStatus"><i class="fa-solid fa-circle-dot"></i>
+                    Scheduler: Đang Chạy</span>
+            </div>
+        </div>
+
+        <div class="pipeline-flow-grid mt-3">
+            <div class="flow-step-card">
+                <div class="flow-step-num">1</div>
+                <div class="flow-step-icon bg-blue"><i class="fa-solid fa-rss"></i></div>
+                <div class="flow-step-content">
+                    <h4>Quét RSS Kênh Nguồn</h4>
+                    <p class="flow-step-meta" id="pipeRssIntervalMeta">Mỗi 15 phút qua XML YouTube</p>
+                    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+                        <span class="flow-badge" id="pipeActiveChannels">0 Kênh Active</span>
+                        <span class="badge badge-success" id="step1RssBadge" style="font-size:10px;"><i
+                                class="fa-solid fa-signal"></i> RSS: BẬT</span>
                     </div>
                 </div>
-
-                <!-- 4-Stage Visual Steps Indicator -->
-                <div class="glass-panel mb-4">
-                    <div class="panel-header">
-                        <div>
-                            <h3><i class="fa-solid fa-diagram-project text-cyan"></i> Quy Trình Tự Động Hóa
-                            </h3>
-                            <p class="panel-sub">Video mới sẽ di chuyển liên tục qua 4 công đoạn hoàn toàn tự động</p>
-                        </div>
-                        <div class="scheduler-badge-wrap">
-                            <span class="badge badge-cyan" id="pipelineSchedulerStatus"><i
-                                    class="fa-solid fa-circle-dot"></i> Scheduler: Đang Chạy</span>
-                        </div>
-                    </div>
-
-                    <div class="pipeline-flow-grid mt-3">
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">1</div>
-                            <div class="flow-step-icon bg-blue"><i class="fa-solid fa-rss"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Quét RSS Kênh Nguồn</h4>
-                                <p class="flow-step-meta" id="pipeRssIntervalMeta">Mỗi 15 phút qua XML YouTube</p>
-                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:4px;">
-                                    <span class="flow-badge" id="pipeActiveChannels">0 Kênh Active</span>
-                                    <span class="badge badge-success" id="step1RssBadge" style="font-size:10px;"><i
-                                            class="fa-solid fa-signal"></i> RSS: BẬT</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">2</div>
-                            <div class="flow-step-icon bg-cyan"><i class="fa-solid fa-cloud-arrow-down"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Tải Video Gốc (yt-dlp)</h4>
-                                <p class="flow-step-meta">Tự động kéo MP4 vào hàng đợi</p>
-                                <span class="flow-badge" id="pipeDownloadedCount">0 Video Đã Tải</span>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">3</div>
-                            <div class="flow-step-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                            <div class="flow-step-content">
-                                <h4>AI Transformer Render</h4>
-                                <p class="flow-step-meta">Dọc 9:16, speed x1.03, lật hình</p>
-                                <span class="flow-badge" id="pipeRenderedCount">0 Video Đã Render</span>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">4</div>
-                            <div class="flow-step-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Đăng Lên Tài Khoản</h4>
-                                <p class="flow-step-meta">Hàng đợi upload tự động mỗi 60s</p>
-                                <span class="flow-badge" id="pipeUploadedCount">0 Video Đã Đăng</span>
-                            </div>
-                        </div>
-                    </div>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">2</div>
+                <div class="flow-step-icon bg-cyan"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                <div class="flow-step-content">
+                    <h4>Tải Video Gốc (yt-dlp)</h4>
+                    <p class="flow-step-meta">Tự động kéo MP4 vào hàng đợi</p>
+                    <span class="flow-badge" id="pipeDownloadedCount">0 Video Đã Tải</span>
                 </div>
-
-                <!-- Active Campaigns Section -->
-                <div class="glass-panel">
-                    <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
-                        <div>
-                            <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy</h3>
-                            <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
-                        </div>
-                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
-                                data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
-                            <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
-                                data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến Dịch</button>
-                        </div>
-                    </div>
-
-                    <!-- Toolbar: Tìm kiếm & Lọc chiến dịch -->
-                    <div class="table-toolbar mb-3" style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <div class="table-search-box" style="min-width: 280px;">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" id="searchCampaignKeyword" placeholder="Tìm tên chiến dịch, kênh nguồn, nick..." oninput="filterAndRenderCampaigns()">
-                            </div>
-                            <div class="sort-control">
-                                <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
-                                <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;" onchange="filterAndRenderCampaigns()">
-                                    <option value="ALL" selected>Tất cả trạng thái</option>
-                                    <option value="ACTIVE">▶️ Đang kích hoạt</option>
-                                    <option value="PAUSED">⏸️ Tạm dừng</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="badge badge-info" id="badgeCampaignCount" style="font-size:12px; padding:6px 12px;">0 Chiến Dịch</span>
-                        </div>
-                    </div>
-
-                    <div class="campaign-flow-grid" id="campaignsFlowGrid">
-                        <!-- Dynamic Campaign Cards rendered by campaigns.js -->
-                        <div class="card-empty-state">
-                            <i class="fa-solid fa-robot"></i>
-                            <h4>Chưa có chiến dịch tự động nào</h4>
-                            <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận video.</p>
-                            <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()"
-                                style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-                                <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Campaigns Pagination Bar -->
-                    <div id="campaignsPaginationBar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 14px 18px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
-                        <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
-                            <span>Hiển thị</span>
-                            <select id="campaignsPageSizeSelect" class="custom-select" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 100px;" onchange="changeCampaignsPageSize(this.value)">
-                                <option value="5">5 / trang</option>
-                                <option value="10" selected>10 / trang</option>
-                                <option value="20">20 / trang</option>
-                                <option value="50">50 / trang</option>
-                                <option value="100">100 / trang</option>
-                            </select>
-                            <span id="campaignsPaginationInfo">0 chiến dịch</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;" id="campaignsPaginationNav">
-                        </div>
-                    </div>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">3</div>
+                <div class="flow-step-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="flow-step-content">
+                    <h4>AI Transformer Render</h4>
+                    <p class="flow-step-meta">Dọc 9:16, speed x1.03, lật hình</p>
+                    <span class="flow-badge" id="pipeRenderedCount">0 Video Đã Render</span>
                 </div>
-            </section>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">4</div>
+                <div class="flow-step-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
+                <div class="flow-step-content">
+                    <h4>Đăng Lên Tài Khoản</h4>
+                    <p class="flow-step-meta">Hàng đợi upload tự động mỗi 60s</p>
+                    <span class="flow-badge" id="pipeUploadedCount">0 Video Đã Đăng</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            <!-- TAB: VIDEO STUDIO & RECIPE (EDIT Ở ĐÂU & MÔ PHỎNG XEM TRƯỚC) -->
+    <!-- Active Campaigns Section -->
+    <div class="glass-panel">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy</h3>
+                <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
+                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
+                <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
+                    data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến
+                    Dịch</button>
+            </div>
+        </div>
+
+        <!-- Toolbar: Tìm kiếm & Lọc chiến dịch -->
+        <div class="table-toolbar mb-3"
+            style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div class="table-search-box" style="min-width: 280px;">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchCampaignKeyword" placeholder="Tìm tên chiến dịch, kênh nguồn, nick..."
+                        oninput="filterAndRenderCampaigns()">
+                </div>
+                <div class="sort-control">
+                    <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
+                    <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;"
+                        onchange="filterAndRenderCampaigns()">
+                        <option value="ALL" selected>Tất cả trạng thái</option>
+                        <option value="ACTIVE">▶️ Đang kích hoạt</option>
+                        <option value="PAUSED">⏸️ Tạm dừng</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-info" id="badgeCampaignCount" style="font-size:12px; padding:6px 12px;">0 Chiến
+                    Dịch</span>
+            </div>
+        </div>
+
+        <div class="campaign-flow-grid" id="campaignsFlowGrid">
+            <!-- Dynamic Campaign Cards rendered by campaigns.js -->
+            <div class="card-empty-state">
+                <i class="fa-solid fa-robot"></i>
+                <h4>Chưa có chiến dịch tự động nào</h4>
+                <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận
+                    video.</p>
+                <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()"
+                    style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Campaigns Pagination Bar -->
+        <div id="campaignsPaginationBar"
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 14px 18px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
+                <span>Hiển thị</span>
+                <select id="campaignsPageSizeSelect" class="custom-select"
+                    style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 100px;"
+                    onchange="changeCampaignsPageSize(this.value)">
+                    <option value="5">5 / trang</option>
+                    <option value="10" selected>10 / trang</option>
+                    <option value="20">20 / trang</option>
+                    <option value="50">50 / trang</option>
+                    <option value="100">100 / trang</option>
+                </select>
+                <span id="campaignsPaginationInfo">0 chiến dịch</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;" id="campaignsPaginationNav">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- TAB: VIDEO STUDIO & RECIPE (EDIT Ở ĐÂU & MÔ PHỎNG XEM TRƯỚC) -->

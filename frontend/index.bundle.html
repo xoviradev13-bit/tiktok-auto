@@ -28,7 +28,7 @@
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css?v=20261109_04">
-    <link rel="stylesheet" href="/static/css/theme.css?v=20261109_04">
+    <link rel="stylesheet" href="/static/css/theme.css?v=20261109_05">
     <link rel="icon" type="image/x-icon" href="/logo/app-logo.ico">
     <link rel="shortcut icon" type="image/x-icon" href="/logo/app-logo.ico">
     <link rel="apple-touch-icon" href="/logo/app-logo.png">
@@ -1079,177 +1079,182 @@
 
             <!-- TAB: AUDIO STUDIO (KHO ÂM THANH & BGM) -->
 
-                <section id="tab-auto-pipeline" class="tab-pane active">
-                <!-- Master Automation Banner -->
-                <div class="auto-master-banner mb-4">
-                    <div class="master-status-left">
-                        <div class="master-pulse-icon" id="masterSchedulerLed"></div>
-                        <div>
-                            <div class="master-title-row">
-                                <h3 id="masterSchedulerTitle">HỆ THỐNG TỰ ĐỘNG: ĐANG HOẠT ĐỘNG</h3>
-                                <span class="badge badge-success" id="masterSchedulerBadge">Auto-Pilot Active</span>
-                            </div>
-                            <p class="panel-sub" style="margin:0;" id="masterSchedulerDesc">Chu kỳ quét RSS (15 phút)
-                                &rarr; Tự động tải MP4
-                                &rarr; AI Render 9:16 Beta &rarr; Tự đăng lên tài khoản</p>
-                        </div>
-                    </div>
-                    <div class="master-status-right"
-                        style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <button class="btn btn-secondary has-tooltip" id="btnToggleSchedulerMaster"
-                            onclick="toggleMasterScheduler(this)"
-                            data-tooltip="Tạm dừng / Bật chạy ngầm tự động (15p/lần)">
-                            <i class="fa-solid fa-pause"></i> <span>Tạm Dừng</span>
-                        </button>
-                        <button class="btn btn-primary has-tooltip" id="btnScanAllMaster"
-                            onclick="scanAllChannelsPipeline(this)"
-                            data-tooltip="Quét tìm video mới ngay lập tức không cần chờ">
-                            <i class="fa-solid fa-bolt"></i> <span>Quét Ngay</span>
-                        </button>
-                        <button class="btn btn-accent has-tooltip tooltip-left" onclick="openNewCampaignModal()"
-                            data-tooltip="Tạo luồng tự động: Kênh YouTube → Thư mục & Edit → Dàn Account"
-                            style="background:linear-gradient(135deg, #8b5cf6 0%, #00f2fe 100%); color:#0a0d14; font-weight:700;">
-                            <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch</span>
-                        </button>
-                        <button class="btn btn-secondary has-tooltip tooltip-left" id="btnSchedulerConfig"
-                            onclick="openSchedulerSettingsModal()"
-                            data-tooltip="Cấu hình chu kỳ quét, bật/tắt RSS & cài đặt tự động ngầm">
-                            <i class="fa-solid fa-sliders"></i> <span>Cài Đặt</span>
-                        </button>
+    <section id="tab-auto-pipeline" class="tab-pane active">
+    <!-- Master Automation Banner -->
+    <div class="auto-master-banner mb-4">
+        <div class="master-status-left">
+            <div class="master-pulse-icon" id="masterSchedulerLed"></div>
+            <div>
+                <div class="master-title-row">
+                    <h3 id="masterSchedulerTitle">HỆ THỐNG TỰ ĐỘNG: ĐANG HOẠT ĐỘNG</h3>
+                    <span class="badge badge-success" id="masterSchedulerBadge">Auto-Pilot Active</span>
+                </div>
+                <p class="panel-sub" style="margin:0;" id="masterSchedulerDesc">Chu kỳ quét RSS (15 phút)
+                    &rarr; Tự động tải MP4
+                    &rarr; AI Render 9:16 Beta &rarr; Tự đăng lên tài khoản</p>
+            </div>
+        </div>
+        <div class="master-status-right" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-secondary has-tooltip" id="btnToggleSchedulerMaster"
+                onclick="toggleMasterScheduler(this)" data-tooltip="Tạm dừng / Bật chạy ngầm tự động (15p/lần)">
+                <i class="fa-solid fa-pause"></i> <span>Tạm Dừng</span>
+            </button>
+            <button class="btn btn-primary has-tooltip" id="btnScanAllMaster" onclick="scanAllChannelsPipeline(this)"
+                data-tooltip="Quét tìm video mới ngay lập tức không cần chờ">
+                <i class="fa-solid fa-bolt"></i> <span>Quét Ngay</span>
+            </button>
+            <button class="btn btn-accent has-tooltip tooltip-left" onclick="openNewCampaignModal()"
+                data-tooltip="Tạo luồng tự động: Kênh YouTube → Thư mục & Edit → Dàn Account"
+                style="background:linear-gradient(135deg, #8b5cf6 0%, #00f2fe 100%); color:#0a0d14; font-weight:700;">
+                <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch</span>
+            </button>
+            <button class="btn btn-secondary has-tooltip tooltip-left" id="btnSchedulerConfig"
+                onclick="openSchedulerSettingsModal()"
+                data-tooltip="Cấu hình chu kỳ quét, bật/tắt RSS & cài đặt tự động ngầm">
+                <i class="fa-solid fa-sliders"></i> <span>Cài Đặt</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 4-Stage Visual Steps Indicator -->
+    <div class="glass-panel mb-4">
+        <div class="panel-header">
+            <div>
+                <h3><i class="fa-solid fa-diagram-project text-cyan"></i> Quy Trình Tự Động Hóa
+                </h3>
+                <p class="panel-sub">Video mới sẽ di chuyển liên tục qua 4 công đoạn hoàn toàn tự động</p>
+            </div>
+            <div class="scheduler-badge-wrap">
+                <span class="badge badge-cyan" id="pipelineSchedulerStatus"><i class="fa-solid fa-circle-dot"></i>
+                    Scheduler: Đang Chạy</span>
+            </div>
+        </div>
+
+        <div class="pipeline-flow-grid mt-3">
+            <div class="flow-step-card">
+                <div class="flow-step-num">1</div>
+                <div class="flow-step-icon bg-blue"><i class="fa-solid fa-rss"></i></div>
+                <div class="flow-step-content">
+                    <h4>Quét RSS Kênh Nguồn</h4>
+                    <p class="flow-step-meta" id="pipeRssIntervalMeta">Mỗi 15 phút qua XML YouTube</p>
+                    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+                        <span class="flow-badge" id="pipeActiveChannels">0 Kênh Active</span>
+                        <span class="badge badge-success" id="step1RssBadge" style="font-size:10px;"><i
+                                class="fa-solid fa-signal"></i> RSS: BẬT</span>
                     </div>
                 </div>
-
-                <!-- 4-Stage Visual Steps Indicator -->
-                <div class="glass-panel mb-4">
-                    <div class="panel-header">
-                        <div>
-                            <h3><i class="fa-solid fa-diagram-project text-cyan"></i> Quy Trình Tự Động Hóa
-                            </h3>
-                            <p class="panel-sub">Video mới sẽ di chuyển liên tục qua 4 công đoạn hoàn toàn tự động</p>
-                        </div>
-                        <div class="scheduler-badge-wrap">
-                            <span class="badge badge-cyan" id="pipelineSchedulerStatus"><i
-                                    class="fa-solid fa-circle-dot"></i> Scheduler: Đang Chạy</span>
-                        </div>
-                    </div>
-
-                    <div class="pipeline-flow-grid mt-3">
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">1</div>
-                            <div class="flow-step-icon bg-blue"><i class="fa-solid fa-rss"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Quét RSS Kênh Nguồn</h4>
-                                <p class="flow-step-meta" id="pipeRssIntervalMeta">Mỗi 15 phút qua XML YouTube</p>
-                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:4px;">
-                                    <span class="flow-badge" id="pipeActiveChannels">0 Kênh Active</span>
-                                    <span class="badge badge-success" id="step1RssBadge" style="font-size:10px;"><i
-                                            class="fa-solid fa-signal"></i> RSS: BẬT</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">2</div>
-                            <div class="flow-step-icon bg-cyan"><i class="fa-solid fa-cloud-arrow-down"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Tải Video Gốc (yt-dlp)</h4>
-                                <p class="flow-step-meta">Tự động kéo MP4 vào hàng đợi</p>
-                                <span class="flow-badge" id="pipeDownloadedCount">0 Video Đã Tải</span>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">3</div>
-                            <div class="flow-step-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                            <div class="flow-step-content">
-                                <h4>AI Transformer Render</h4>
-                                <p class="flow-step-meta">Dọc 9:16, speed x1.03, lật hình</p>
-                                <span class="flow-badge" id="pipeRenderedCount">0 Video Đã Render</span>
-                            </div>
-                        </div>
-                        <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
-                        <div class="flow-step-card">
-                            <div class="flow-step-num">4</div>
-                            <div class="flow-step-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
-                            <div class="flow-step-content">
-                                <h4>Đăng Lên Tài Khoản</h4>
-                                <p class="flow-step-meta">Hàng đợi upload tự động mỗi 60s</p>
-                                <span class="flow-badge" id="pipeUploadedCount">0 Video Đã Đăng</span>
-                            </div>
-                        </div>
-                    </div>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">2</div>
+                <div class="flow-step-icon bg-cyan"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+                <div class="flow-step-content">
+                    <h4>Tải Video Gốc (yt-dlp)</h4>
+                    <p class="flow-step-meta">Tự động kéo MP4 vào hàng đợi</p>
+                    <span class="flow-badge" id="pipeDownloadedCount">0 Video Đã Tải</span>
                 </div>
-
-                <!-- Active Campaigns Section -->
-                <div class="glass-panel">
-                    <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
-                        <div>
-                            <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy</h3>
-                            <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
-                        </div>
-                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                            <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
-                                data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
-                            <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
-                                data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến Dịch</button>
-                        </div>
-                    </div>
-
-                    <!-- Toolbar: Tìm kiếm & Lọc chiến dịch -->
-                    <div class="table-toolbar mb-3" style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <div class="table-search-box" style="min-width: 280px;">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" id="searchCampaignKeyword" placeholder="Tìm tên chiến dịch, kênh nguồn, nick..." oninput="filterAndRenderCampaigns()">
-                            </div>
-                            <div class="sort-control">
-                                <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
-                                <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;" onchange="filterAndRenderCampaigns()">
-                                    <option value="ALL" selected>Tất cả trạng thái</option>
-                                    <option value="ACTIVE">▶️ Đang kích hoạt</option>
-                                    <option value="PAUSED">⏸️ Tạm dừng</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="badge badge-info" id="badgeCampaignCount" style="font-size:12px; padding:6px 12px;">0 Chiến Dịch</span>
-                        </div>
-                    </div>
-
-                    <div class="campaign-flow-grid" id="campaignsFlowGrid">
-                        <!-- Dynamic Campaign Cards rendered by campaigns.js -->
-                        <div class="card-empty-state">
-                            <i class="fa-solid fa-robot"></i>
-                            <h4>Chưa có chiến dịch tự động nào</h4>
-                            <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận video.</p>
-                            <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()"
-                                style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-                                <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Campaigns Pagination Bar -->
-                    <div id="campaignsPaginationBar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 14px 18px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
-                        <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
-                            <span>Hiển thị</span>
-                            <select id="campaignsPageSizeSelect" class="custom-select" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 100px;" onchange="changeCampaignsPageSize(this.value)">
-                                <option value="5">5 / trang</option>
-                                <option value="10" selected>10 / trang</option>
-                                <option value="20">20 / trang</option>
-                                <option value="50">50 / trang</option>
-                                <option value="100">100 / trang</option>
-                            </select>
-                            <span id="campaignsPaginationInfo">0 chiến dịch</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;" id="campaignsPaginationNav">
-                        </div>
-                    </div>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">3</div>
+                <div class="flow-step-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="flow-step-content">
+                    <h4>AI Transformer Render</h4>
+                    <p class="flow-step-meta">Dọc 9:16, speed x1.03, lật hình</p>
+                    <span class="flow-badge" id="pipeRenderedCount">0 Video Đã Render</span>
                 </div>
-            </section>
+            </div>
+            <div class="flow-arrow"><i class="fa-solid fa-chevron-right"></i></div>
+            <div class="flow-step-card">
+                <div class="flow-step-num">4</div>
+                <div class="flow-step-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
+                <div class="flow-step-content">
+                    <h4>Đăng Lên Tài Khoản</h4>
+                    <p class="flow-step-meta">Hàng đợi upload tự động mỗi 60s</p>
+                    <span class="flow-badge" id="pipeUploadedCount">0 Video Đã Đăng</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            <!-- TAB: VIDEO STUDIO & RECIPE (EDIT Ở ĐÂU & MÔ PHỎNG XEM TRƯỚC) -->
+    <!-- Active Campaigns Section -->
+    <div class="glass-panel">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+                <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy</h3>
+                <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
+                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
+                <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
+                    data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến
+                    Dịch</button>
+            </div>
+        </div>
 
+        <!-- Toolbar: Tìm kiếm & Lọc chiến dịch -->
+        <div class="table-toolbar mb-3"
+            style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div class="table-search-box" style="min-width: 280px;">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchCampaignKeyword" placeholder="Tìm tên chiến dịch, kênh nguồn, nick..."
+                        oninput="filterAndRenderCampaigns()">
+                </div>
+                <div class="sort-control">
+                    <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
+                    <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;"
+                        onchange="filterAndRenderCampaigns()">
+                        <option value="ALL" selected>Tất cả trạng thái</option>
+                        <option value="ACTIVE">▶️ Đang kích hoạt</option>
+                        <option value="PAUSED">⏸️ Tạm dừng</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-info" id="badgeCampaignCount" style="font-size:12px; padding:6px 12px;">0 Chiến
+                    Dịch</span>
+            </div>
+        </div>
+
+        <div class="campaign-flow-grid" id="campaignsFlowGrid">
+            <!-- Dynamic Campaign Cards rendered by campaigns.js -->
+            <div class="card-empty-state">
+                <i class="fa-solid fa-robot"></i>
+                <h4>Chưa có chiến dịch tự động nào</h4>
+                <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận
+                    video.</p>
+                <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()"
+                    style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Campaigns Pagination Bar -->
+        <div id="campaignsPaginationBar"
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 14px 18px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
+                <span>Hiển thị</span>
+                <select id="campaignsPageSizeSelect" class="custom-select"
+                    style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 100px;"
+                    onchange="changeCampaignsPageSize(this.value)">
+                    <option value="5">5 / trang</option>
+                    <option value="10" selected>10 / trang</option>
+                    <option value="20">20 / trang</option>
+                    <option value="50">50 / trang</option>
+                    <option value="100">100 / trang</option>
+                </select>
+                <span id="campaignsPaginationInfo">0 chiến dịch</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;" id="campaignsPaginationNav">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- TAB: VIDEO STUDIO & RECIPE (EDIT Ở ĐÂU & MÔ PHỎNG XEM TRƯỚC) -->
     <section id="tab-video-studio" class="tab-pane">
     <div class="studio-container">
         <!-- Column 1: Video Library Picker -->
@@ -1986,16 +1991,18 @@
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button class="btn btn-secondary" id="btnWireguardStatusModal" onclick="openWireguardStatusModal()"
-                    style="display:flex; align-items:center; gap:6px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08);" title="Quản lý cổng WireGuard VPN cho dàn Profile">
+                    style="display:flex; align-items:center; gap:6px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08);"
+                    title="Quản lý cổng WireGuard VPN cho dàn Profile">
                     <i class="fa-solid fa-shield-halved text-cyan"></i> <span id="wireguardBtnText">WireGuard VPN</span>
                 </button>
                 <button class="btn btn-secondary" id="btnFollowerSchedulerModal" onclick="openFollowerSchedulerModal()"
-                    style="display:flex; align-items:center; gap:6px;" title="Cài đặt lịch quét follower tự động">
+                    style="display:flex; align-items:center; gap:6px;" title="Cài đặt lịch quét định kỳ dữ liệu TikTok">
                     <i class="fa-solid fa-clock text-accent"></i> <span>Lịch Quét Định Kỳ</span>
                 </button>
                 <button class="btn btn-accent" id="btnScanAllFollowersTab" onclick="scanAllProfilesFollowers(this)"
-                    style="display:flex; align-items:center; gap:6px; font-weight:700;">
-                    <i class="fa-solid fa-magnifying-glass-chart"></i> Quét Follower
+                    style="display:flex; align-items:center; gap:6px; font-weight:700;"
+                    title="Quét và cập nhật dữ liệu TikTok của toàn bộ profile ngay lập tức">
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Quét Dữ Liệu TikTok
                 </button>
                 <button class="btn btn-primary" id="btnSyncGpmTab" onclick="syncGPMProfiles(this)"
                     style="display:flex; align-items:center; gap:6px;">
@@ -2009,19 +2016,25 @@
             style="display:none; width: 100%; box-sizing: border-box; margin: 16px 0 12px 0; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(14, 165, 233, 0.5); border-radius: var(--radius-md); padding: 14px 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <i class="fa-solid fa-arrows-rotate fa-spin text-cyan" id="syncProgressIcon" style="font-size: 18px;"></i>
+                    <i class="fa-solid fa-arrows-rotate fa-spin text-cyan" id="syncProgressIcon"
+                        style="font-size: 18px;"></i>
                     <div>
-                        <strong id="syncProgressTitle" style="color: #fff; font-size: 14px;">Đang đồng bộ profiles...</strong>
-                        <div id="syncProgressSubtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                        <strong id="syncProgressTitle" style="color: #fff; font-size: 14px;">Đang đồng bộ
+                            profiles...</strong>
+                        <div id="syncProgressSubtitle"
+                            style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
                             Đang kết nối API trình duyệt Antidetect và nạp danh sách tài khoản vào cơ sở dữ liệu...
                         </div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 14px;">
-                    <span id="syncProgressPercent" style="font-weight: 800; font-size: 14px; color: var(--accent-cyan); letter-spacing: 0.5px;">Đang xử lý...</span>
+                    <span id="syncProgressPercent"
+                        style="font-weight: 800; font-size: 14px; color: var(--accent-cyan); letter-spacing: 0.5px;">Đang
+                        xử lý...</span>
                 </div>
             </div>
-            <div style="width: 100%; height: 7px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
+            <div
+                style="width: 100%; height: 7px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
                 <div id="syncProgressBarFill"
                     style="width: 100%; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8, #38bdf8); background-size: 200% 100%; animation: syncShimmer 1.5s infinite linear; border-radius: 4px;">
                 </div>
@@ -2068,7 +2081,8 @@
                     <!-- Sort Field -->
                     <div class="sort-control">
                         <label for="sortGpmField"><i class="fa-solid fa-arrow-down-wide-short"></i> Sắp xếp:</label>
-                        <select id="sortGpmField" class="custom-select sort-select" onchange="handleGpmSortChange(this.value)">
+                        <select id="sortGpmField" class="custom-select sort-select"
+                            onchange="handleGpmSortChange(this.value)">
                             <option value="followers_count">Số Follower</option>
                             <option value="name">Tên Profile</option>
                             <option value="tiktok_username">Account Username</option>
@@ -2088,8 +2102,10 @@
 
                     <!-- Filter Country -->
                     <div class="sort-control">
-                        <label for="filterGpmCountry"><i class="fa-solid fa-earth-americas text-cyan"></i> Quốc Gia:</label>
-                        <select id="filterGpmCountry" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmCountry"><i class="fa-solid fa-earth-americas text-cyan"></i> Quốc
+                            Gia:</label>
+                        <select id="filterGpmCountry" class="custom-select" style="min-width: 145px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả quốc gia</option>
                             <option value="US">🇺🇸 Hoa Kỳ (US)</option>
                             <option value="GB">🇬🇧 Anh (GB)</option>
@@ -2113,7 +2129,8 @@
                     <!-- Filter Beta -->
                     <div class="sort-control">
                         <label for="filterGpmBeta"><i class="fa-solid fa-trophy text-gold"></i> Đạt Beta / 10K:</label>
-                        <select id="filterGpmBeta" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                        <select id="filterGpmBeta" class="custom-select" style="min-width: 155px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả chuẩn Beta</option>
                             <option value="ELIGIBLE">🏆 Đủ điều kiện Beta (≥ 10K)</option>
                             <option value="INELIGIBLE">🌱 Chưa đủ điều kiện (< 10K)</option>
@@ -2122,8 +2139,10 @@
 
                     <!-- Filter Creator Program (Yes / No) -->
                     <div class="sort-control">
-                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator Program:</label>
-                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator
+                            Program:</label>
+                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả Creator Program</option>
                             <option value="YES">✅ Đã bật Creator (Yes)</option>
                             <option value="NO">❌ Chưa bật Creator (No)</option>
@@ -2136,8 +2155,10 @@
 
                     <!-- Filter Hiệu Suất / Flop -->
                     <div class="sort-control">
-                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất / Flop:</label>
-                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất /
+                            Flop:</label>
+                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả hiệu suất</option>
                             <option value="GOOD">🚀 Khỏe / Phát triển tốt</option>
                             <option value="FLOP">⚠️ Tổng hợp Flop (0v / 200v / Không ổn định)</option>
@@ -2201,7 +2222,8 @@
                             title="Bấm để sắp xếp theo trạng thái Đạt Chỉ Tiêu / Chuẩn Beta">
                             Đạt Chỉ Tiêu / Beta <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th class="sortable" id="th-gpm-creator_program" onclick="handleGpmHeaderSort('creator_program')"
+                        <th class="sortable" id="th-gpm-creator_program"
+                            onclick="handleGpmHeaderSort('creator_program')"
                             title="Bấm để sắp xếp theo Creator Program (Beta)">
                             Creator Program <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
@@ -2226,10 +2248,13 @@
         </div>
 
         <!-- GPM Profiles Pagination -->
-        <div id="gpmProfilesPagination" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: -1px; flex-wrap: wrap; gap: 10px;">
+        <div id="gpmProfilesPagination"
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: -1px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
                 <span>Hiển thị</span>
-                <select id="gpmProfilesPageSizeSelect" class="input-field" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 95px;" onchange="changeGpmProfilesPageSize(this.value)">
+                <select id="gpmProfilesPageSizeSelect" class="input-field"
+                    style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 95px;"
+                    onchange="changeGpmProfilesPageSize(this.value)">
                     <option value="10">10 / trang</option>
                     <option value="20" selected>20 / trang</option>
                     <option value="50">50 / trang</option>
@@ -2801,8 +2826,10 @@
                     <textarea id="settingDeepSeekKey" class="input-field font-monospace" rows="2"
                         placeholder="sk-key1&#10;sk-key2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('deepseek', this)"
@@ -2835,8 +2862,10 @@
                     <textarea id="settingGeminiKey" class="input-field font-monospace" rows="2"
                         placeholder="AIzaKey1&#10;AIzaKey2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('gemini', this)"
@@ -2871,8 +2900,10 @@
                     <textarea id="settingOpenAiKey" class="input-field font-monospace" rows="2"
                         placeholder="sk-key1&#10;sk-key2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('openai', this)"
@@ -3114,8 +3145,11 @@
             <div class="settings-section-header">
                 <i class="fa-solid fa-eye-slash" style="color:#00f2fe;"></i>
                 <div>
-                    <h4 data-i18n="settings_invisible_automation_title">Chế Độ Tự Động Hóa Ẩn Ngầm (Invisible Screen Mode)</h4>
-                    <p class="panel-sub" data-i18n="settings_invisible_automation_sub">Tự động đưa cửa sổ trình duyệt ra ngoài màn hình (-3200, -3200) và tắt tiếng để bạn thoải mái làm việc khác mà không bị làm phiền.</p>
+                    <h4 data-i18n="settings_invisible_automation_title">Chế Độ Tự Động Hóa Ẩn Ngầm (Invisible Screen
+                        Mode)</h4>
+                    <p class="panel-sub" data-i18n="settings_invisible_automation_sub">Tự động đưa cửa sổ trình duyệt ra
+                        ngoài màn hình (-3200, -3200) và tắt tiếng để bạn thoải mái làm việc khác mà không bị làm phiền.
+                    </p>
                 </div>
             </div>
 
@@ -3128,11 +3162,17 @@
                         <span class="slider"></span>
                     </label>
                     <span>
-                        <strong style="color:var(--accent-cyan);" data-i18n="settings_invisible_automation_label">Ẩn cửa sổ trình duyệt khi tự động hóa (Khuyên dùng)</strong>
+                        <strong style="color:var(--accent-cyan);" data-i18n="settings_invisible_automation_label">Ẩn cửa
+                            sổ trình duyệt khi tự động hóa (Khuyên dùng)</strong>
                         <span
-                            style="color:var(--text-muted); font-size:12px; display:block; margin-top:3px; line-height:1.5;" data-i18n="settings_invisible_automation_desc">
-                            • <strong>BẬT (Mặc định)</strong>: Cửa sổ trình duyệt sẽ chạy ở toạ độ ngầm ngoài màn hình và tắt tiếng video khi Tự động đăng bài, Lướt feed Warm-up hoặc Quét tài khoản. Bạn hoàn toàn có thể làm việc khác, gõ phím, lướt web mà không bị cửa sổ che khuất hay cướp chuột.<br>
-                            • <strong>TẮT</strong>: Cửa sổ trình duyệt sẽ hiện lên giữa màn hình để bạn trực tiếp theo dõi thao tác từng bước (phục vụ kiểm tra lỗi hoặc gỡ checkpoint).
+                            style="color:var(--text-muted); font-size:12px; display:block; margin-top:3px; line-height:1.5;"
+                            data-i18n="settings_invisible_automation_desc">
+                            • <strong>BẬT (Mặc định)</strong>: Cửa sổ trình duyệt sẽ chạy ở toạ độ ngầm ngoài màn hình
+                            và tắt tiếng video khi Tự động đăng bài, Lướt feed Warm-up hoặc Quét tài khoản. Bạn hoàn
+                            toàn có thể làm việc khác, gõ phím, lướt web mà không bị cửa sổ che khuất hay cướp
+                            chuột.<br>
+                            • <strong>TẮT</strong>: Cửa sổ trình duyệt sẽ hiện lên giữa màn hình để bạn trực tiếp theo
+                            dõi thao tác từng bước (phục vụ kiểm tra lỗi hoặc gỡ checkpoint).
                         </span>
                     </span>
                 </label>
@@ -3172,8 +3212,8 @@
                         và các thông số tự động</p>
                 </div>
             </div>
-            <button type="button" class="modal-corner-close"
-                onclick="closeSchedulerSettingsModal()" title="Đóng cửa sổ" aria-label="Đóng cửa sổ"
+            <button type="button" class="modal-corner-close" onclick="closeSchedulerSettingsModal()" title="Đóng cửa sổ"
+                aria-label="Đóng cửa sổ"
                 style="position: absolute; top: 14px; right: 18px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px;">
                 <i class="fa-solid fa-xmark"></i>
             </button>
@@ -3298,58 +3338,72 @@
                 </div>
 
                 <!-- Số luồng tải lên song song (Concurrent Upload Workers) -->
-                <div class="form-group full-width" style="background: rgba(168, 85, 247, 0.05); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(168, 85, 247, 0.2);">
+                <div class="form-group full-width"
+                    style="background: rgba(168, 85, 247, 0.05); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(168, 85, 247, 0.2);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <label style="font-weight:600; margin:0;">
-                            <i class="fa-solid fa-layer-group" style="color:#c084fc;"></i> <span data-i18n="settings_concurrent_uploads_title">Số Luồng Đăng Bài Song Song:</span>
+                            <i class="fa-solid fa-layer-group" style="color:#c084fc;"></i> <span
+                                data-i18n="settings_concurrent_uploads_title">Số Luồng Đăng Bài Song Song:</span>
                         </label>
-                        <span id="modalParallelUploadsBadge" class="badge" style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:11.5px; font-weight:700;">1 Luồng (8GB RAM)</span>
+                        <span id="modalParallelUploadsBadge" class="badge"
+                            style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:11.5px; font-weight:700;">1
+                            Luồng (8GB RAM)</span>
                     </div>
                     <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-                        <input type="number" id="modalMaxParallelUploads" class="input-field" min="1" max="6" value="1"
+                        <input type="number" id="modalMaxParallelUploads" class="input-field" min="1" max="20" value="1"
                             oninput="updateModalParallelUploadsBadge(this.value)"
                             style="width:120px; font-size:15px; font-weight:700; color:#c084fc; text-align:center;">
-                        <span style="font-size:12.5px; color:var(--text-muted); font-weight:600;">tài khoản upload đồng thời</span>
+                        <span style="font-size:12.5px; color:var(--text-muted); font-weight:600;">tài khoản upload đồng
+                            thời</span>
                     </div>
                     <!-- Presets for RAM -->
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
-                        <button type="button" class="btn btn-sm btn-primary has-tooltip tooltip-top tooltip-right" id="btnParallelPreset1"
-                            onclick="setParallelUploadsPreset(1)" data-tooltip="Khuyến nghị mặc định cho laptop 8GB RAM, không bị tràn bộ nhớ">
-                            <i class="fa-solid fa-laptop"></i> 1 Luồng (8GB RAM)
+                        <button type="button" class="btn btn-sm btn-primary has-tooltip tooltip-top tooltip-right"
+                            id="btnParallelPreset1" onclick="setParallelUploadsPreset(1)"
+                            data-tooltip="Khuyến nghị cho laptop 8GB RAM, tiết kiệm tài nguyên">
+                            <i class="fa-solid fa-laptop"></i> 1–2 Luồng (8GB RAM)
                         </button>
-                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left" id="btnParallelPreset2"
-                            onclick="setParallelUploadsPreset(2)" data-tooltip="Phù hợp máy 16GB RAM, đăng 2 profile cùng lúc">
-                            <i class="fa-solid fa-server"></i> 2 Luồng (16GB RAM)
+                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left"
+                            id="btnParallelPreset2" onclick="setParallelUploadsPreset(3)"
+                            data-tooltip="Phù hợp máy 16GB RAM, tải lên mượt mà">
+                            <i class="fa-solid fa-server"></i> 3–4 Luồng (16GB RAM)
                         </button>
-                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-right" id="btnParallelPreset3"
-                            onclick="setParallelUploadsPreset(3)" data-tooltip="Phù hợp máy 32GB RAM, tốc độ cao">
-                            <i class="fa-solid fa-bolt"></i> 3 Luồng (32GB RAM)
+                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-right"
+                            id="btnParallelPreset3" onclick="setParallelUploadsPreset(6)"
+                            data-tooltip="Phù hợp máy 32GB RAM, tăng tốc đăng bài cho dàn nick lớn">
+                            <i class="fa-solid fa-bolt"></i> 6–8 Luồng (32GB RAM)
                         </button>
-                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left" id="btnParallelPreset4"
-                            onclick="setParallelUploadsPreset(4)" data-tooltip="Dành cho máy trạm / Farm chuyên dụng">
-                            4–5 Luồng (Farm Pro)
+                        <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left"
+                            id="btnParallelPreset4" onclick="setParallelUploadsPreset(10)"
+                            data-tooltip="Dành cho máy trạm chuyên dụng / Server farm 64GB+ RAM">
+                            10+ Luồng (Farm Pro)
                         </button>
                     </div>
                     <small class="form-hint" style="margin-top:6px; margin-bottom:0; line-height:1.4;">
-                        🛡️ <b>Mặc định 1 luồng</b> để đảm bảo laptop 8GB RAM chạy mượt mà, không bị lag đơ hoặc crash trình duyệt. Nếu máy tính của bạn có 16GB - 32GB+ RAM, hãy nâng lên 2-4 luồng để tăng tốc độ đăng bài song song cho dàn nick.
+                        🛡️ Mỗi profile trình duyệt upload chỉ tốn khoảng 400MB–600MB RAM. Máy 32GB RAM có thể chạy thoải mái 6–10 luồng đồng thời. Lưu ý: Cần đảm bảo băng thông mạng và proxy riêng cho từng tài khoản khi mở nhiều luồng.
                     </small>
                 </div>
 
                 <!-- Cấu Hình Đa Luồng Cho Quét Kênh YouTube (Fast RSS Engine) -->
-                <div class="form-group full-width" style="background: rgba(0, 242, 254, 0.04); padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.2); margin-top: 10px;">
+                <div class="form-group full-width"
+                    style="background: rgba(0, 242, 254, 0.04); padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.2); margin-top: 10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <label style="font-weight:700; margin:0; font-size:13px; color:#fff;">
                             <i class="fa-solid fa-rss text-gold"></i> Tăng Tốc Quét Kênh YouTube
                         </label>
                         <span class="badge badge-cyan" style="font-size:10.5px; font-weight:700;">Fast RSS Engine</span>
                     </div>
-                    <small class="form-hint" style="margin-top:4px; margin-bottom:10px; color:var(--text-muted); line-height:1.4;">
-                        Quét song song nhiều kênh YouTube qua RSS XML (0 Quota API). Khuyến nghị <b>15–20 luồng</b> giúp quét 4.000 kênh chỉ trong ~2 đến 3 phút.
+                    <small class="form-hint"
+                        style="margin-top:4px; margin-bottom:10px; color:var(--text-muted); line-height:1.4;">
+                        Quét song song nhiều kênh YouTube qua RSS XML (0 Quota API). Khuyến nghị <b>15–20 luồng</b> giúp
+                        quét 4.000 kênh chỉ trong ~2 đến 3 phút.
                     </small>
 
-                    <div style="background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center;">
+                    <div
+                        style="background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <label style="font-size:12.5px; font-weight:600; color:var(--text-primary); margin:0; display:block;">
+                            <label
+                                style="font-size:12.5px; font-weight:600; color:var(--text-primary); margin:0; display:block;">
                                 Số Luồng Quét RSS Kênh Song Song:
                             </label>
                             <small class="form-hint" style="font-size:11px; margin:2px 0 0 0;">
@@ -3357,7 +3411,8 @@
                             </small>
                         </div>
                         <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-                            <input type="number" id="modalRssConcurrentWorkers" class="input-field" min="1" max="50" value="15"
+                            <input type="number" id="modalRssConcurrentWorkers" class="input-field" min="1" max="50"
+                                value="15"
                                 style="width:85px; font-weight:700; color:var(--accent-cyan); text-align:center;">
                             <span style="font-size:12px; color:var(--text-muted); font-weight:600;">luồng</span>
                         </div>
@@ -5754,322 +5809,354 @@
     </div>
 </div>
 
-<!-- MODAL: CÀI ĐẶT LỊCH QUÉT ĐỊNH KỲ TỰ ĐỘNG -->
-        <div id="followerSchedulerModal" class="modal">
-        <div class="modal-content" style="max-width: 580px;">
-            <div class="modal-header">
-                <div style="max-width: 440px;">
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Định Kỳ
-                    </h3>
-                    <p class="modal-sub"
-                        style="max-width: 400px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
-                        Cấu hình tự động quét và cập nhật số liệu TikTok của dàn tài khoản</p>
-                </div>
-                <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeFollowerSchedulerModal()"
-                    data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
+<!-- MODAL: CÀI ĐẶT LỊCH QUÉT FOLLOWER TỰ ĐỘNG -->
+    <div id="followerSchedulerModal" class="modal">
+    <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-header">
+            <div style="max-width: 440px;">
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Định Kỳ
+                </h3>
+                <p class="modal-sub"
+                    style="max-width: 400px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
+                    Cấu hình tự động quét và cập nhật số liệu TikTok của dàn tài khoản</p>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <!-- Trạng thái bật/tắt -->
-                <div
-                    style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Định Kỳ</div>
-                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Tự động chạy ngầm theo lịch để quét và cập nhật số liệu TikTok của dàn tài khoản</div>
-                    </div>
-                    <label class="tele-toggle-switch has-tooltip tooltip-side-left"
-                        data-tooltip="Bật hoặc tắt quét định kỳ">
-                        <input type="checkbox" id="chkFollowerSchedulerEnable" checked>
-                        <span class="tele-toggle-slider"></span>
-                    </label>
-                </div>
-
-                <!-- Chế độ quét -->
-                <div class="form-group">
-                    <label
-                        style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: block;">
-                        <i class="fa-solid fa-calendar-check"></i> Chế độ quét lịch trình:
-                    </label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <label
-                            style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
-                            <input type="radio" name="followerScanMode" id="scanModeDaily" value="daily_times" checked
-                                onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
-                            <div>
-                                <strong style="font-size: 13px; color: #fff;">Giờ Cố Định Hàng Ngày</strong>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Quét vào các
-                                    khung giờ vàng trong ngày (VD: 08:00, 20:00)</div>
-                            </div>
-                        </label>
-                        <label
-                            style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
-                            <input type="radio" name="followerScanMode" id="scanModeInterval" value="interval"
-                                onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
-                            <div>
-                                <strong style="font-size: 13px; color: #fff;">Chu Kỳ Cách N Tiếng</strong>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Cứ mỗi 6 tiếng
-                                    hoặc 12 tiếng tự động quét lại một lần</div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Cấu hình giờ cố định -->
-                <div id="wrapDailyTimes" class="form-group">
-                    <label
-                        style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
-                        <i class="fa-regular fa-clock"></i> Các mốc giờ quét trong ngày (phân tách bởi dấu phẩy):
-                    </label>
-                    <input type="text" id="inputFollowerScanTimes" class="input-field" placeholder="08:00, 20:00"
-                        value="08:00, 20:00">
-                    <small class="form-hint"
-                        style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
-                        Ví dụ: <code>08:00, 14:00, 20:00</code> hoặc chỉ 1 giờ cụ thể như <code>21:00</code> (định dạng
-                        24 giờ).
-                    </small>
-                </div>
-
-                <!-- Cấu hình chu kỳ N tiếng -->
-                <div id="wrapIntervalHours" class="form-group" style="display: none;">
-                    <label
-                        style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
-                        <i class="fa-solid fa-hourglass-half"></i> Khoảng cách giữa các lần quét:
-                    </label>
-                    <select id="selectFollowerIntervalHours" class="custom-select" style="width: 100%; height: 42px;">
-                        <option value="2">Mỗi 2 tiếng một lần</option>
-                        <option value="4">Mỗi 4 tiếng một lần</option>
-                        <option value="6" selected>Mỗi 6 tiếng một lần (Khuyên Dùng)</option>
-                        <option value="8">Mỗi 8 tiếng một lần</option>
-                        <option value="12">Mỗi 12 tiếng một lần</option>
-                        <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
-                    </select>
-                </div>
-
-                <!-- Cấu hình trình duyệt đồng bộ Profile (Đa luồng) -->
-                <div style="background: rgba(168, 85, 247, 0.05); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.25);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <label style="font-weight:600; font-size:12.5px; color:#fff; margin:0;">
-                            <i class="fa-solid fa-users-gear" style="color:#c084fc;"></i> Trình Duyệt Đồng Bộ Profile (Đa Luồng):
-                        </label>
-                        <span class="badge" style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:10px; font-weight:700;">Invisible Pool</span>
-                    </div>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        <input type="number" id="schedProfileSyncConcurrentWorkers" class="input-field" min="1" max="10" value="3"
-                            style="width:90px; font-size:14px; font-weight:700; color:#c084fc; text-align:center;">
-                        <span style="font-size:12px; color:var(--text-muted); font-weight:600;">profile / luồng cùng lúc (mặc định: 3)</span>
-                    </div>
-                    <small class="form-hint" style="font-size:11px; margin-top:6px; color:var(--text-muted); line-height:1.4; display:block;">
-                        Mở song song 3–5 profile ẩn ngầm ngoài màn hình khi cần cào dữ liệu TikTok Studio. Rút ngắn thời gian quét 1.000 tài khoản từ 3.3 tiếng xuống còn <b>~40 phút</b>.
-                    </small>
-                </div>
-
-                <!-- Banner thông tin bảo vệ -->
-                <div
-                    style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
-                    <div
-                        style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                        <i class="fa-solid fa-shield-halved"></i> Cơ Chế Vận Hành Thông Minh:
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px;">
-                        <li><strong>Ưu tiên ZeroRAM (Không mở trình duyệt):</strong> Đọc trực tiếp cookie từ ổ đĩa và
-                            gọi API TikTok thần tốc (~0.5s/nick), không tốn RAM và không mở cửa sổ trình duyệt. Chỉ mở
-                            app/trình duyệt làm dự phòng khi cookie hết hạn.</li>
-                        <li><strong>Chống Xung Đột:</strong> Profile nào đang bận upload bài sẽ được tự động
-                            bỏ qua và quét lại sau, tuyệt đối không làm gián đoạn việc đăng video.</li>
-                        <li><strong>Đạt Chỉ Tiêu:</strong> Khi phát hiện nick/kênh đạt ngưỡng cài đặt (TikTok,
-                            YouTube, Facebook), hệ thống sẽ tự động cập nhật trạng thái và gắn huy hiệu Đạt Chỉ Tiêu trên danh sách.</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                <button type="button" class="btn btn-warning" onclick="scanAllProfilesFollowers(this)">
-                    <i class="fa-solid fa-bolt"></i> Quét Thử Ngay
-                </button>
-                <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-secondary"
-                        onclick="closeFollowerSchedulerModal()">Đóng</button>
-                    <button type="button" class="btn btn-primary" onclick="saveFollowerSchedulerSettings(this)">
-                        <i class="fa-solid fa-check"></i> Lưu Lịch Quét Định Kỳ
-                    </button>
-                </div>
-            </div>
+            <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeFollowerSchedulerModal()"
+                data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
         </div>
-    </div><!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
-    <div id="editProfileUsernameModal" class="modal">
-        <div class="modal-content" style="max-width: 480px;">
-            <div class="modal-header">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- Trạng thái bật/tắt -->
+            <div
+                style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i id="editProfileModalIcon" class="fa-solid fa-user-pen text-accent"></i> <span id="editProfileModalTitle">Sửa Thông Tin & Chỉ Số Tài Khoản</span>
-                    </h3>
-                    <p class="modal-sub" id="editProfileModalSub">Gán thủ công hoặc đồng bộ thông số cho profile / kênh</p>
+                    <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Định Kỳ</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Tự động chạy ngầm theo lịch
+                        để quét và cập nhật số liệu TikTok của dàn tài khoản</div>
                 </div>
-                <button type="button" class="close-btn has-tooltip" onclick="closeEditUsernameModal()"
-                    data-tooltip="Đóng"><i class="fa-solid fa-xmark"></i></button>
+                <label class="tele-toggle-switch has-tooltip tooltip-side-left"
+                    data-tooltip="Bật hoặc tắt quét định kỳ">
+                    <input type="checkbox" id="chkFollowerSchedulerEnable" checked>
+                    <span class="tele-toggle-slider"></span>
+                </label>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
-                <input type="hidden" id="editProfileGpmId">
-                <input type="hidden" id="editProfileChannelId">
-                <div class="form-group">
-                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Tên Profile
-                        :</label>
-                    <input type="text" id="editProfileName" class="input-field" disabled
-                        style="background: rgba(255,255,255,0.05); color: var(--text-primary);">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr; gap:10px;">
-                    <!-- Trình duyệt (Preserved in DOM for future development) -->
-                    <div class="form-group" style="display: none;">
-                        <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
-                                class="fa-solid fa-window-restore"></i> Trình Duyệt:</label>
-                        <select id="editProfileBrowserType" class="input-field" style="height:38px;">
-                            <option value="gpm" selected>GPMLogin</option>
-                            <option value="adspower">AdsPower</option>
-                            <option value="dolphin">Dolphin Anty</option>
-                            <option value="genlogin">GenLogin</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
-                                class="fa-brands fa-tiktok text-pink"></i> Nền Tảng:</label>
-                        <select id="editProfilePlatform" class="input-field" style="height:38px;" onchange="onEditProfilePlatformChange(this.value)">
-                            <option value="tiktok" selected>TikTok</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
-                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quốc Gia VPN (WireGuard SOCKS5 / Extension):
-                    </label>
-                    <select id="editProfileCountry" class="input-field" style="height:38px; border:1px solid rgba(56, 189, 248, 0.4); font-weight:600;">
-                        <option value="NONE" selected>🌐 Không Dùng Proxy (Direct IP - Tắt Proxy GPMLogin)</option>
-                        <option value="US">🇺🇸 Hoa Kỳ (United States)</option>
-                        <option value="GB">🇬🇧 Vương Quốc Anh (United Kingdom)</option>
-                        <option value="DE">🇩🇪 Đức (Germany)</option>
-                        <option value="FR">🇫🇷 Pháp (France)</option>
-                        <option value="JP">🇯🇵 Nhật Bản (Japan)</option>
-                        <option value="KR">🇰🇷 Hàn Quốc (South Korea)</option>
-                        <option value="CA">🇨🇦 Canada</option>
-                        <option value="AU">🇦🇺 Úc (Australia)</option>
-                        <option value="SG">🇸🇬 Singapore</option>
-                        <option value="NL">🇳🇱 Hà Lan (Netherlands)</option>
-                        <option value="MX">🇲🇽 Mexico</option>
-                        <option value="ID">🇮🇩 Indonesia (Indo)</option>
-                        <option value="MY">🇲🇾 Malaysia (Malay)</option>
-                        <option value="PH">🇵🇭 Philippines (Philippin)</option>
-                        <option value="VN">🇻🇳 Việt Nam (Vietnam)</option>
-                    </select>
-                    <small class="form-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
-                        Tự động gán cổng Proxy WireGuard SOCKS5 (0.05s) trực tiếp vào GPMLogin qua API, không mở trình duyệt.
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileUsername" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileUserIcon" class="fa-brands fa-tiktok"></i> <span id="editProfileUserLabel">Tài Khoản / Username:</span>
-                    </label>
-                    <div style="position: relative;">
-                        <span id="editProfileUserPrefix"
-                            style="position: absolute; left: 12px; top: 10px; color: var(--text-muted); font-weight: 700;">@</span>
-                        <input type="text" id="editProfileUsername" class="input-field" placeholder="username_cua_ban"
-                            style="padding-left: 28px;">
-                    </div>
-                    <small id="editProfileUserHint" class="form-hint"
-                        style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
-                        Không cần nhập dấu @. Ví dụ: <code>dat.nguyen261096</code>
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileNickname" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileNickIcon" class="fa-solid fa-id-badge"></i> <span id="editProfileNickLabel">Tên Kênh / Hiển Thị:</span>
-                    </label>
-                    <input type="text" id="editProfileNickname" class="input-field"
-                        placeholder="Ví dụ: Hoàng Minh, Iamcooked...">
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileFollowers" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileFollowersIcon" class="fa-solid fa-users"></i> <span id="editProfileFollowersLabel">Số Follower / Người Đăng Ký:</span>
-                    </label>
-                    <input type="number" id="editProfileFollowers" class="input-field" placeholder="0">
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
-                <button type="button" class="btn btn-primary" onclick="saveProfileUsernameFromModal(this)"
-                    style="min-width: 140px;">
-                    <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
-                </button>
-            </div>
-        </div>
-    </div>
 
-    <!-- MODAL: QUẢN LÝ WIREGUARD VPN SOCKS5 CHO 1.000 PROFILE GPM -->
-    <div id="wireguardStatusModal" class="modal">
-        <div class="modal-content" style="max-width: 980px; width: 94%;">
-            <div class="modal-header">
-                <div>
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quản Lý WireGuard VPN SOCKS5
-                    </h3>
-                    <p class="modal-sub">Cổng Proxy cục bộ tốc độ cao hỗ trợ 1.000 Profile GPMLogin dùng đồng thời</p>
-                </div>
-                <button type="button" class="close-btn has-tooltip" onclick="closeWireguardStatusModal()" data-tooltip="Đóng">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
-                <!-- Hộp thông báo tổng quan & hướng dẫn -->
-                <div style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 14px 18px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
-                        <strong style="color: var(--accent-cyan); font-size: 13.5px;">
-                            <i class="fa-solid fa-circle-check"></i> Trạng thái: <span id="wireguardActiveSummary">Đang tải...</span>
-                        </strong>
-                        <div style="display:flex; gap:8px;">
-                            <button class="btn btn-sm btn-secondary" onclick="openWireguardFolderOnWindows()" title="Mở thư mục data/vpn_configs trên máy tính" style="padding: 6px 14px;">
-                                <i class="fa-regular fa-folder-open text-warning"></i> Mở Thư Mục Config
-                            </button>
-                            <button class="btn btn-sm btn-primary" onclick="rescanWireguardConfigs()" title="Quét lại file .conf và khởi động các cổng mới" style="padding: 6px 14px;">
-                                <i class="fa-solid fa-arrows-rotate"></i> Quét Lại
-                            </button>
+            <!-- Chế độ quét -->
+            <div class="form-group">
+                <label
+                    style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: block;">
+                    <i class="fa-solid fa-calendar-check"></i> Chế độ quét lịch trình:
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <label
+                        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
+                        <input type="radio" name="followerScanMode" id="scanModeDaily" value="daily_times" checked
+                            onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
+                        <div>
+                            <strong style="font-size: 13px; color: #fff;">Giờ Cố Định Hàng Ngày</strong>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Quét vào các
+                                khung giờ vàng trong ngày (VD: 08:00, 20:00)</div>
                         </div>
-                    </div>
-                    <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.6;">
-                        Chỉ cần tải file <code>.conf</code> WireGuard từ Proton VPN thả vào thư mục <code>data/vpn_configs/</code>. ClipFlow tự động mở cổng SOCKS5 cục bộ (10801, 10802,...). Khi chọn quốc gia cho profile, proxy được gán trong 0.1s không cần mở extension hay đăng nhập lại!
-                    </div>
-                </div>
-
-                <!-- Bảng danh sách Proxy Quốc Gia đang hoạt động -->
-                <div>
-                    <h4 style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
-                        <i class="fa-solid fa-network-wired text-cyan"></i> Danh Sách Cổng Proxy Quốc Gia & Địa Điểm:
-                    </h4>
-                    <div style="max-height: 380px; overflow-y: auto; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                            <thead>
-                                <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: var(--text-secondary); white-space: nowrap;">
-                                    <th style="padding: 12px 16px; min-width: 220px;">Quốc Gia & Địa Điểm</th>
-                                    <th style="padding: 12px 16px; min-width: 180px;">Cổng SOCKS5 Cục Bộ</th>
-                                    <th style="padding: 12px 16px; min-width: 220px;">File Cấu Hình Nguồn</th>
-                                    <th style="padding: 12px 16px; min-width: 120px; text-align: center;">Trạng Thái</th>
-                                    <th style="padding: 12px 16px; text-align: center; min-width: 110px;">Thao Tác</th>
-                                </tr>
-                            </thead>
-                            <tbody id="wireguardProxyTableBody">
-                                <tr>
-                                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
-                                        <i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách cổng proxy...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    </label>
+                    <label
+                        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
+                        <input type="radio" name="followerScanMode" id="scanModeInterval" value="interval"
+                            onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
+                        <div>
+                            <strong style="font-size: 13px; color: #fff;">Chu Kỳ Cách N Tiếng</strong>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Cứ mỗi 6 tiếng
+                                hoặc 12 tiếng tự động quét lại một lần</div>
+                        </div>
+                    </label>
                 </div>
             </div>
-            <div class="modal-footer" style="display:flex; justify-content:flex-end;">
-                <button type="button" class="btn btn-secondary" onclick="closeWireguardStatusModal()" style="min-width: 100px;">Đóng</button>
+
+            <!-- Cấu hình giờ cố định -->
+            <div id="wrapDailyTimes" class="form-group">
+                <label
+                    style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                    <i class="fa-regular fa-clock"></i> Các mốc giờ quét trong ngày (phân tách bởi dấu phẩy):
+                </label>
+                <input type="text" id="inputFollowerScanTimes" class="input-field" placeholder="08:00, 20:00"
+                    value="08:00, 20:00">
+                <small class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+                    Ví dụ: <code>08:00, 14:00, 20:00</code> hoặc chỉ 1 giờ cụ thể như <code>21:00</code> (định dạng
+                    24 giờ).
+                </small>
+            </div>
+
+            <!-- Cấu hình chu kỳ N tiếng -->
+            <div id="wrapIntervalHours" class="form-group" style="display: none;">
+                <label
+                    style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                    <i class="fa-solid fa-hourglass-half"></i> Khoảng cách giữa các lần quét:
+                </label>
+                <select id="selectFollowerIntervalHours" class="custom-select" style="width: 100%; height: 42px;">
+                    <option value="2">Mỗi 2 tiếng một lần</option>
+                    <option value="4">Mỗi 4 tiếng một lần</option>
+                    <option value="6" selected>Mỗi 6 tiếng một lần (Khuyên Dùng)</option>
+                    <option value="8">Mỗi 8 tiếng một lần</option>
+                    <option value="12">Mỗi 12 tiếng một lần</option>
+                    <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
+                </select>
+            </div>
+
+            <!-- Cấu hình trình duyệt đồng bộ Profile (Đa luồng) -->
+            <div
+                style="background: rgba(168, 85, 247, 0.05); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.25);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label style="font-weight:600; font-size:12.5px; color:#fff; margin:0;">
+                        <i class="fa-solid fa-users-gear" style="color:#c084fc;"></i> Trình Duyệt Đồng Bộ Profile (Đa
+                        Luồng):
+                    </label>
+                    <span class="badge"
+                        style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:10px; font-weight:700;">Invisible
+                        Pool</span>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="number" id="schedProfileSyncConcurrentWorkers" class="input-field" min="1" max="10"
+                        value="3"
+                        style="width:90px; font-size:14px; font-weight:700; color:#c084fc; text-align:center;">
+                    <span style="font-size:12px; color:var(--text-muted); font-weight:600;">profile / luồng cùng lúc
+                        (mặc định: 3)</span>
+                </div>
+                <small class="form-hint"
+                    style="font-size:11px; margin-top:6px; color:var(--text-muted); line-height:1.4; display:block;">
+                    Mở song song 3–5 profile ẩn ngầm ngoài màn hình khi cần cào dữ liệu TikTok Studio. Rút ngắn thời
+                    gian quét 1.000 tài khoản từ 3.3 tiếng xuống còn <b>~40 phút</b>.
+                </small>
+            </div>
+
+            <!-- Banner thông tin bảo vệ -->
+            <div
+                style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+                <div
+                    style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-shield-halved"></i> Cơ Chế Vận Hành Thông Minh:
+                </div>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li><strong>Ưu tiên ZeroRAM (Không mở trình duyệt):</strong> Đọc trực tiếp cookie từ ổ đĩa và
+                        gọi API TikTok thần tốc (~0.5s/nick), không tốn RAM và không mở cửa sổ trình duyệt. Chỉ mở
+                        app/trình duyệt làm dự phòng khi cookie hết hạn.</li>
+                    <li><strong>Chống Xung Đột:</strong> Profile nào đang bận upload bài sẽ được tự động
+                        bỏ qua và quét lại sau, tuyệt đối không làm gián đoạn việc đăng video.</li>
+                    <li><strong>Đạt Chỉ Tiêu:</strong> Khi phát hiện nick/kênh đạt ngưỡng cài đặt (TikTok,
+                        YouTube, Facebook), hệ thống sẽ tự động cập nhật trạng thái và gắn huy hiệu Đạt Chỉ Tiêu trên
+                        danh sách.</li>
+                </ul>
+            </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="btn btn-warning" onclick="scanAllProfilesFollowers(this)">
+                <i class="fa-solid fa-bolt"></i> Quét Thử Ngay
+            </button>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary" onclick="closeFollowerSchedulerModal()">Đóng</button>
+                <button type="button" class="btn btn-primary" onclick="saveFollowerSchedulerSettings(this)">
+                    <i class="fa-solid fa-check"></i> Lưu Lịch Quét Định Kỳ
+                </button>
             </div>
         </div>
     </div>
+</div><!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
+<div id="editProfileUsernameModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i id="editProfileModalIcon" class="fa-solid fa-user-pen text-accent"></i> <span
+                        id="editProfileModalTitle">Sửa Thông Tin & Chỉ Số Tài Khoản</span>
+                </h3>
+                <p class="modal-sub" id="editProfileModalSub">Gán thủ công hoặc đồng bộ thông số cho profile / kênh</p>
+            </div>
+            <button type="button" class="close-btn has-tooltip" onclick="closeEditUsernameModal()"
+                data-tooltip="Đóng"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+            <input type="hidden" id="editProfileGpmId">
+            <input type="hidden" id="editProfileChannelId">
+            <div class="form-group">
+                <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Tên Profile
+                    :</label>
+                <input type="text" id="editProfileName" class="input-field" disabled
+                    style="background: rgba(255,255,255,0.05); color: var(--text-primary);">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                <!-- Trình duyệt (Preserved in DOM for future development) -->
+                <div class="form-group" style="display: none;">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
+                            class="fa-solid fa-window-restore"></i> Trình Duyệt:</label>
+                    <select id="editProfileBrowserType" class="input-field" style="height:38px;">
+                        <option value="gpm" selected>GPMLogin</option>
+                        <option value="adspower">AdsPower</option>
+                        <option value="dolphin">Dolphin Anty</option>
+                        <option value="genlogin">GenLogin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
+                            class="fa-brands fa-tiktok text-pink"></i> Nền Tảng:</label>
+                    <select id="editProfilePlatform" class="input-field" style="height:38px;"
+                        onchange="onEditProfilePlatformChange(this.value)">
+                        <option value="tiktok" selected>TikTok</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label
+                    style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-shield-halved text-cyan"></i> Quốc Gia VPN (WireGuard SOCKS5 / Extension):
+                </label>
+                <select id="editProfileCountry" class="input-field"
+                    style="height:38px; border:1px solid rgba(56, 189, 248, 0.4); font-weight:600;">
+                    <option value="NONE" selected>🌐 Không Dùng Proxy (Direct IP - Tắt Proxy GPMLogin)</option>
+                    <option value="US">🇺🇸 Hoa Kỳ (United States)</option>
+                    <option value="GB">🇬🇧 Vương Quốc Anh (United Kingdom)</option>
+                    <option value="DE">🇩🇪 Đức (Germany)</option>
+                    <option value="FR">🇫🇷 Pháp (France)</option>
+                    <option value="JP">🇯🇵 Nhật Bản (Japan)</option>
+                    <option value="KR">🇰🇷 Hàn Quốc (South Korea)</option>
+                    <option value="CA">🇨🇦 Canada</option>
+                    <option value="AU">🇦🇺 Úc (Australia)</option>
+                    <option value="SG">🇸🇬 Singapore</option>
+                    <option value="NL">🇳🇱 Hà Lan (Netherlands)</option>
+                    <option value="MX">🇲🇽 Mexico</option>
+                    <option value="ID">🇮🇩 Indonesia (Indo)</option>
+                    <option value="MY">🇲🇾 Malaysia (Malay)</option>
+                    <option value="PH">🇵🇭 Philippines (Philippin)</option>
+                    <option value="VN">🇻🇳 Việt Nam (Vietnam)</option>
+                </select>
+                <small class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
+                    Tự động gán cổng Proxy WireGuard SOCKS5 (0.05s) trực tiếp vào GPMLogin qua API, không mở trình
+                    duyệt.
+                </small>
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileUsername"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileUserIcon" class="fa-brands fa-tiktok"></i> <span id="editProfileUserLabel">Tài
+                        Khoản / Username:</span>
+                </label>
+                <div style="position: relative;">
+                    <span id="editProfileUserPrefix"
+                        style="position: absolute; left: 12px; top: 10px; color: var(--text-muted); font-weight: 700;">@</span>
+                    <input type="text" id="editProfileUsername" class="input-field" placeholder="username_cua_ban"
+                        style="padding-left: 28px;">
+                </div>
+                <small id="editProfileUserHint" class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
+                    Không cần nhập dấu @. Ví dụ: <code>dat.nguyen261096</code>
+                </small>
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileNickname"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileNickIcon" class="fa-solid fa-id-badge"></i> <span id="editProfileNickLabel">Tên
+                        Kênh / Hiển Thị:</span>
+                </label>
+                <input type="text" id="editProfileNickname" class="input-field"
+                    placeholder="Ví dụ: Hoàng Minh, Iamcooked...">
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileFollowers"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileFollowersIcon" class="fa-solid fa-users"></i> <span
+                        id="editProfileFollowersLabel">Số Follower / Người Đăng Ký:</span>
+                </label>
+                <input type="number" id="editProfileFollowers" class="input-field" placeholder="0">
+            </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+            <button type="button" class="btn btn-primary" onclick="saveProfileUsernameFromModal(this)"
+                style="min-width: 140px;">
+                <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
+            </button>
+        </div>
+    </div>
+</div>
 
-    <!-- MODAL 1: SYSTEM ACTIVE ISSUES -->
+<!-- MODAL: QUẢN LÝ WIREGUARD VPN SOCKS5 CHO 1.000 PROFILE GPM -->
+<div id="wireguardStatusModal" class="modal">
+    <div class="modal-content" style="max-width: 980px; width: 94%;">
+        <div class="modal-header">
+            <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-shield-halved text-cyan"></i> Quản Lý WireGuard VPN SOCKS5
+                </h3>
+                <p class="modal-sub">Cổng Proxy cục bộ tốc độ cao hỗ trợ 1.000 Profile GPMLogin dùng đồng thời</p>
+            </div>
+            <button type="button" class="close-btn has-tooltip" onclick="closeWireguardStatusModal()"
+                data-tooltip="Đóng">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Hộp thông báo tổng quan & hướng dẫn -->
+            <div
+                style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 14px 18px;">
+                <div
+                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                    <strong style="color: var(--accent-cyan); font-size: 13.5px;">
+                        <i class="fa-solid fa-circle-check"></i> Trạng thái: <span id="wireguardActiveSummary">Đang
+                            tải...</span>
+                    </strong>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="openWireguardFolderOnWindows()"
+                            title="Mở thư mục data/vpn_configs trên máy tính" style="padding: 6px 14px;">
+                            <i class="fa-regular fa-folder-open text-warning"></i> Mở Thư Mục Config
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="rescanWireguardConfigs()"
+                            title="Quét lại file .conf và khởi động các cổng mới" style="padding: 6px 14px;">
+                            <i class="fa-solid fa-arrows-rotate"></i> Quét Lại
+                        </button>
+                    </div>
+                </div>
+                <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.6;">
+                    Chỉ cần tải file <code>.conf</code> WireGuard từ Proton VPN thả vào thư mục
+                    <code>data/vpn_configs/</code>. ClipFlow tự động mở cổng SOCKS5 cục bộ (10801, 10802,...). Khi chọn
+                    quốc gia cho profile, proxy được gán trong 0.1s không cần mở extension hay đăng nhập lại!
+                </div>
+            </div>
 
+            <!-- Bảng danh sách Proxy Quốc Gia đang hoạt động -->
+            <div>
+                <h4
+                    style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-network-wired text-cyan"></i> Danh Sách Cổng Proxy Quốc Gia & Địa Điểm:
+                </h4>
+                <div
+                    style="max-height: 380px; overflow-y: auto; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr
+                                style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: var(--text-secondary); white-space: nowrap;">
+                                <th style="padding: 12px 16px; min-width: 220px;">Quốc Gia & Địa Điểm</th>
+                                <th style="padding: 12px 16px; min-width: 180px;">Cổng SOCKS5 Cục Bộ</th>
+                                <th style="padding: 12px 16px; min-width: 220px;">File Cấu Hình Nguồn</th>
+                                <th style="padding: 12px 16px; min-width: 120px; text-align: center;">Trạng Thái</th>
+                                <th style="padding: 12px 16px; text-align: center; min-width: 110px;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wireguardProxyTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách cổng proxy...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeWireguardStatusModal()"
+                style="min-width: 100px;">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 1: SYSTEM ACTIVE ISSUES -->
         <div class="modal" id="modalSystemIssues">
         <div class="modal-content glass-panel modal-lg"
             style="max-width: 820px; max-height: 85vh; display: flex; flex-direction: column;">
@@ -6222,7 +6309,7 @@
     <!-- Core Scripts & Modules -->
     <script src="/static/js/i18n.js?v=20261108_06"></script>
     <script src="/static/js/app.js?v=20261109_01"></script>
-    <script src="/static/js/modules/gpm_farm.js?v=20261109_01"></script>
+    <script src="/static/js/modules/gpm_farm.js?v=20261109_02"></script>
     <script src="/static/js/modules/saved_channels.js?v=20261109_01"></script>
     <script src="/static/js/modules/campaigns.js?v=20261109_01"></script>
     <script src="/static/js/modules/video_studio.js?v=20261109_01"></script>

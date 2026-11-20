@@ -180,6 +180,58 @@ class GPMClient:
 
         return all_profiles
 
+    def find_running_debug_address(self, profile_id: str) -> Optional[str]:
+        """Tự động phát hiện cổng debug của profile đang chạy sẵn nếu có (dành cho ProfileInUse)"""
+        import subprocess, re
+        try:
+            # Lấy tên profile từ SQLite để tìm theo window title nếu có
+            prof_name = ""
+            try:
+                from backend.database import get_connection
+                conn = get_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT name FROM gpm_profiles WHERE gpm_id = ? OR id = ?", (profile_id, profile_id))
+                row = cur.fetchone()
+                conn.close()
+                if row and row["name"]:
+                    prof_name = row["name"]
+            except Exception:
+                pass
+
+            search_terms = [t for t in [prof_name, profile_id, profile_id[:8]] if t]
+            out = subprocess.check_output('tasklist /V /FO CSV', shell=True).decode('utf-8', errors='ignore')
+            target_pids = []
+            for line in out.splitlines():
+                if 'chrome.exe' in line.lower():
+                    if any(term.lower() in line.lower() for term in search_terms):
+                        parts = line.split('","')
+                        if len(parts) > 1:
+                            pid = parts[1].replace('"', '').strip()
+                            if pid.isdigit() and pid not in target_pids:
+                                target_pids.append(pid)
+
+            for pid in target_pids:
+                try:
+                    net_out = subprocess.check_output(f'netstat -ano | findstr {pid}', shell=True).decode('utf-8', errors='ignore')
+                    for net_line in net_out.splitlines():
+                        if 'LISTENING' in net_line and '127.0.0.1:' in net_line:
+                            m = re.search(r'127\.0\.0\.1:(\d+)', net_line)
+                            if m:
+                                port = m.group(1)
+                                try:
+                                    v = requests.get(f'http://127.0.0.1:{port}/json/version', timeout=1).json()
+                                    ws = v.get('webSocketDebuggerUrl')
+                                    if ws:
+                                        return ws
+                                    return f"127.0.0.1:{port}"
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+        except Exception as e:
+            log_event("WARNING", f"Lỗi dò tìm debug address đang chạy cho profile {profile_id}: {e}")
+        return None
+
     def start_profile(
         self,
         profile_id: str,
@@ -195,6 +247,12 @@ class GPMClient:
         - low_ram_mode=True: Tiết kiệm tối đa RAM (tắt GPU, tắt load ảnh, ẩn cửa sổ offscreen)
         - invisible=True: Ẩn hoàn toàn cửa sổ ra ngoài màn hình (-3200, -3200) để không che khuất hay làm phiền người dùng
         """
+        # 1. Kiểm tra nếu profile đã đang chạy sẵn thì tận dụng luôn không cần restart
+        running_addr = self.find_running_debug_address(profile_id)
+        if running_addr:
+            log_event("INFO", f"🎯 Profile {profile_id} đã đang mở sẵn trên máy. Tự động kết nối trực tiếp tại {running_addr}")
+            return running_addr
+
         if invisible is None:
             try:
                 from backend.database import get_connection
@@ -285,20 +343,30 @@ class GPMClient:
                 if json_data.get("success") is False:
                     msg = str(json_data.get("message", ""))
                     if "inuse" in msg.lower():
-                        log_event("INFO", f"Profile {profile_id} đang mở (ProfileInUse). Đang tự động đóng và khởi động lại...")
+                        # Kiểm tra xem profile đang chạy sẵn có cổng debug dùng được không
+                        existing_addr = self.find_running_debug_address(profile_id)
+                        if existing_addr:
+                            log_event("INFO", f"🎯 Profile {profile_id} đang chạy sẵn. Tự động kết nối trực tiếp tại {existing_addr}")
+                            return existing_addr
+
+                        log_event("INFO", f"Profile {profile_id} đang mở (ProfileInUse). Đang đóng và khởi động lại...")
                         self.stop_profile(profile_id)
-                        time.sleep(3)
-                        resp2 = requests.get(url, timeout=30)
-                        if resp2.status_code == 200:
-                            json_data2 = resp2.json()
-                            if json_data2.get("success"):
-                                data2 = json_data2.get("data", {})
-                                if not isinstance(data2, dict):
-                                    data2 = json_data2
-                                remote_addr2 = self._extract_debug_address(data2)
-                                if remote_addr2:
-                                    log_event("INFO", f"Khởi động lại thành công GPM profile {profile_id} tại {remote_addr2}")
-                                    return remote_addr2
+                        for attempt in range(1, 5):
+                            time.sleep(2.5)
+                            try:
+                                resp2 = requests.get(url, timeout=30)
+                                if resp2.status_code == 200:
+                                    json_data2 = resp2.json()
+                                    if json_data2.get("success"):
+                                        data2 = json_data2.get("data", {})
+                                        if not isinstance(data2, dict):
+                                            data2 = json_data2
+                                        remote_addr2 = self._extract_debug_address(data2)
+                                        if remote_addr2:
+                                            log_event("INFO", f"Khởi động lại thành công GPM profile {profile_id} tại {remote_addr2}")
+                                            return remote_addr2
+                            except Exception:
+                                pass
                     log_event("ERROR", f"GPM trả về lỗi khi mở profile {profile_id}: {json_data.get('message')}")
                     return None
 

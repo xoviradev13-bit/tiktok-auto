@@ -78,7 +78,7 @@ class BackgroundScheduler:
         self.max_parallel_uploads = 1
         self._active_uploading_profiles = set()
         self._active_upload_lock = threading.Lock()
-        self._upload_pool = concurrent.futures.ThreadPoolExecutor(max_workers=6, thread_name_prefix="UploadWorker")
+        self._upload_pool = concurrent.futures.ThreadPoolExecutor(max_workers=20, thread_name_prefix="UploadWorker")
         
         # Cấu hình đa luồng xử lý quy mô lớn (Mega-Scale Farm: 3000-4000 kênh & 1000 profiles)
         self.rss_concurrent_workers = 15
@@ -131,7 +131,7 @@ class BackgroundScheduler:
                 self.min_account_cooldown_minutes = max(15, int(db_settings["min_post_interval_minutes"]))
             if "max_parallel_uploads" in db_settings:
                 try:
-                    self.max_parallel_uploads = max(1, min(6, int(db_settings["max_parallel_uploads"])))
+                    self.max_parallel_uploads = max(1, min(20, int(db_settings["max_parallel_uploads"])))
                 except Exception:
                     pass
             if "rss_concurrent_workers" in db_settings:
@@ -187,7 +187,7 @@ class BackgroundScheduler:
         if min_account_cooldown_minutes is not None:
             self.min_account_cooldown_minutes = max(15, int(min_account_cooldown_minutes))
         if max_parallel_uploads is not None:
-            self.max_parallel_uploads = max(1, min(6, int(max_parallel_uploads)))
+            self.max_parallel_uploads = max(1, min(20, int(max_parallel_uploads)))
         if rss_concurrent_workers is not None:
             self.rss_concurrent_workers = max(1, min(50, int(rss_concurrent_workers)))
         if profile_sync_concurrent_workers is not None:
@@ -541,7 +541,7 @@ class BackgroundScheduler:
           AND (ut.scheduled_time IS NULL OR ut.scheduled_time <= ?)
           AND (ut.retry_after IS NULL OR ut.retry_after <= ?)
         ORDER BY ut.scheduled_time ASC, ut.id ASC
-        LIMIT 30
+        LIMIT 60
         ''', (now_str, now_str))
         candidates = cursor.fetchall()
         

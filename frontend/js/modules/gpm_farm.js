@@ -2682,7 +2682,7 @@ async function loadWireguardStatus() {
                         <i class="fa-solid fa-plug" style="font-size:11px; margin-right:4px; opacity:0.7;"></i> ${item.proxy_url || `socks5://127.0.0.1:${item.port}`}
                     </td>
                     <td style="padding: 12px 16px; color: var(--text-muted); font-size: 12px; font-family: monospace; vertical-align: middle;">
-                        <code>${item.source_file}</code>
+                        <span class="vpn-config-filename" style="border: none !important; background: transparent !important; padding: 0 !important; font-family: monospace; font-size: 12px; color: var(--text-muted); box-shadow: none !important;">${item.source_file}</span>
                     </td>
                     <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
                         ${statusBadge}

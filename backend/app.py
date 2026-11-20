@@ -1837,17 +1837,23 @@ def cleanup_uploaded_files(retention_mode=None, custom_days=None):
             target_days = 7
 
     cursor.execute('''
-        SELECT ut.id as task_id, ut.video_id, ut.uploaded_at,
+        SELECT v.id as video_id, MAX(ut.uploaded_at) as uploaded_at,
                v.download_path, v.rendered_path, v.title
-        FROM upload_tasks ut
-        JOIN videos v ON ut.video_id = v.id
+        FROM videos v
+        JOIN upload_tasks ut ON ut.video_id = v.id
         WHERE ut.status = 'completed'
           AND ut.uploaded_at IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM upload_tasks ut2
+              WHERE ut2.video_id = v.id
+                AND ut2.status IN ('pending', 'queued', 'processing', 'retry')
+          )
           AND (
             (v.download_path IS NOT NULL AND v.download_path != '')
             OR
             (v.rendered_path IS NOT NULL AND v.rendered_path != '')
           )
+        GROUP BY v.id
     ''')
     tasks = [dict(r) for r in cursor.fetchall()]
 
@@ -2634,7 +2640,7 @@ def test_run_campaign(campaign_id: int, bg_tasks: BackgroundTasks):
 
                 if pending_v:
                     pending_v = dict(pending_v)
-                    v_orig = pending_v.get("original_path")
+                    v_orig = pending_v.get("download_path") or pending_v.get("original_path")
                     if v_orig and os.path.exists(v_orig):
                         log_campaign_event(campaign_id, "INFO", "pipeline", f"Tìm thấy video có sẵn '{pending_v['title']}', tiến hành render Smart AI theo chiến dịch...")
                         yt_monitor.handle_video_post_download(
@@ -4608,8 +4614,8 @@ def update_scheduler_settings(req: UpdateSchedulerSettingsRequest):
         raise HTTPException(status_code=400, detail="Thời gian timeout chống treo phải từ 5 đến 180 phút!")
     if req.min_account_cooldown_minutes is not None and (req.min_account_cooldown_minutes < 15 or req.min_account_cooldown_minutes > 1440):
         raise HTTPException(status_code=400, detail="Giãn cách tối thiểu giữa 2 lần đăng bài trên cùng 1 tài khoản phải từ 15 đến 1440 phút!")
-    if req.max_parallel_uploads is not None and (req.max_parallel_uploads < 1 or req.max_parallel_uploads > 6):
-        raise HTTPException(status_code=400, detail="Số luồng upload song song phải từ 1 đến 6 luồng (khuyến nghị 1 luồng cho máy 8GB RAM)!")
+    if req.max_parallel_uploads is not None and (req.max_parallel_uploads < 1 or req.max_parallel_uploads > 20):
+        raise HTTPException(status_code=400, detail="Số luồng upload song song phải từ 1 đến 20 luồng!")
     if req.rss_concurrent_workers is not None and (req.rss_concurrent_workers < 1 or req.rss_concurrent_workers > 50):
         raise HTTPException(status_code=400, detail="Số luồng quét RSS phải từ 1 đến 50 luồng (khuyến nghị 15-20 cho 3000-4000 kênh)!")
     if req.profile_sync_concurrent_workers is not None and (req.profile_sync_concurrent_workers < 1 or req.profile_sync_concurrent_workers > 10):

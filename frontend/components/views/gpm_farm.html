@@ -8,7 +8,8 @@
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button class="btn btn-secondary" id="btnWireguardStatusModal" onclick="openWireguardStatusModal()"
-                    style="display:flex; align-items:center; gap:6px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08);" title="Quản lý cổng WireGuard VPN cho dàn Profile">
+                    style="display:flex; align-items:center; gap:6px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08);"
+                    title="Quản lý cổng WireGuard VPN cho dàn Profile">
                     <i class="fa-solid fa-shield-halved text-cyan"></i> <span id="wireguardBtnText">WireGuard VPN</span>
                 </button>
                 <button class="btn btn-secondary" id="btnFollowerSchedulerModal" onclick="openFollowerSchedulerModal()"
@@ -16,7 +17,8 @@
                     <i class="fa-solid fa-clock text-accent"></i> <span>Lịch Quét Định Kỳ</span>
                 </button>
                 <button class="btn btn-accent" id="btnScanAllFollowersTab" onclick="scanAllProfilesFollowers(this)"
-                    style="display:flex; align-items:center; gap:6px; font-weight:700;" title="Quét và cập nhật dữ liệu TikTok của toàn bộ profile ngay lập tức">
+                    style="display:flex; align-items:center; gap:6px; font-weight:700;"
+                    title="Quét và cập nhật dữ liệu TikTok của toàn bộ profile ngay lập tức">
                     <i class="fa-solid fa-magnifying-glass-chart"></i> Quét Dữ Liệu TikTok
                 </button>
                 <button class="btn btn-primary" id="btnSyncGpmTab" onclick="syncGPMProfiles(this)"
@@ -31,19 +33,25 @@
             style="display:none; width: 100%; box-sizing: border-box; margin: 16px 0 12px 0; background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(14, 165, 233, 0.5); border-radius: var(--radius-md); padding: 14px 20px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <i class="fa-solid fa-arrows-rotate fa-spin text-cyan" id="syncProgressIcon" style="font-size: 18px;"></i>
+                    <i class="fa-solid fa-arrows-rotate fa-spin text-cyan" id="syncProgressIcon"
+                        style="font-size: 18px;"></i>
                     <div>
-                        <strong id="syncProgressTitle" style="color: #fff; font-size: 14px;">Đang đồng bộ profiles...</strong>
-                        <div id="syncProgressSubtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                        <strong id="syncProgressTitle" style="color: #fff; font-size: 14px;">Đang đồng bộ
+                            profiles...</strong>
+                        <div id="syncProgressSubtitle"
+                            style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
                             Đang kết nối API trình duyệt Antidetect và nạp danh sách tài khoản vào cơ sở dữ liệu...
                         </div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 14px;">
-                    <span id="syncProgressPercent" style="font-weight: 800; font-size: 14px; color: var(--accent-cyan); letter-spacing: 0.5px;">Đang xử lý...</span>
+                    <span id="syncProgressPercent"
+                        style="font-weight: 800; font-size: 14px; color: var(--accent-cyan); letter-spacing: 0.5px;">Đang
+                        xử lý...</span>
                 </div>
             </div>
-            <div style="width: 100%; height: 7px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
+            <div
+                style="width: 100%; height: 7px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; position: relative;">
                 <div id="syncProgressBarFill"
                     style="width: 100%; height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8, #38bdf8); background-size: 200% 100%; animation: syncShimmer 1.5s infinite linear; border-radius: 4px;">
                 </div>
@@ -90,7 +98,8 @@
                     <!-- Sort Field -->
                     <div class="sort-control">
                         <label for="sortGpmField"><i class="fa-solid fa-arrow-down-wide-short"></i> Sắp xếp:</label>
-                        <select id="sortGpmField" class="custom-select sort-select" onchange="handleGpmSortChange(this.value)">
+                        <select id="sortGpmField" class="custom-select sort-select"
+                            onchange="handleGpmSortChange(this.value)">
                             <option value="followers_count">Số Follower</option>
                             <option value="name">Tên Profile</option>
                             <option value="tiktok_username">Account Username</option>
@@ -110,8 +119,10 @@
 
                     <!-- Filter Country -->
                     <div class="sort-control">
-                        <label for="filterGpmCountry"><i class="fa-solid fa-earth-americas text-cyan"></i> Quốc Gia:</label>
-                        <select id="filterGpmCountry" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmCountry"><i class="fa-solid fa-earth-americas text-cyan"></i> Quốc
+                            Gia:</label>
+                        <select id="filterGpmCountry" class="custom-select" style="min-width: 145px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả quốc gia</option>
                             <option value="US">🇺🇸 Hoa Kỳ (US)</option>
                             <option value="GB">🇬🇧 Anh (GB)</option>
@@ -135,7 +146,8 @@
                     <!-- Filter Beta -->
                     <div class="sort-control">
                         <label for="filterGpmBeta"><i class="fa-solid fa-trophy text-gold"></i> Đạt Beta / 10K:</label>
-                        <select id="filterGpmBeta" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                        <select id="filterGpmBeta" class="custom-select" style="min-width: 155px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả chuẩn Beta</option>
                             <option value="ELIGIBLE">🏆 Đủ điều kiện Beta (≥ 10K)</option>
                             <option value="INELIGIBLE">🌱 Chưa đủ điều kiện (< 10K)</option>
@@ -144,8 +156,10 @@
 
                     <!-- Filter Creator Program (Yes / No) -->
                     <div class="sort-control">
-                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator Program:</label>
-                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator
+                            Program:</label>
+                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả Creator Program</option>
                             <option value="YES">✅ Đã bật Creator (Yes)</option>
                             <option value="NO">❌ Chưa bật Creator (No)</option>
@@ -158,8 +172,10 @@
 
                     <!-- Filter Hiệu Suất / Flop -->
                     <div class="sort-control">
-                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất / Flop:</label>
-                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất /
+                            Flop:</label>
+                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;"
+                            onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả hiệu suất</option>
                             <option value="GOOD">🚀 Khỏe / Phát triển tốt</option>
                             <option value="FLOP">⚠️ Tổng hợp Flop (0v / 200v / Không ổn định)</option>
@@ -223,7 +239,8 @@
                             title="Bấm để sắp xếp theo trạng thái Đạt Chỉ Tiêu / Chuẩn Beta">
                             Đạt Chỉ Tiêu / Beta <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th class="sortable" id="th-gpm-creator_program" onclick="handleGpmHeaderSort('creator_program')"
+                        <th class="sortable" id="th-gpm-creator_program"
+                            onclick="handleGpmHeaderSort('creator_program')"
                             title="Bấm để sắp xếp theo Creator Program (Beta)">
                             Creator Program <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
@@ -248,10 +265,13 @@
         </div>
 
         <!-- GPM Profiles Pagination -->
-        <div id="gpmProfilesPagination" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: -1px; flex-wrap: wrap; gap: 10px;">
+        <div id="gpmProfilesPagination"
+            style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: -1px; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
                 <span>Hiển thị</span>
-                <select id="gpmProfilesPageSizeSelect" class="input-field" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 95px;" onchange="changeGpmProfilesPageSize(this.value)">
+                <select id="gpmProfilesPageSizeSelect" class="input-field"
+                    style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 95px;"
+                    onchange="changeGpmProfilesPageSize(this.value)">
                     <option value="10">10 / trang</option>
                     <option value="20" selected>20 / trang</option>
                     <option value="50">50 / trang</option>

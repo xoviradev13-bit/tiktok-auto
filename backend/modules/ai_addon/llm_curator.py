@@ -764,7 +764,7 @@ class LLMCurator:
                             break
 
                 hook = data.get("hook_3s", "").strip()
-                title = data.get("viral_title", video_title).strip()
+                title = (data.get("viral_title") or "").strip() or video_title.strip()
                 desc = data.get("description", "").strip()
                 tags = data.get("hashtags", "").strip()
 
@@ -887,30 +887,35 @@ class LLMCurator:
                     if cleaned_tokens:
                         tags = " ".join(cleaned_tokens)
                 hook = data.get("hook_3s", clean_title[:40].upper())
+                viral_title = (data.get("viral_title") or "").strip()
+                if not viral_title:
+                    viral_title = raw_title.strip() if (raw_title and raw_title.strip()) else clean_title.strip()
                 return {
                     "hook": hook,
                     "hook_curiosity": data.get("hook_curiosity") or hook or "NOBODY NOTICED THIS",
                     "hook_controversy": data.get("hook_controversy") or hook or "HE EXPOSED THE TRUTH",
                     "hook_climax": data.get("hook_climax") or hook or "WAIT TILL THE END",
-                    "viral_title": data.get("viral_title", f"{clean_title} 😱"),
+                    "viral_title": viral_title,
                     "description": data.get("description", f"Search insights on {clean_title[:40]}. What do you think?"),
                     "tags": tags or "#highlights #clips #story #podcast"
                 }
             except Exception:
                 pass
 
-        # Heuristic fallback chuẩn ngôn ngữ và SEO
+        # Heuristic fallback: Khi AI không có key, bị lỗi hoặc vượt quá giới hạn (limit/quota),
+        # sử dụng NGUYÊN VẸN tiêu đề gốc (original title) của video!
+        original_title = raw_title.strip() if (raw_title and raw_title.strip()) else clean_title.strip()
         if is_vietnamese:
             return {
                 "hook": f"CHI TIẾT BẤT NGỜ: {clean_title[:30]}".upper(),
-                "viral_title": f"{clean_title} 😱 Xem ngay!",
+                "viral_title": original_title,
                 "description": f"Phân tích chi tiết về {clean_title[:45]}. Bạn nghĩ sao về điều này?",
                 "tags": "#tintuc #giaitri #shorts #cliphot #videohay"
             }
         else:
             return {
                 "hook": f"WAIT TILL THE END: {clean_title[:30]}".upper(),
-                "viral_title": f"{clean_title} 😭",
+                "viral_title": original_title,
                 "description": f"Full context behind {clean_title[:45]}. What would you do in this situation?",
                 "tags": "#highlights #clips #story #podcast #gaming"
             }
@@ -941,7 +946,7 @@ class LLMCurator:
             "hook_curiosity": copy_data.get("hook_curiosity", copy_data["hook"]),
             "hook_controversy": copy_data.get("hook_controversy", copy_data["hook"]),
             "hook_climax": copy_data.get("hook_climax", copy_data["hook"]),
-            "viral_title": copy_data["viral_title"],
+            "viral_title": copy_data.get("viral_title") or video_title.strip(),
             "description": copy_data["description"],
             "hashtags": copy_data["tags"],
             "virality_score": 75,

@@ -1078,7 +1078,7 @@ class AIVideoEngine:
             # Người dùng chủ động Render trong Studio Biên Tập: áp dụng đầy đủ Công thức biên tập (Recipe) lên video Short
             log_event("INFO", f"Video {video_id} là Short-form ({actual_dur:.1f}s <= 180s) -> Tiến hành biên tập theo công thức Studio (render trọn vẹn clip, không chia Part).")
             curation = llm_curator.generate_hook_and_copy(video_title, video_id=video_id)
-            viral_title = curation.get("viral_title") or video_title
+            viral_title = (curation.get("viral_title") or "").strip() or video_title.strip()
             primary_hook = curation.get("hook") or viral_title
             hook_3s = primary_hook if generate_hook else ""
             description = curation.get("description", "")
@@ -1185,7 +1185,7 @@ class AIVideoEngine:
         start_time = curation["start_time"]
         duration = curation["duration"]
         hook_3s = curation["hook_3s"] if generate_hook else ""
-        viral_title = curation["viral_title"]
+        viral_title = (curation.get("viral_title") or "").strip() or video_title.strip()
         description = curation["description"]
         hashtags = curation["hashtags"]
         primary_hook = hook_3s.strip() if (hook_3s and hook_3s.strip()) else viral_title.strip()

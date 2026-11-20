@@ -866,6 +866,16 @@ body.light-mode .settings-section code {
     border: 1px solid #cbd5e1 !important;
 }
 
+body.light-mode #wireguardProxyTableBody code,
+body.light-mode #wireguardProxyTableBody .vpn-config-filename,
+#wireguardProxyTableBody code,
+#wireguardProxyTableBody .vpn-config-filename {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
 /* Specific Modal Titles and Confirmation Prompts (Fix for Invisible Text in Light Mode) */
 body.light-mode #modalGlobalConfirm #globalConfirmTitle,
 body.light-mode #globalConfirmTitle,

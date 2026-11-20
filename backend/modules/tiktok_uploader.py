@@ -21,6 +21,37 @@ TIKTOK_UPLOAD_URLS = [
 ]
 
 
+def _set_input_files_via_cdp(page, file_path: str) -> bool:
+    """
+    Sử dụng native Chrome DevTools Protocol (CDP) DOM.setFileInputFiles để gán file trực tiếp từ ổ cứng.
+    Vượt qua giới hạn 50MB payload của Playwright connect_over_cdp khi kết nối qua WebSocket!
+    """
+    try:
+        cdp = page.context.new_cdp_session(page)
+        doc = cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
+        nodes = cdp.send("DOM.querySelectorAll", {
+            "nodeId": doc["root"]["nodeId"],
+            "selector": 'input[type="file"]'
+        })
+        abs_path = os.path.abspath(file_path)
+        for nid in nodes.get("nodeIds", []):
+            try:
+                cdp.send("DOM.setFileInputFiles", {
+                    "files": [abs_path],
+                    "nodeId": nid
+                })
+                size_mb = os.path.getsize(abs_path) / (1024 * 1024)
+                log_event("INFO", f"✅ Đã nạp file video thành công qua CDP DOM.setFileInputFiles ({os.path.basename(abs_path)}, {size_mb:.1f}MB, nodeId={nid})")
+                cdp.detach()
+                return True
+            except Exception:
+                continue
+        cdp.detach()
+    except Exception as e_cdp:
+        log_event("WARNING", f"CDP DOM.setFileInputFiles: {e_cdp}")
+    return False
+
+
 def dismiss_tiktok_modals(page) -> None:
     """
     Tự động phát hiện và đóng tất cả các loại popup/modal của TikTok Studio:
@@ -59,11 +90,13 @@ def dismiss_tiktok_modals(page) -> None:
         pass
 
     try:
-        # 3a. Banner bản nháp cũ chưa lưu -> bấm Hủy bỏ
-        btn_draft_discard = page.locator('div:has-text("chưa được lưu") button:has-text("Hủy bỏ"), div:has-text("unsaved") button:has-text("Discard")').first
-        if btn_draft_discard.is_visible(timeout=800):
-            btn_draft_discard.click()
-            time.sleep(1)
+        # 3a. Banner bản nháp cũ chưa lưu ("Video bạn đang chỉnh sửa chưa được lưu...")
+        if page.locator('*:has-text("chưa được lưu"), *:has-text("unsaved")').count() > 0:
+            btn_draft_discard = page.locator('button:has-text("Hủy bỏ"), button:has-text("Discard")').first
+            if btn_draft_discard.is_visible(timeout=800):
+                log_event("INFO", "Phát hiện modal 'Video chưa được lưu' -> Đang bấm 'Hủy bỏ'...")
+                btn_draft_discard.click()
+                time.sleep(1)
     except Exception:
         pass
 
@@ -417,30 +450,41 @@ class TikTokUploader:
                     try:
                         replace_btn = page.locator('button:has-text("Thay thế"), button:has-text("Replace")').first
                         if replace_btn.is_visible(timeout=2000):
-                            with page.expect_file_chooser(timeout=7000) as fc_info:
-                                replace_btn.click()
-                            fc = fc_info.value
-                            fc.set_files(video_path, no_wait_after=True, timeout=file_upload_timeout)
-                            file_input_set = True
-                            log_event("INFO", f"Đã thay thế video mới thành công: {os.path.basename(video_path)}")
+                            try:
+                                with page.expect_file_chooser(timeout=7000) as fc_info:
+                                    replace_btn.click()
+                                fc = fc_info.value
+                                fc.set_files(video_path, no_wait_after=True, timeout=file_upload_timeout)
+                                file_input_set = True
+                                log_event("INFO", f"Đã thay thế video mới thành công: {os.path.basename(video_path)}")
+                            except Exception as e_fc_rep:
+                                log_event("WARNING", f"FileChooser thay thế gặp lỗi: {e_fc_rep}")
+                                file_input_set = _set_input_files_via_cdp(page, video_path)
                     except Exception as e_rep:
                         log_event("WARNING", f"Không thể bấm Thay thế ({e_rep}), tiếp tục với video hiện tại.")
                         file_input_set = True
 
                 if not file_input_set and not has_uploaded_video:
                     # Giao diện Dropzone tải lên ban đầu
+                    # Cách 0: Nếu file lớn (> 40MB), ưu tiên dùng trực tiếp native CDP để không bị giới hạn 50MB payload
+                    file_size_mb = (os.path.getsize(video_path) / (1024 * 1024)) if os.path.exists(video_path) else 0
+                    if file_size_mb >= 40:
+                        file_input_set = _set_input_files_via_cdp(page, video_path)
+
                     # Cách 1 (Chuẩn nhất cho TikTok): expect_file_chooser click div[data-e2e="select_video_container"]
-                    try:
-                        drop_container = page.locator('div[data-e2e="select_video_container"], div[class*="upload-card"], div[role="button"]:has(input[type="file"])').first
-                        if drop_container.is_visible(timeout=3000):
-                            with page.expect_file_chooser(timeout=7000) as fc_info:
-                                drop_container.click()
-                            fc = fc_info.value
-                            fc.set_files(video_path, no_wait_after=True, timeout=file_upload_timeout)
-                            file_input_set = True
-                            log_event("INFO", "Đã nạp file video thành công qua TikTok dropzone container")
-                    except Exception as e_fc1:
-                        log_event("WARNING", f"Upload qua dropzone container chưa thành công: {e_fc1}")
+                    if not file_input_set:
+                        try:
+                            drop_container = page.locator('div[data-e2e="select_video_container"], div[class*="upload-card"], div[role="button"]:has(input[type="file"])').first
+                            if drop_container.is_visible(timeout=3000):
+                                with page.expect_file_chooser(timeout=7000) as fc_info:
+                                    drop_container.click()
+                                fc = fc_info.value
+                                fc.set_files(video_path, no_wait_after=True, timeout=file_upload_timeout)
+                                file_input_set = True
+                                log_event("INFO", "Đã nạp file video thành công qua TikTok dropzone container")
+                        except Exception as e_fc1:
+                            log_event("WARNING", f"Upload qua dropzone container chưa thành công: {e_fc1}")
+                            file_input_set = _set_input_files_via_cdp(page, video_path)
 
                     # Cách 2: locator('input[type="file"]').set_input_files với timeout linh hoạt
                     if not file_input_set:
@@ -452,6 +496,7 @@ class TikTokUploader:
                                 log_event("INFO", "Đã set file input qua locator(no_wait_after=True)")
                         except Exception as e_loc:
                             log_event("WARNING", f"locator.set_input_files gặp lỗi: {e_loc}")
+                            file_input_set = _set_input_files_via_cdp(page, video_path)
 
                     # Cách 3: Thử trực tiếp qua page.set_input_files
                     if not file_input_set:
@@ -461,6 +506,7 @@ class TikTokUploader:
                             log_event("INFO", "Đã set file input qua page.set_input_files")
                         except Exception as e_psi:
                             log_event("WARNING", f"page.set_input_files gặp lỗi: {e_psi}")
+                            file_input_set = _set_input_files_via_cdp(page, video_path)
 
                     # Cách 4: Thử trong các iframe
                     if not file_input_set:
@@ -476,6 +522,10 @@ class TikTokUploader:
                                     break
                             except Exception:
                                 continue
+
+                    # Cách 5: Fallback cuối cùng bằng native CDP nếu các cách trên đều chưa set được
+                    if not file_input_set:
+                        file_input_set = _set_input_files_via_cdp(page, video_path)
 
                     if not file_input_set:
                         ss_path = str(SCREENSHOT_DIR / f"upload_fail_{gpm_profile_id[:8]}.png")
@@ -546,20 +596,42 @@ class TikTokUploader:
                     dismiss_tiktok_modals(page)
 
                     # Tìm chính xác nút Đăng thực sự (data-e2e="post_video_button" hoặc type-primary, TRÁNH nhầm với menu 'Bài đăng' ở sidebar)
-                    post_btn = page.locator('button[data-e2e="post_video_button"]').first
-                    if not post_btn.is_visible():
-                        post_btn = page.locator(
-                            'button.Button__root--type-primary:has-text("Đăng"), '
-                            'button.Button__root--type-primary:has-text("Post"), '
-                            'button:text-is("Đăng"), '
-                            'button:text-is("Post")'
-                        ).first
+                    post_btn_selector = (
+                        'button[data-e2e="post_video_button"], '
+                        'button.Button__root--type-primary:has-text("Đăng"):not([data-e2e*="nav"]):not([class*="sidebar"]), '
+                        'button.Button__root--type-primary:has-text("Post"):not([data-e2e*="nav"]):not([class*="sidebar"]), '
+                        'button:text-is("Đăng"):not([data-e2e*="nav"]):not([class*="sidebar"]), '
+                        'button:text-is("Post"):not([data-e2e*="nav"]):not([class*="sidebar"])'
+                    )
+                    post_btn = page.locator(post_btn_selector).first
 
-                    try:
-                        post_btn.scroll_into_view_if_needed(timeout=5000)
+                    # Chờ nút Đăng xuất hiện và sẵn sàng (upload video hoàn tất, không bị disabled)
+                    log_event("INFO", "Đang chờ tiến trình tải video lên TikTok hoàn tất...")
+                    post_ready = False
+                    for w in range(120):
+                        dismiss_tiktok_modals(page)
+                        if post_btn.count() > 0:
+                            try:
+                                post_btn.scroll_into_view_if_needed(timeout=1500)
+                                is_dis = post_btn.is_disabled() if hasattr(post_btn, "is_disabled") else False
+                                aria_dis = post_btn.get_attribute("aria-disabled") == "true"
+                                cls = post_btn.get_attribute("class") or ""
+                                is_btn_disabled = is_dis or aria_dis or ("disabled" in cls.lower())
+                                if not is_btn_disabled and post_btn.is_visible():
+                                    post_ready = True
+                                    log_event("INFO", f"Nút Đăng đã sẵn sàng sau {w}s!")
+                                    break
+                            except Exception:
+                                pass
                         time.sleep(1)
 
-                        if post_btn.is_visible(timeout=5000):
+                    if not post_ready:
+                        log_event("WARNING", "Hết thời gian chờ nhưng nút Đăng có thể vẫn đang xử lý, cố gắng click...")
+
+                    try:
+                        if post_btn.count() > 0:
+                            post_btn.scroll_into_view_if_needed(timeout=3000)
+                            time.sleep(1)
                             # Thực hiện click JS trực tiếp để bỏ qua hoàn toàn overlay react-joyride
                             try:
                                 post_btn.evaluate("el => el.click()")

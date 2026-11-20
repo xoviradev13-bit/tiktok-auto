@@ -7,11 +7,14 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
 from backend.database import get_connection, log_campaign_event, log_event
+from backend.logger import get_logger
 from backend.modules.browser_adapters import browser_manager
 from backend.modules.multi_downloader import multi_downloader
 from backend.modules.multi_uploader import multi_uploader
 from backend.modules.local_ingestion import local_ingestor, is_rss_scan_enabled, set_rss_scan_enabled
 from backend.modules.license_client import LicenseClient, get_machine_hwid
+
+logger = get_logger("api_v2_routes")
 
 router = APIRouter(prefix="/api/v2", tags=["v2_features"])
 
@@ -540,7 +543,12 @@ def campaign_scan_and_ingest_local(campaign_id: int):
         
     # Quét video trong thư mục
     scan_res = local_ingestor.scan_folder(folder)
-    files = [f["path"] for f in scan_res.get("files", [])]
+    if isinstance(scan_res, list):
+        files = [f.get("file_path") or f.get("path") for f in scan_res if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+    elif isinstance(scan_res, dict):
+        files = [f.get("file_path") or f.get("path") for f in scan_res.get("files", []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+    else:
+        files = []
     if not files:
         return {"status": "warning", "message": f"Không tìm thấy file video nào trong thư mục {folder}", "added": 0}
         

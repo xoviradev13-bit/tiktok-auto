@@ -154,7 +154,7 @@
                             Luồng (8GB RAM)</span>
                     </div>
                     <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-                        <input type="number" id="modalMaxParallelUploads" class="input-field" min="1" max="6" value="1"
+                        <input type="number" id="modalMaxParallelUploads" class="input-field" min="1" max="20" value="1"
                             oninput="updateModalParallelUploadsBadge(this.value)"
                             style="width:120px; font-size:15px; font-weight:700; color:#c084fc; text-align:center;">
                         <span style="font-size:12.5px; color:var(--text-muted); font-weight:600;">tài khoản upload đồng
@@ -164,29 +164,27 @@
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
                         <button type="button" class="btn btn-sm btn-primary has-tooltip tooltip-top tooltip-right"
                             id="btnParallelPreset1" onclick="setParallelUploadsPreset(1)"
-                            data-tooltip="Khuyến nghị mặc định cho laptop 8GB RAM, không bị tràn bộ nhớ">
-                            <i class="fa-solid fa-laptop"></i> 1 Luồng (8GB RAM)
+                            data-tooltip="Khuyến nghị cho laptop 8GB RAM, tiết kiệm tài nguyên">
+                            <i class="fa-solid fa-laptop"></i> 1–2 Luồng (8GB RAM)
                         </button>
                         <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left"
-                            id="btnParallelPreset2" onclick="setParallelUploadsPreset(2)"
-                            data-tooltip="Phù hợp máy 16GB RAM, đăng 2 profile cùng lúc">
-                            <i class="fa-solid fa-server"></i> 2 Luồng (16GB RAM)
+                            id="btnParallelPreset2" onclick="setParallelUploadsPreset(3)"
+                            data-tooltip="Phù hợp máy 16GB RAM, tải lên mượt mà">
+                            <i class="fa-solid fa-server"></i> 3–4 Luồng (16GB RAM)
                         </button>
                         <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-right"
-                            id="btnParallelPreset3" onclick="setParallelUploadsPreset(3)"
-                            data-tooltip="Phù hợp máy 32GB RAM, tốc độ cao">
-                            <i class="fa-solid fa-bolt"></i> 3 Luồng (32GB RAM)
+                            id="btnParallelPreset3" onclick="setParallelUploadsPreset(6)"
+                            data-tooltip="Phù hợp máy 32GB RAM, tăng tốc đăng bài cho dàn nick lớn">
+                            <i class="fa-solid fa-bolt"></i> 6–8 Luồng (32GB RAM)
                         </button>
                         <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top tooltip-left"
-                            id="btnParallelPreset4" onclick="setParallelUploadsPreset(4)"
-                            data-tooltip="Dành cho máy trạm / Farm chuyên dụng">
-                            4–5 Luồng (Farm Pro)
+                            id="btnParallelPreset4" onclick="setParallelUploadsPreset(10)"
+                            data-tooltip="Dành cho máy trạm chuyên dụng / Server farm 64GB+ RAM">
+                            10+ Luồng (Farm Pro)
                         </button>
                     </div>
                     <small class="form-hint" style="margin-top:6px; margin-bottom:0; line-height:1.4;">
-                        🛡️ <b>Mặc định 1 luồng</b> để đảm bảo laptop 8GB RAM chạy mượt mà, không bị lag đơ hoặc crash
-                        trình duyệt. Nếu máy tính của bạn có 16GB - 32GB+ RAM, hãy nâng lên 2-4 luồng để tăng tốc độ
-                        đăng bài song song cho dàn nick.
+                        🛡️ Mỗi profile trình duyệt upload chỉ tốn khoảng 400MB–600MB RAM. Máy 32GB RAM có thể chạy thoải mái 6–10 luồng đồng thời. Lưu ý: Cần đảm bảo băng thông mạng và proxy riêng cho từng tài khoản khi mở nhiều luồng.
                     </small>
                 </div>
 

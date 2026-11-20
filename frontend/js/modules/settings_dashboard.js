@@ -1220,31 +1220,36 @@ function updateModalParallelUploadsBadge(val) {
     if (!badge) return;
     const num = parseInt(val, 10) || 1;
     let text = '';
-    if (num === 1) text = '1 Luồng (8GB RAM)';
-    else if (num === 2) text = '2 Luồng (16GB RAM)';
-    else if (num === 3) text = '3 Luồng (32GB RAM)';
-    else text = `${num} Luồng (Farm Pro)`;
+    if (num <= 2) text = `${num} Luồng (8GB RAM)`;
+    else if (num <= 4) text = `${num} Luồng (16GB RAM)`;
+    else if (num <= 8) text = `${num} Luồng (32GB RAM)`;
+    else text = `${num} Luồng (Farm Pro / 64GB)`;
     badge.textContent = text;
     if (window.i18n && typeof window.i18n.translateElement === 'function') {
         window.i18n.translateElement(badge);
     }
+    const presets = [
+        { id: 'btnParallelPreset1', match: num <= 2 },
+        { id: 'btnParallelPreset2', match: num >= 3 && num <= 4 },
+        { id: 'btnParallelPreset3', match: num >= 5 && num <= 8 },
+        { id: 'btnParallelPreset4', match: num >= 9 },
+    ];
+    presets.forEach(p => {
+        const btn = document.getElementById(p.id);
+        if (btn) {
+            btn.classList.toggle('btn-primary', p.match);
+            btn.classList.toggle('btn-secondary', !p.match);
+        }
+    });
 }
 
 function setParallelUploadsPreset(count) {
-    const num = Math.max(1, Math.min(6, parseInt(count, 10) || 1));
+    const num = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
     const inp = document.getElementById('modalMaxParallelUploads');
     if (inp) {
         inp.value = num;
     }
     updateModalParallelUploadsBadge(num);
-    [1, 2, 3, 4].forEach(n => {
-        const btn = document.getElementById(`btnParallelPreset${n}`);
-        if (btn) {
-            const isActive = (n === num) || (n === 4 && num >= 4);
-            btn.classList.toggle('btn-primary', isActive);
-            btn.classList.toggle('btn-secondary', !isActive);
-        }
-    });
 }
 
 async function loadSchedulerSettings() {
@@ -1358,7 +1363,7 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         watchdog = document.getElementById('modalWatchdogToggle')?.checked ?? true;
         stuckTimeout = parseInt(document.getElementById('modalStuckTimeout')?.value, 10) || 15;
         minAccountCooldown = parseInt(document.getElementById('modalMinAccountCooldown')?.value, 10) || 60;
-        maxParallelUploads = Math.max(1, Math.min(6, parseInt(document.getElementById('modalMaxParallelUploads')?.value || 1, 10)));
+        maxParallelUploads = Math.max(1, Math.min(20, parseInt(document.getElementById('modalMaxParallelUploads')?.value || 1, 10)));
         rssConcurrentWorkers = Math.max(1, Math.min(50, parseInt(document.getElementById('modalRssConcurrentWorkers')?.value || document.getElementById('settingRssConcurrentWorkers')?.value || 15, 10)));
         profileSyncConcurrentWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || document.getElementById('modalProfileSyncConcurrentWorkers')?.value || document.getElementById('settingProfileSyncConcurrentWorkers')?.value || 3, 10)));
     } else {
