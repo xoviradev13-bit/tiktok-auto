@@ -1,6 +1,7 @@
 import time
 import re
 import threading
+import concurrent.futures
 from typing import Dict, Any, Optional, List
 from backend.database import get_connection, log_event
 from backend.modules.gpm_client import gpm_client
@@ -578,14 +579,28 @@ class TikTokTracker:
         global _scan_progress
         return dict(_scan_progress)
 
-    def scan_all_profiles(self, delay_seconds: float = 1.5) -> Dict[str, Any]:
-        """Quét toàn bộ danh sách profile GPM tuần tự với chế độ Low-RAM và hỗ trợ Dừng Quét"""
+    def scan_all_profiles(self, delay_seconds: float = 1.0, max_workers: Optional[int] = None) -> Dict[str, Any]:
+        """Quét toàn bộ danh sách profile GPM (hỗ trợ đa luồng Invisible Browser Pool 3-5 workers và Dừng Quét)"""
         global _is_scanning_all, _cancel_scan_flag, _scan_progress
         if _is_scanning_all:
             return {"success": False, "message": "Tiến trình quét toàn bộ profile đang chạy..."}
 
         _is_scanning_all = True
         _cancel_scan_flag = False
+
+        # Đọc cấu hình max_workers nếu không truyền vào
+        if max_workers is None:
+            try:
+                conn_w = get_connection()
+                cur_w = conn_w.cursor()
+                cur_w.execute("SELECT value FROM settings WHERE key = 'profile_sync_concurrent_workers'")
+                row_w = cur_w.fetchone()
+                conn_w.close()
+                max_workers = int(row_w["value"]) if row_w and row_w["value"] else 3
+            except Exception:
+                max_workers = 3
+        max_workers = max(1, min(10, max_workers))
+
         # Tự động đồng bộ với GPMLogin trước khi quét để thêm profile mới và xóa profile đã bị xóa trên GPM
         try:
             active_gpm_list = gpm_client.get_profiles()
@@ -637,64 +652,107 @@ class TikTokTracker:
 
             results = []
             success_count = 0
+            completed_count = 0
             total_cnt = len(profiles)
+            progress_lock = threading.Lock()
 
             # Khởi tạo trạng thái ban đầu để frontend hiển thị ngay
             first_name = profiles[0].get("name") or profiles[0].get("gpm_id")
             _scan_progress = {
                 "is_scanning": True,
-                "current": 1,
-                "current_index": 1,
+                "current": 0,
+                "current_index": 0,
                 "total": total_cnt,
                 "current_profile_name": first_name,
                 "current_gpm_id": profiles[0].get("gpm_id"),
-                "percent": int((1 / total_cnt) * 100) if total_cnt > 0 else 0,
+                "percent": 0,
                 "success_count": 0,
-                "status_message": f"Đang quét [1/{total_cnt}]: {first_name}",
-                "message": f"Đang quét [1/{total_cnt}]: {first_name}"
+                "status_message": f"Bắt đầu đồng bộ [0/{total_cnt}] ({max_workers} luồng)...",
+                "message": f"Bắt đầu đồng bộ [0/{total_cnt}] ({max_workers} luồng)..."
             }
 
-            for i, p in enumerate(profiles):
-                # Kiểm tra nếu người dùng bấm nút Dừng Quét
-                if _cancel_scan_flag:
-                    log_event("WARNING", "🛑 [TIKTOK TRACKER] Đã dừng quét tuần tự theo yêu cầu của người dùng.")
-                    _scan_progress["status_message"] = "Đã dừng quét"
-                    _scan_progress["message"] = "Đã dừng quét"
-                    break
+            # Nếu max_workers == 1 hoặc chỉ có 1 profile: Chạy tuần tự truyền thống
+            if max_workers <= 1 or total_cnt == 1:
+                for i, p in enumerate(profiles):
+                    if _cancel_scan_flag:
+                        log_event("WARNING", "🛑 [TIKTOK TRACKER] Đã dừng quét tuần tự theo yêu cầu của người dùng.")
+                        _scan_progress["status_message"] = "Đã dừng quét"
+                        _scan_progress["message"] = "Đã dừng quét"
+                        break
 
-                gpm_id = p["gpm_id"]
-                p_name = p.get("name") or gpm_id
-                current_pct = int(((i + 1) / total_cnt) * 100)
-                
-                # Cập nhật trạng thái tiến độ thời gian thực (đầy đủ cả current và current_index)
-                _scan_progress = {
-                    "is_scanning": True,
-                    "current": i + 1,
-                    "current_index": i + 1,
-                    "total": total_cnt,
-                    "current_profile_name": p_name,
-                    "current_gpm_id": gpm_id,
-                    "percent": current_pct,
-                    "success_count": success_count,
-                    "status_message": f"Đang quét [{i+1}/{total_cnt}]: {p_name}",
-                    "message": f"Đang quét [{i+1}/{total_cnt}]: {p_name}"
-                }
+                    gpm_id = p["gpm_id"]
+                    p_name = p.get("name") or gpm_id
 
-                # Bỏ qua nếu profile đang bận upload video
-                if is_profile_busy(gpm_id):
-                    log_event("INFO", f"Bỏ qua profile {p_name} do đang bận upload bài...")
-                    results.append({"gpm_id": gpm_id, "name": p_name, "status": "skipped_busy"})
-                    continue
+                    if is_profile_busy(gpm_id):
+                        log_event("INFO", f"Bỏ qua profile {p_name} do đang bận upload bài...")
+                        results.append({"gpm_id": gpm_id, "name": p_name, "status": "skipped_busy"})
+                        completed_count += 1
+                        continue
 
-                res = self.scan_single_gpm_profile(gpm_id, auto_close=True)
-                if res.get("success"):
-                    success_count += 1
-                _scan_progress["success_count"] = success_count
-                results.append({"gpm_id": gpm_id, "name": p_name, **res})
+                    res = self.scan_single_gpm_profile(gpm_id, auto_close=True)
+                    completed_count += 1
+                    if res.get("success"):
+                        success_count += 1
 
-                # Nghỉ ngắn giữa các profile và kiểm tra lại cờ dừng
-                if i < total_cnt - 1 and not _cancel_scan_flag:
-                    time.sleep(delay_seconds)
+                    current_pct = int((completed_count / total_cnt) * 100)
+                    _scan_progress = {
+                        "is_scanning": True,
+                        "current": completed_count,
+                        "current_index": completed_count,
+                        "total": total_cnt,
+                        "current_profile_name": p_name,
+                        "current_gpm_id": gpm_id,
+                        "percent": current_pct,
+                        "success_count": success_count,
+                        "status_message": f"Đang quét [{completed_count}/{total_cnt}]: {p_name}",
+                        "message": f"Đang quét [{completed_count}/{total_cnt}]: {p_name}"
+                    }
+                    results.append({"gpm_id": gpm_id, "name": p_name, **res})
+
+                    if i < total_cnt - 1 and not _cancel_scan_flag:
+                        time.sleep(delay_seconds)
+            else:
+                # Chạy đa luồng song song (Profile Sync Pool cho dàn hàng trăm - hàng ngàn nick)
+                log_event("INFO", f"🚀 [TIKTOK TRACKER] Bắt đầu đồng bộ song song {total_cnt} profiles với {max_workers} luồng...")
+
+                def _scan_profile_worker(p_item):
+                    nonlocal completed_count, success_count
+                    if _cancel_scan_flag:
+                        return None
+
+                    g_id = p_item["gpm_id"]
+                    pr_name = p_item.get("name") or g_id
+
+                    if is_profile_busy(g_id):
+                        with progress_lock:
+                            completed_count += 1
+                            results.append({"gpm_id": g_id, "name": pr_name, "status": "skipped_busy"})
+                        return None
+
+                    res = self.scan_single_gpm_profile(g_id, auto_close=True)
+
+                    with progress_lock:
+                        completed_count += 1
+                        if res.get("success"):
+                            success_count += 1
+                        current_pct = int((completed_count / total_cnt) * 100)
+                        _scan_progress["current"] = completed_count
+                        _scan_progress["current_index"] = completed_count
+                        _scan_progress["percent"] = current_pct
+                        _scan_progress["success_count"] = success_count
+                        _scan_progress["current_profile_name"] = pr_name
+                        _scan_progress["current_gpm_id"] = g_id
+                        _scan_progress["status_message"] = f"Đang đồng bộ [{completed_count}/{total_cnt}]: {pr_name} ({success_count} thành công)"
+                        _scan_progress["message"] = _scan_progress["status_message"]
+                        results.append({"gpm_id": g_id, "name": pr_name, **res})
+
+                    if delay_seconds > 0 and not _cancel_scan_flag:
+                        time.sleep(delay_seconds)
+                    return res
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ProfileSyncPool") as executor:
+                    futures = [executor.submit(_scan_profile_worker, p) for p in profiles]
+                    concurrent.futures.wait(futures)
 
             summary_msg = f"Hoàn tất quét {len(results)}/{total_cnt} profiles: {success_count} thành công"
             log_event("INFO", f"🏁 [TIKTOK TRACKER] {summary_msg}")

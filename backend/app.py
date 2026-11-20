@@ -285,6 +285,7 @@ class FollowerSchedulerRequest(BaseModel):
     follower_threshold_youtube: Optional[int] = None
     follower_threshold_facebook: Optional[int] = None
     invisible_browser_automation: Optional[bool] = True
+    profile_sync_concurrent_workers: Optional[int] = 3
 
 class ThresholdSettingsRequest(BaseModel):
     follower_threshold_tiktok: Optional[int] = 10000
@@ -3877,7 +3878,7 @@ def recalculate_profile_flop_endpoint(gpm_id: str):
 
 @app.get("/api/settings/follower-scheduler")
 def get_follower_scheduler_settings():
-    from backend.database import get_follower_thresholds
+    from backend.database import get_follower_thresholds, get_setting
     thresholds = get_follower_thresholds()
     return {
         "enabled": scheduler.follower_scan_enabled,
@@ -3887,6 +3888,7 @@ def get_follower_scheduler_settings():
         "follower_threshold_tiktok": thresholds["tiktok"],
         "follower_threshold_youtube": thresholds["youtube"],
         "follower_threshold_facebook": thresholds["facebook"],
+        "profile_sync_concurrent_workers": int(get_setting("profile_sync_concurrent_workers", "3") or 3),
         "last_scan": getattr(scheduler, "last_follower_scan", 0),
         "is_scanning": getattr(tiktok_tracker, "_is_scanning_all", False)
     }
@@ -3918,6 +3920,9 @@ def save_follower_scheduler_settings(req: FollowerSchedulerRequest):
         conn.commit()
         conn.close()
 
+        if req.profile_sync_concurrent_workers is not None:
+            p_workers = max(1, min(10, req.profile_sync_concurrent_workers))
+            set_setting("profile_sync_concurrent_workers", str(p_workers))
         if req.follower_threshold_tiktok is not None:
             set_setting("follower_threshold_tiktok", str(max(1, req.follower_threshold_tiktok)))
         if req.follower_threshold_youtube is not None:
@@ -3928,8 +3933,8 @@ def save_follower_scheduler_settings(req: FollowerSchedulerRequest):
     except Exception as e:
         log_event("WARNING", f"Lỗi lưu cấu hình scheduler vào settings: {e}")
 
-    log_event("INFO", f"Đã lưu cấu hình quét Follower tự động: Bật={req.enabled}, Chế độ={req.mode}, Giờ={req.times}, Khoảng cách={req.interval_hours}h")
-    return {"status": "success", "message": "Đã lưu cài đặt quét Follower tự động thành công"}
+    log_event("INFO", f"Đã lưu cấu hình lịch quét định kỳ TikTok: Bật={req.enabled}, Chế độ={req.mode}, Giờ={req.times}, Khoảng cách={req.interval_hours}h")
+    return {"status": "success", "message": "Đã lưu cài đặt lịch quét định kỳ thành công"}
 
 # --- System Tray & Auto-Start Settings ---
 @app.get("/api/settings/system-tray")
@@ -4531,6 +4536,8 @@ class UpdateSchedulerSettingsRequest(BaseModel):
     stuck_timeout_minutes: int = 15
     min_account_cooldown_minutes: Optional[int] = 60
     max_parallel_uploads: Optional[int] = 1
+    rss_concurrent_workers: Optional[int] = 15
+    profile_sync_concurrent_workers: Optional[int] = 3
 
 @app.get("/api/settings/defaults")
 def get_default_settings():
@@ -4577,6 +4584,8 @@ def get_scheduler_settings():
         "stuck_timeout_minutes": int(settings_dict.get("upload_stuck_timeout_minutes", getattr(scheduler, "stuck_timeout_minutes", 15))),
         "min_account_cooldown_minutes": int(settings_dict.get("min_account_cooldown_minutes", getattr(scheduler, "min_account_cooldown_minutes", 60))),
         "max_parallel_uploads": int(settings_dict.get("max_parallel_uploads", getattr(scheduler, "max_parallel_uploads", 1))),
+        "rss_concurrent_workers": int(settings_dict.get("rss_concurrent_workers", getattr(scheduler, "rss_concurrent_workers", 15))),
+        "profile_sync_concurrent_workers": int(settings_dict.get("profile_sync_concurrent_workers", getattr(scheduler, "profile_sync_concurrent_workers", 3))),
         "scheduler_running": scheduler.is_running
     }
 
@@ -4601,6 +4610,10 @@ def update_scheduler_settings(req: UpdateSchedulerSettingsRequest):
         raise HTTPException(status_code=400, detail="Giãn cách tối thiểu giữa 2 lần đăng bài trên cùng 1 tài khoản phải từ 15 đến 1440 phút!")
     if req.max_parallel_uploads is not None and (req.max_parallel_uploads < 1 or req.max_parallel_uploads > 6):
         raise HTTPException(status_code=400, detail="Số luồng upload song song phải từ 1 đến 6 luồng (khuyến nghị 1 luồng cho máy 8GB RAM)!")
+    if req.rss_concurrent_workers is not None and (req.rss_concurrent_workers < 1 or req.rss_concurrent_workers > 50):
+        raise HTTPException(status_code=400, detail="Số luồng quét RSS phải từ 1 đến 50 luồng (khuyến nghị 15-20 cho 3000-4000 kênh)!")
+    if req.profile_sync_concurrent_workers is not None and (req.profile_sync_concurrent_workers < 1 or req.profile_sync_concurrent_workers > 10):
+        raise HTTPException(status_code=400, detail="Số trình duyệt đồng bộ Profile song song phải từ 1 đến 10 luồng (khuyến nghị 3-4 luồng)!")
 
     scheduler.update_config(
         interval_minutes=req.interval_minutes,
@@ -4616,7 +4629,9 @@ def update_scheduler_settings(req: UpdateSchedulerSettingsRequest):
         watchdog_enabled=req.watchdog_enabled,
         stuck_timeout_minutes=req.stuck_timeout_minutes,
         min_account_cooldown_minutes=req.min_account_cooldown_minutes,
-        max_parallel_uploads=req.max_parallel_uploads
+        max_parallel_uploads=req.max_parallel_uploads,
+        rss_concurrent_workers=req.rss_concurrent_workers,
+        profile_sync_concurrent_workers=req.profile_sync_concurrent_workers
     )
     try:
         conn = get_connection()
@@ -4637,12 +4652,16 @@ def update_scheduler_settings(req: UpdateSchedulerSettingsRequest):
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('min_account_cooldown_minutes', ?)", (str(req.min_account_cooldown_minutes),))
         if req.max_parallel_uploads is not None:
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('max_parallel_uploads', ?)", (str(req.max_parallel_uploads),))
+        if req.rss_concurrent_workers is not None:
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('rss_concurrent_workers', ?)", (str(req.rss_concurrent_workers),))
+        if req.profile_sync_concurrent_workers is not None:
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('profile_sync_concurrent_workers', ?)", (str(req.profile_sync_concurrent_workers),))
         conn.commit()
         conn.close()
     except Exception as e:
         log_event("WARNING", f"Lỗi lưu cấu hình scheduler vào DB: {e}")
 
-    log_event("INFO", f"Đã cập nhật cấu hình tự động: Quét RSS {req.interval_minutes}p/lần, kiểm tra Upload {req.upload_interval_seconds}s, Upload song song: {req.max_parallel_uploads or 1} luồng, Giãn cách đăng nick {req.min_account_cooldown_minutes or 60}p, Auto-Retry: {'BẬT' if req.auto_retry_enabled else 'TẮT'} ({req.max_retries} lần, cách {req.retry_delay_minutes}p), Watchdog: {'BẬT' if req.watchdog_enabled else 'TẮT'} ({req.stuck_timeout_minutes}p).")
+    log_event("INFO", f"Đã cập nhật cấu hình tự động: Quét RSS {req.interval_minutes}p/lần (Worker Pool: {req.rss_concurrent_workers or 15} luồng), kiểm tra Upload {req.upload_interval_seconds}s, Upload song song: {req.max_parallel_uploads or 1} luồng, Profile Sync: {req.profile_sync_concurrent_workers or 3} luồng, Giãn cách đăng nick {req.min_account_cooldown_minutes or 60}p, Auto-Retry: {'BẬT' if req.auto_retry_enabled else 'TẮT'} ({req.max_retries} lần, cách {req.retry_delay_minutes}p), Watchdog: {'BẬT' if req.watchdog_enabled else 'TẮT'} ({req.stuck_timeout_minutes}p).")
     return {
         "status": "success",
         "message": f"Đã lưu cấu hình tự động quét ({req.interval_minutes} phút/lần) và Auto-Retry/Watchdog thành công!",

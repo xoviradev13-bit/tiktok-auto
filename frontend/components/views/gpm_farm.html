@@ -12,12 +12,12 @@
                     <i class="fa-solid fa-shield-halved text-cyan"></i> <span id="wireguardBtnText">WireGuard VPN</span>
                 </button>
                 <button class="btn btn-secondary" id="btnFollowerSchedulerModal" onclick="openFollowerSchedulerModal()"
-                    style="display:flex; align-items:center; gap:6px;" title="Cài đặt lịch quét follower tự động">
+                    style="display:flex; align-items:center; gap:6px;" title="Cài đặt lịch quét định kỳ dữ liệu TikTok">
                     <i class="fa-solid fa-clock text-accent"></i> <span>Lịch Quét Định Kỳ</span>
                 </button>
                 <button class="btn btn-accent" id="btnScanAllFollowersTab" onclick="scanAllProfilesFollowers(this)"
-                    style="display:flex; align-items:center; gap:6px; font-weight:700;">
-                    <i class="fa-solid fa-magnifying-glass-chart"></i> Quét Follower
+                    style="display:flex; align-items:center; gap:6px; font-weight:700;" title="Quét và cập nhật dữ liệu TikTok của toàn bộ profile ngay lập tức">
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Quét Dữ Liệu TikTok
                 </button>
                 <button class="btn btn-primary" id="btnSyncGpmTab" onclick="syncGPMProfiles(this)"
                     style="display:flex; align-items:center; gap:6px;">
@@ -95,6 +95,8 @@
                             <option value="name">Tên Profile</option>
                             <option value="tiktok_username">Account Username</option>
                             <option value="eligible_10k">Đạt Chỉ Tiêu / Beta</option>
+                            <option value="creator_program">Creator Program</option>
+                            <option value="flop_status">Hiệu Suất / Flop</option>
                             <option value="country">Quốc Gia VPN</option>
                             <option value="last_checked">Lần quét gần nhất</option>
                         </select>
@@ -139,6 +141,36 @@
                             <option value="INELIGIBLE">🌱 Chưa đủ điều kiện (< 10K)</option>
                         </select>
                     </div>
+
+                    <!-- Filter Creator Program (Yes / No) -->
+                    <div class="sort-control">
+                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator Program:</label>
+                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả Creator Program</option>
+                            <option value="YES">✅ Đã bật Creator (Yes)</option>
+                            <option value="NO">❌ Chưa bật Creator (No)</option>
+                            <option value="ACTIVE">⚡ Đang hoạt động (Active)</option>
+                            <option value="NOT_ENROLLED">⏸️ Chưa bật (Đủ 10K)</option>
+                            <option value="INELIGIBLE">➖ Chưa đủ ĐK (&lt; 10K)</option>
+                            <option value="BANNED">🚫 Bị cấm / Ngừng</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Hiệu Suất / Flop -->
+                    <div class="sort-control">
+                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất / Flop:</label>
+                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả hiệu suất</option>
+                            <option value="GOOD">🚀 Khỏe / Phát triển tốt</option>
+                            <option value="FLOP">⚠️ Tổng hợp Flop (0v / 200v / Không ổn định)</option>
+                            <option value="200_VIEW">⚠️ Kẹt 200 View</option>
+                            <option value="0_VIEW">🚨 0-View Flop</option>
+                            <option value="UNSTABLE">⚡ Không Ổn Định</option>
+                            <option value="NEW">🌱 Đang Nuôi</option>
+                            <option value="BREAKOUT">⚡ Đang Breakout (≥ 1,000v)</option>
+                            <option value="RECOVERING">🔄 Đang Hồi Phục</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -174,7 +206,6 @@
                             title="Bấm để sắp xếp theo Tên Profile">
                             Tên Profile <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th style="width: 88px;">Nền Tảng</th>
                         <th class="sortable" id="th-gpm-tiktok_username"
                             onclick="handleGpmHeaderSort('tiktok_username')"
                             title="Bấm để sắp xếp theo Account Username">
@@ -209,7 +240,7 @@
                 </thead>
                 <tbody id="gpmTableBody">
                     <tr>
-                        <td colspan="10" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
+                        <td colspan="9" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
                             "Đồng Bộ" để nạp dữ liệu!</td>
                     </tr>
                 </tbody>

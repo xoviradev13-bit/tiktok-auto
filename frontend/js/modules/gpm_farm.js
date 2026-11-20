@@ -60,6 +60,10 @@ function resetGpmFilters() {
     if (filterCountry) filterCountry.value = 'ALL';
     const filterBeta = document.getElementById('filterGpmBeta');
     if (filterBeta) filterBeta.value = 'ALL';
+    const filterCp = document.getElementById('filterGpmCreatorProgram');
+    if (filterCp) filterCp.value = 'ALL';
+    const filterFlop = document.getElementById('filterGpmFlop');
+    if (filterFlop) filterFlop.value = 'ALL';
     const filter10k = document.getElementById('filterGpm10k');
     if (filter10k) filter10k.value = 'all';
     const filterNotify = document.getElementById('filterGpmNotify');
@@ -85,12 +89,63 @@ async function exportGpmProfilesCsv() {
             console.warn('Lỗi tải profiles trước khi xuất CSV:', e);
         }
     }
+    const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+    const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
+    const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
+    const filterFlop = document.getElementById('filterGpmFlop')?.value || 'ALL';
     const filter10k = document.getElementById('filterGpm10k')?.value || 'all';
     const filterNotify = document.getElementById('filterGpmNotify')?.value || 'all';
     const filterNick = document.getElementById('filterGpmNick')?.value || 'all';
     const keyword = (document.getElementById('searchGpmKeyword')?.value || '').trim().toLowerCase();
 
     let list = (cachedGpmProfiles || []).slice();
+
+    // Filter Country
+    if (filterCountry !== 'ALL') {
+        const pCountry = (p.country || '').toUpperCase();
+        if (filterCountry === 'NONE') {
+            if (pCountry && pCountry !== 'NONE') list = list.filter(p => !p.country || p.country.toUpperCase() === 'NONE');
+        } else {
+            list = list.filter(p => (p.country || '').toUpperCase() === filterCountry);
+        }
+    }
+
+    // Filter Beta
+    if (filterBeta === 'ELIGIBLE') {
+        list = list.filter(p => isProfileEligible(p));
+    } else if (filterBeta === 'INELIGIBLE') {
+        list = list.filter(p => !isProfileEligible(p));
+    }
+
+    // Filter Creator Program (Yes / No / Specific)
+    if (filterCreatorProgram !== 'ALL') {
+        list = list.filter(p => {
+            const cpStatus = (p.creator_program || (isProfileEligible(p) ? 'active' : 'ineligible')).toLowerCase();
+            if (filterCreatorProgram === 'YES') return cpStatus === 'active';
+            if (filterCreatorProgram === 'NO') return cpStatus !== 'active';
+            if (filterCreatorProgram === 'ACTIVE') return cpStatus === 'active';
+            if (filterCreatorProgram === 'NOT_ENROLLED') return cpStatus === 'not_enrolled';
+            if (filterCreatorProgram === 'INELIGIBLE') return cpStatus === 'ineligible';
+            if (filterCreatorProgram === 'BANNED') return cpStatus === 'banned';
+            return true;
+        });
+    }
+
+    // Filter Flop / Performance
+    if (filterFlop !== 'ALL') {
+        list = list.filter(p => {
+            const fStatus = (p.flop_status || 'new').toLowerCase();
+            if (filterFlop === 'GOOD') return fStatus === 'good';
+            if (filterFlop === 'FLOP') return fStatus === '0_view' || fStatus === '200_view' || fStatus === 'unstable';
+            if (filterFlop === '200_VIEW') return fStatus === '200_view';
+            if (filterFlop === '0_VIEW') return fStatus === '0_view';
+            if (filterFlop === 'UNSTABLE') return fStatus === 'unstable';
+            if (filterFlop === 'NEW') return fStatus === 'new';
+            if (filterFlop === 'BREAKOUT') return Boolean(p.is_breakout);
+            if (filterFlop === 'RECOVERING') return Boolean(p.flop_recovering);
+            return true;
+        });
+    }
 
     if (filter10k === '10k') {
         list = list.filter(p => isProfileEligible(p));
@@ -204,6 +259,8 @@ function renderGpmProfilesTable() {
 
     const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
     const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
+    const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
+    const filterFlop = document.getElementById('filterGpmFlop')?.value || 'ALL';
     const filter10k = document.getElementById('filterGpm10k') ? document.getElementById('filterGpm10k').value : 'all';
     const filterNotify = document.getElementById('filterGpmNotify') ? document.getElementById('filterGpmNotify').value : 'all';
     const filterNick = document.getElementById('filterGpmNick') ? document.getElementById('filterGpmNick').value : 'all';
@@ -229,6 +286,30 @@ function renderGpmProfilesTable() {
         // Beta Eligibility Filter
         if (filterBeta === 'ELIGIBLE' && !isProfileEligible(p)) return false;
         if (filterBeta === 'INELIGIBLE' && isProfileEligible(p)) return false;
+
+        // Creator Program Filter (Yes / No / Specific)
+        if (filterCreatorProgram !== 'ALL') {
+            const cpStatus = (p.creator_program || (isProfileEligible(p) ? 'active' : 'ineligible')).toLowerCase();
+            if (filterCreatorProgram === 'YES' && cpStatus !== 'active') return false;
+            if (filterCreatorProgram === 'NO' && cpStatus === 'active') return false;
+            if (filterCreatorProgram === 'ACTIVE' && cpStatus !== 'active') return false;
+            if (filterCreatorProgram === 'NOT_ENROLLED' && cpStatus !== 'not_enrolled') return false;
+            if (filterCreatorProgram === 'INELIGIBLE' && cpStatus !== 'ineligible') return false;
+            if (filterCreatorProgram === 'BANNED' && cpStatus !== 'banned') return false;
+        }
+
+        // Flop / Performance Filter
+        if (filterFlop !== 'ALL') {
+            const fStatus = (p.flop_status || 'new').toLowerCase();
+            if (filterFlop === 'GOOD' && fStatus !== 'good') return false;
+            if (filterFlop === 'FLOP' && fStatus !== '0_view' && fStatus !== '200_view' && fStatus !== 'unstable') return false;
+            if (filterFlop === '200_VIEW' && fStatus !== '200_view') return false;
+            if (filterFlop === '0_VIEW' && fStatus !== '0_view') return false;
+            if (filterFlop === 'UNSTABLE' && fStatus !== 'unstable') return false;
+            if (filterFlop === 'NEW' && fStatus !== 'new') return false;
+            if (filterFlop === 'BREAKOUT' && !p.is_breakout) return false;
+            if (filterFlop === 'RECOVERING' && !p.flop_recovering) return false;
+        }
 
         // 1. 10K Filter
         if (filter10k === '10k' && !isProfileEligible(p)) return false;
@@ -615,7 +696,7 @@ function renderGpmProfilesTable() {
             } else if (fStatus === '200_view') {
                 flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(245,158,11,0.18); color:#f59e0b; border:1px solid rgba(245,158,11,0.35); font-weight:700;" data-tooltip="⚠️ Kẹt 200 View (${escapeHtml(postStatsHint)}). Cần đổi công thức Hook/Split-screen. Bấm để đổi"><i class="fa-solid fa-circle-exclamation"></i> Kẹt 200v</span>`;
             } else if (fStatus === 'unstable') {
-                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(234,179,8,0.18); color:#eab308; border:1px solid rgba(234,179,8,0.35); font-weight:700;" data-tooltip="🟡 Không Ổn Định (${escapeHtml(postStatsHint)}). Lượt view chênh lệch cao hoặc tỷ lệ 0-view cao. Bấm để đổi"><i class="fa-solid fa-chart-line"></i> Không Ổn Định</span>`;
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(234,179,8,0.18); color:#eab308; border:1px solid rgba(234,179,8,0.35); font-weight:700;" data-tooltip="⚡ Không Ổn Định (${escapeHtml(postStatsHint)}). Lượt view chênh lệch cao hoặc tỷ lệ 0-view cao. Bấm để đổi"><i class="fa-solid fa-chart-line"></i> Không Ổn Định</span>`;
             } else if (fStatus === 'good') {
                 flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(34,197,94,0.18); color:#22c55e; border:1px solid rgba(34,197,94,0.35); font-weight:700;" data-tooltip="🚀 Phát Triển Tốt (${escapeHtml(postStatsHint)}). View/Follower tăng trưởng tốt. Bấm để đổi"><i class="fa-solid fa-rocket"></i> Khỏe / Lên</span>`;
             } else {
@@ -650,14 +731,6 @@ function renderGpmProfilesTable() {
                             <i class="fa-solid fa-layer-group"></i> ${channelsList.length}
                         </span>` : ''}
                     </div>
-                </td>
-                <td>
-                    ${(() => {
-                    const plat = (p.platform || 'tiktok').toLowerCase();
-                    if (plat === 'youtube') return '<span class="badge" style="background:rgba(239,68,68,0.15); color:#f87171; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-youtube"></i> YouTube</span>';
-                    if (plat === 'facebook') return '<span class="badge" style="background:rgba(24,119,242,0.15); color:#60a5fa; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-facebook"></i> Facebook</span>';
-                    return '<span class="badge" style="background:rgba(255,0,80,0.12); color:#ff0050; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-tiktok"></i> TikTok</span>';
-                })()}
                 </td>
                 <td>${usernameDisplay}</td>
                 <td>
@@ -890,8 +963,12 @@ function renderGpmProfilesTable() {
                                 </span>
                             </div>
                         </td>
-                        <td>${chTypeBadge}</td>
-                        <td>${chNameHtml}</td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                ${chTypeBadge}
+                                ${chNameHtml}
+                            </div>
+                        </td>
                         <td style="color:var(--text-muted); font-size:11.5px; opacity:0.7;"><i class="fa-solid fa-arrow-turn-up fa-rotate-90"></i> Cùng nick</td>
                         <td>
                             <div>
@@ -1069,7 +1146,7 @@ async function cycleCreatorProgramStatus(gpmId, currentStatus) {
             };
             showToast(`✅ Đã chuyển Creator Program thành: ${labelMap[nextStatus] || nextStatus.toUpperCase()}`);
         }
-    } catch(e) {
+    } catch (e) {
         showToast(`❌ Lỗi cập nhật Creator Program: ${e.message}`, 'error');
     }
 }
@@ -1109,16 +1186,13 @@ async function cycleFlopStatus(gpmId, currentStatus) {
             const labelMap = {
                 '0_view': '🚨 0-VIEW (FLOP / SHADOWBAN)',
                 '200_view': '⚠️ KẸT 200 VIEW',
-                'unstable': '🟡 KHÔNG ỔN ĐỊNH',
+                'unstable': '⚡ KHÔNG ỔN ĐỊNH',
                 'good': '🚀 KHỎE / TĂNG TRƯỞNG TỐT',
                 'new': '🌱 ĐANG NUÔI (CHƯA ĐỦ SỐ LIỆU)'
             };
-                'good': '🚀 PHÁT TRIỂN TỐT',
-                'new': '🌱 ĐANG NUÔI'
-            };
             showToast(`✅ Đã chuyển tình trạng kênh thành: ${labelMap[nextStatus] || nextStatus.toUpperCase()}`);
         }
-    } catch(e) {
+    } catch (e) {
         showToast(`❌ Lỗi cập nhật Tình trạng kênh: ${e.message}`, 'error');
     }
 }
@@ -1840,6 +1914,10 @@ async function openFollowerSchedulerModal() {
             const el = document.getElementById('schedThresholdFacebook');
             if (el) el.value = data.follower_threshold_facebook;
         }
+        if (data.profile_sync_concurrent_workers !== undefined) {
+            const elWorkers = document.getElementById('schedProfileSyncConcurrentWorkers');
+            if (elWorkers) elWorkers.value = data.profile_sync_concurrent_workers;
+        }
         if (typeof toggleFollowerScanModeUI === 'function') toggleFollowerScanModeUI();
     } catch (err) {
         console.error('[DEBUG MODAL] Lỗi đọc follower scheduler settings:', err);
@@ -2008,6 +2086,7 @@ async function saveFollowerSchedulerSettings(btn) {
     const thTiktok = parseInt(document.getElementById('schedThresholdTiktok')?.value, 10) || followerThresholds.tiktok;
     const thYoutube = parseInt(document.getElementById('schedThresholdYoutube')?.value, 10) || followerThresholds.youtube;
     const thFacebook = parseInt(document.getElementById('schedThresholdFacebook')?.value, 10) || followerThresholds.facebook;
+    const profileWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || '3', 10) || 3));
 
     try {
         const res = await fetch('/api/settings/follower-scheduler', {
@@ -2020,7 +2099,8 @@ async function saveFollowerSchedulerSettings(btn) {
                 interval_hours: interval_hours,
                 follower_threshold_tiktok: thTiktok,
                 follower_threshold_youtube: thYoutube,
-                follower_threshold_facebook: thFacebook
+                follower_threshold_facebook: thFacebook,
+                profile_sync_concurrent_workers: profileWorkers
             })
         });
         const data = await res.json();
@@ -2028,7 +2108,7 @@ async function saveFollowerSchedulerSettings(btn) {
             followerThresholds.tiktok = thTiktok;
             followerThresholds.youtube = thYoutube;
             followerThresholds.facebook = thFacebook;
-            showToast('✅ Đã lưu cấu hình lịch quét Follower thành công!', 'success');
+            showToast('✅ Đã lưu cấu hình lịch quét định kỳ thành công!', 'success');
             closeFollowerSchedulerModal();
             loadFollowerSchedulerBadge();
             loadGpmProfiles();

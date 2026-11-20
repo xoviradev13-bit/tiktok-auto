@@ -1206,7 +1206,7 @@
                                 <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
                                 <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;" onchange="filterAndRenderCampaigns()">
                                     <option value="ALL" selected>Tất cả trạng thái</option>
-                                    <option value="ACTIVE">🟢 Đang kích hoạt</option>
+                                    <option value="ACTIVE">▶️ Đang kích hoạt</option>
                                     <option value="PAUSED">⏸️ Tạm dừng</option>
                                 </select>
                             </div>
@@ -2073,6 +2073,8 @@
                             <option value="name">Tên Profile</option>
                             <option value="tiktok_username">Account Username</option>
                             <option value="eligible_10k">Đạt Chỉ Tiêu / Beta</option>
+                            <option value="creator_program">Creator Program</option>
+                            <option value="flop_status">Hiệu Suất / Flop</option>
                             <option value="country">Quốc Gia VPN</option>
                             <option value="last_checked">Lần quét gần nhất</option>
                         </select>
@@ -2117,6 +2119,36 @@
                             <option value="INELIGIBLE">🌱 Chưa đủ điều kiện (< 10K)</option>
                         </select>
                     </div>
+
+                    <!-- Filter Creator Program (Yes / No) -->
+                    <div class="sort-control">
+                        <label for="filterGpmCreatorProgram"><i class="fa-solid fa-certificate text-gold"></i> Creator Program:</label>
+                        <select id="filterGpmCreatorProgram" class="custom-select" style="min-width: 145px;" onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả Creator Program</option>
+                            <option value="YES">✅ Đã bật Creator (Yes)</option>
+                            <option value="NO">❌ Chưa bật Creator (No)</option>
+                            <option value="ACTIVE">⚡ Đang hoạt động (Active)</option>
+                            <option value="NOT_ENROLLED">⏸️ Chưa bật (Đủ 10K)</option>
+                            <option value="INELIGIBLE">➖ Chưa đủ ĐK (&lt; 10K)</option>
+                            <option value="BANNED">🚫 Bị cấm / Ngừng</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Hiệu Suất / Flop -->
+                    <div class="sort-control">
+                        <label for="filterGpmFlop"><i class="fa-solid fa-chart-line text-cyan"></i> Hiệu Suất / Flop:</label>
+                        <select id="filterGpmFlop" class="custom-select" style="min-width: 155px;" onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả hiệu suất</option>
+                            <option value="GOOD">🚀 Khỏe / Phát triển tốt</option>
+                            <option value="FLOP">⚠️ Tổng hợp Flop (0v / 200v / Không ổn định)</option>
+                            <option value="200_VIEW">⚠️ Kẹt 200 View</option>
+                            <option value="0_VIEW">🚨 0-View Flop</option>
+                            <option value="UNSTABLE">⚡ Không Ổn Định</option>
+                            <option value="NEW">🌱 Đang Nuôi</option>
+                            <option value="BREAKOUT">⚡ Đang Breakout (≥ 1,000v)</option>
+                            <option value="RECOVERING">🔄 Đang Hồi Phục</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -2152,7 +2184,6 @@
                             title="Bấm để sắp xếp theo Tên Profile">
                             Tên Profile <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th style="width: 88px;">Nền Tảng</th>
                         <th class="sortable" id="th-gpm-tiktok_username"
                             onclick="handleGpmHeaderSort('tiktok_username')"
                             title="Bấm để sắp xếp theo Account Username">
@@ -2187,7 +2218,7 @@
                 </thead>
                 <tbody id="gpmTableBody">
                     <tr>
-                        <td colspan="10" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
+                        <td colspan="9" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
                             "Đồng Bộ" để nạp dữ liệu!</td>
                     </tr>
                 </tbody>
@@ -2939,7 +2970,7 @@
             </div>
         </div>
 
-        <hr class="settings-divider" style="margin-top: 14px;">
+
 
         <!-- Chính Sách Tự Động Dọn Dẹp File Video -->
         <div class="settings-section">
@@ -3302,6 +3333,35 @@
                     <small class="form-hint" style="margin-top:6px; margin-bottom:0; line-height:1.4;">
                         🛡️ <b>Mặc định 1 luồng</b> để đảm bảo laptop 8GB RAM chạy mượt mà, không bị lag đơ hoặc crash trình duyệt. Nếu máy tính của bạn có 16GB - 32GB+ RAM, hãy nâng lên 2-4 luồng để tăng tốc độ đăng bài song song cho dàn nick.
                     </small>
+                </div>
+
+                <!-- Cấu Hình Đa Luồng Cho Quét Kênh YouTube (Fast RSS Engine) -->
+                <div class="form-group full-width" style="background: rgba(0, 242, 254, 0.04); padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.2); margin-top: 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label style="font-weight:700; margin:0; font-size:13px; color:#fff;">
+                            <i class="fa-solid fa-rss text-gold"></i> Tăng Tốc Quét Kênh YouTube
+                        </label>
+                        <span class="badge badge-cyan" style="font-size:10.5px; font-weight:700;">Fast RSS Engine</span>
+                    </div>
+                    <small class="form-hint" style="margin-top:4px; margin-bottom:10px; color:var(--text-muted); line-height:1.4;">
+                        Quét song song nhiều kênh YouTube qua RSS XML (0 Quota API). Khuyến nghị <b>15–20 luồng</b> giúp quét 4.000 kênh chỉ trong ~2 đến 3 phút.
+                    </small>
+
+                    <div style="background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <label style="font-size:12.5px; font-weight:600; color:var(--text-primary); margin:0; display:block;">
+                                Số Luồng Quét RSS Kênh Song Song:
+                            </label>
+                            <small class="form-hint" style="font-size:11px; margin:2px 0 0 0;">
+                                Mặc định: 15 luồng. Tùy chỉnh từ 1 đến 50 luồng.
+                            </small>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                            <input type="number" id="modalRssConcurrentWorkers" class="input-field" min="1" max="50" value="15"
+                                style="width:85px; font-weight:700; color:var(--accent-cyan); text-align:center;">
+                            <span style="font-size:12px; color:var(--text-muted); font-weight:600;">luồng</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -5694,17 +5754,17 @@
     </div>
 </div>
 
-<!-- MODAL: CÀI ĐẶT LỊCH QUÉT FOLLOWER TỰ ĐỘNG -->
+<!-- MODAL: CÀI ĐẶT LỊCH QUÉT ĐỊNH KỲ TỰ ĐỘNG -->
         <div id="followerSchedulerModal" class="modal">
         <div class="modal-content" style="max-width: 580px;">
             <div class="modal-header">
                 <div style="max-width: 440px;">
                     <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Follower Định Kỳ
+                        <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Định Kỳ
                     </h3>
                     <p class="modal-sub"
                         style="max-width: 400px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
-                        Cấu hình thời gian tự động quét tăng trưởng follower của các tài khoản</p>
+                        Cấu hình tự động quét và cập nhật số liệu TikTok của dàn tài khoản</p>
                 </div>
                 <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeFollowerSchedulerModal()"
                     data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
@@ -5714,9 +5774,8 @@
                 <div
                     style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Follower</div>
-                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Chạy ngầm theo lịch đã
-                            đặt, không phụ thuộc vào lúc đăng bài</div>
+                        <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Định Kỳ</div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Tự động chạy ngầm theo lịch để quét và cập nhật số liệu TikTok của dàn tài khoản</div>
                     </div>
                     <label class="tele-toggle-switch has-tooltip tooltip-side-left"
                         data-tooltip="Bật hoặc tắt quét định kỳ">
@@ -5784,7 +5843,27 @@
                         <option value="12">Mỗi 12 tiếng một lần</option>
                         <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
                     </select>
-                </div><!-- Banner thông tin bảo vệ -->
+                </div>
+
+                <!-- Cấu hình trình duyệt đồng bộ Profile (Đa luồng) -->
+                <div style="background: rgba(168, 85, 247, 0.05); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.25);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-weight:600; font-size:12.5px; color:#fff; margin:0;">
+                            <i class="fa-solid fa-users-gear" style="color:#c084fc;"></i> Trình Duyệt Đồng Bộ Profile (Đa Luồng):
+                        </label>
+                        <span class="badge" style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:10px; font-weight:700;">Invisible Pool</span>
+                    </div>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="number" id="schedProfileSyncConcurrentWorkers" class="input-field" min="1" max="10" value="3"
+                            style="width:90px; font-size:14px; font-weight:700; color:#c084fc; text-align:center;">
+                        <span style="font-size:12px; color:var(--text-muted); font-weight:600;">profile / luồng cùng lúc (mặc định: 3)</span>
+                    </div>
+                    <small class="form-hint" style="font-size:11px; margin-top:6px; color:var(--text-muted); line-height:1.4; display:block;">
+                        Mở song song 3–5 profile ẩn ngầm ngoài màn hình khi cần cào dữ liệu TikTok Studio. Rút ngắn thời gian quét 1.000 tài khoản từ 3.3 tiếng xuống còn <b>~40 phút</b>.
+                    </small>
+                </div>
+
+                <!-- Banner thông tin bảo vệ -->
                 <div
                     style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
                     <div
@@ -5810,7 +5889,7 @@
                     <button type="button" class="btn btn-secondary"
                         onclick="closeFollowerSchedulerModal()">Đóng</button>
                     <button type="button" class="btn btn-primary" onclick="saveFollowerSchedulerSettings(this)">
-                        <i class="fa-solid fa-check"></i> Lưu Cài Đặt
+                        <i class="fa-solid fa-check"></i> Lưu Lịch Quét Định Kỳ
                     </button>
                 </div>
             </div>

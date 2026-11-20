@@ -118,8 +118,10 @@
                     <textarea id="settingDeepSeekKey" class="input-field font-monospace" rows="2"
                         placeholder="sk-key1&#10;sk-key2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('deepseek', this)"
@@ -152,8 +154,10 @@
                     <textarea id="settingGeminiKey" class="input-field font-monospace" rows="2"
                         placeholder="AIzaKey1&#10;AIzaKey2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('gemini', this)"
@@ -188,8 +192,10 @@
                     <textarea id="settingOpenAiKey" class="input-field font-monospace" rows="2"
                         placeholder="sk-key1&#10;sk-key2 (mỗi key 1 dòng hoặc cách nhau bằng dấu phẩy để tự động xoay vòng)"
                         style="font-size:12.5px; resize:vertical;"></textarea>
-                    <small class="form-hint" style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
-                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi gặp lỗi 429.
+                    <small class="form-hint"
+                        style="color:var(--text-muted); font-size:11.5px; display:block; margin-top:3px;">
+                        Mỗi key trên 1 dòng hoặc cách nhau bằng dấu phẩy. Hệ thống sẽ tự động xoay vòng và fallback khi
+                        gặp lỗi 429.
                     </small>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
                         <button type="button" class="btn btn-sm btn-secondary" onclick="testAiKey('openai', this)"
@@ -287,7 +293,7 @@
             </div>
         </div>
 
-        <hr class="settings-divider" style="margin-top: 14px;">
+
 
         <!-- Chính Sách Tự Động Dọn Dẹp File Video -->
         <div class="settings-section">
@@ -431,8 +437,11 @@
             <div class="settings-section-header">
                 <i class="fa-solid fa-eye-slash" style="color:#00f2fe;"></i>
                 <div>
-                    <h4 data-i18n="settings_invisible_automation_title">Chế Độ Tự Động Hóa Ẩn Ngầm (Invisible Screen Mode)</h4>
-                    <p class="panel-sub" data-i18n="settings_invisible_automation_sub">Tự động đưa cửa sổ trình duyệt ra ngoài màn hình (-3200, -3200) và tắt tiếng để bạn thoải mái làm việc khác mà không bị làm phiền.</p>
+                    <h4 data-i18n="settings_invisible_automation_title">Chế Độ Tự Động Hóa Ẩn Ngầm (Invisible Screen
+                        Mode)</h4>
+                    <p class="panel-sub" data-i18n="settings_invisible_automation_sub">Tự động đưa cửa sổ trình duyệt ra
+                        ngoài màn hình (-3200, -3200) và tắt tiếng để bạn thoải mái làm việc khác mà không bị làm phiền.
+                    </p>
                 </div>
             </div>
 
@@ -445,11 +454,17 @@
                         <span class="slider"></span>
                     </label>
                     <span>
-                        <strong style="color:var(--accent-cyan);" data-i18n="settings_invisible_automation_label">Ẩn cửa sổ trình duyệt khi tự động hóa (Khuyên dùng)</strong>
+                        <strong style="color:var(--accent-cyan);" data-i18n="settings_invisible_automation_label">Ẩn cửa
+                            sổ trình duyệt khi tự động hóa (Khuyên dùng)</strong>
                         <span
-                            style="color:var(--text-muted); font-size:12px; display:block; margin-top:3px; line-height:1.5;" data-i18n="settings_invisible_automation_desc">
-                            • <strong>BẬT (Mặc định)</strong>: Cửa sổ trình duyệt sẽ chạy ở toạ độ ngầm ngoài màn hình và tắt tiếng video khi Tự động đăng bài, Lướt feed Warm-up hoặc Quét tài khoản. Bạn hoàn toàn có thể làm việc khác, gõ phím, lướt web mà không bị cửa sổ che khuất hay cướp chuột.<br>
-                            • <strong>TẮT</strong>: Cửa sổ trình duyệt sẽ hiện lên giữa màn hình để bạn trực tiếp theo dõi thao tác từng bước (phục vụ kiểm tra lỗi hoặc gỡ checkpoint).
+                            style="color:var(--text-muted); font-size:12px; display:block; margin-top:3px; line-height:1.5;"
+                            data-i18n="settings_invisible_automation_desc">
+                            • <strong>BẬT (Mặc định)</strong>: Cửa sổ trình duyệt sẽ chạy ở toạ độ ngầm ngoài màn hình
+                            và tắt tiếng video khi Tự động đăng bài, Lướt feed Warm-up hoặc Quét tài khoản. Bạn hoàn
+                            toàn có thể làm việc khác, gõ phím, lướt web mà không bị cửa sổ che khuất hay cướp
+                            chuột.<br>
+                            • <strong>TẮT</strong>: Cửa sổ trình duyệt sẽ hiện lên giữa màn hình để bạn trực tiếp theo
+                            dõi thao tác từng bước (phục vụ kiểm tra lỗi hoặc gỡ checkpoint).
                         </span>
                     </span>
                 </label>

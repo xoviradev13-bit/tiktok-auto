@@ -446,7 +446,7 @@ function renderCampaignCard(c) {
     const narrationBadge = (c.narration_enabled === 1)
         ? `<span class="badge" style="background:rgba(192, 132, 252, 0.15); color:#c084fc; border:1px solid rgba(192, 132, 252, 0.3); font-size:10.5px; padding:2px 6px;" title="Lồng tiếng AI & phụ đề đồng bộ: ${escapeHtml(c.narration_language || 'Gốc')}, Giọng: ${c.voice_gender === 'female' ? 'Nữ' : 'Nam'}, Style: ${c.narration_style || 'Giật gân'}"><i class="fa-solid fa-microphone-lines"></i> Lồng tiếng AI (${escapeHtml(c.narration_language || 'Gốc')})</span>`
         : '';
-    
+
     const subBadge = c.subtitle_enabled
         ? `<span class="badge badge-gold" title="Phong cách: ${escapeHtml(c.subtitle_style || '')}"><i class="fa-solid fa-closed-captioning"></i> Phụ Đề AI Karaoke</span>`
         : '<span class="badge badge-secondary">Không phụ đề</span>';
@@ -734,15 +734,15 @@ function updateSourceModeBadge(mode) {
 }
 window.updateSourceModeBadge = updateSourceModeBadge;
 
-function toggleCampaignTtsEngine(prefix, engine) {}
+function toggleCampaignTtsEngine(prefix, engine) { }
 window.toggleCampaignTtsEngine = toggleCampaignTtsEngine;
-function toggleChannelTtsEngine(engine) {}
+function toggleChannelTtsEngine(engine) { }
 window.toggleChannelTtsEngine = toggleChannelTtsEngine;
-function toggleStudioTtsEngine(engine) {}
+function toggleStudioTtsEngine(engine) { }
 window.toggleStudioTtsEngine = toggleStudioTtsEngine;
-function populateElevenLabsVoicesToSelect(selectElId, selectedVoiceId = '') {}
+function populateElevenLabsVoicesToSelect(selectElId, selectedVoiceId = '') { }
 window.populateElevenLabsVoicesToSelect = populateElevenLabsVoicesToSelect;
-function populateCampaignElevenLabsVoices(prefix, selectedVoiceId = '') {}
+function populateCampaignElevenLabsVoices(prefix, selectedVoiceId = '') { }
 window.populateCampaignElevenLabsVoices = populateCampaignElevenLabsVoices;
 
 function toggleCampaignNarration(prefix, isChecked) {
@@ -787,7 +787,7 @@ async function openNewCampaignModal() {
     if (maxDurInput) maxDurInput.value = '';
     const newCampNoSubShorts = document.getElementById('campaignDisableSubtitleForShorts');
     if (newCampNoSubShorts) newCampNoSubShorts.checked = true;  // default checked when subtitle is on
-        const campVisSrc = document.getElementById('campaignVisualSource');
+    const campVisSrc = document.getElementById('campaignVisualSource');
     if (campVisSrc) campVisSrc.value = 'ai';
     const campStkWrap = document.getElementById('campaignStockWrap');
     if (campStkWrap) campStkWrap.style.display = 'none';
@@ -896,7 +896,7 @@ async function openNewCampaignModal() {
             const aData = await aRes.json();
             if (aData.status === 'success') {
                 cachedAudioCategories = aData.categories || [];
-                            }
+            }
         } catch (_) { }
     }
 }
@@ -1444,7 +1444,7 @@ async function handleCreateCampaignSubmit(e) {
         return;
     }
 
-    
+
     // Validate Split Screen (Ghép 2 tầng) nếu được chọn
     const campAspectRatio = document.getElementById('campaignAspectRatio')?.value || '9:16_blur';
     let splitSourceType = 'local';
@@ -1807,7 +1807,7 @@ async function openEditCampaignModal(id) {
             toggleCampaignNarration('edit', editNarrSwitch.checked);
         }
 
-                                if (editNarrLang) editNarrLang.value = c.narration_language || 'original';
+        if (editNarrLang) editNarrLang.value = c.narration_language || 'original';
         updateVoiceDropdownOptions('editCampaignVoiceGender', c.narration_language || 'original', c.voice_gender || 'male', false);
         if (editNarrStyle) editNarrStyle.value = c.narration_style || 'giat_gan';
         const editNoNarrShorts = document.getElementById('editCampaignDisableNarrationForShorts');
@@ -1818,7 +1818,7 @@ async function openEditCampaignModal(id) {
         const editMpImgStyle = document.getElementById('editCampaignImageStyle');
         if (editMpImgSwitch) {
             editMpImgSwitch.checked = (c.use_ai_images === 1);
-                    }
+        }
         if (editMpImgStyle && c.image_style) editMpImgStyle.value = c.image_style;
         const editVisualSource = document.getElementById('editCampaignVisualSource');
         if (editVisualSource && c.visual_source) {
@@ -1891,7 +1891,7 @@ async function openEditCampaignModal(id) {
         const warmup = document.getElementById('editCampaignWarmupSwitch');
         if (warmup) warmup.checked = c.warmup_mode === 1;
 
-        
+
         // Golden 30-Minute Engagement restore
         const autoEngSwitch = document.getElementById('editCampaignAutoEngagementSwitch');
         const isEngOn = c.auto_engagement_enabled === 1;
@@ -2251,7 +2251,7 @@ async function handleEditCampaignSubmit(e) {
         return;
     }
 
-    
+
     // Validate Split Screen (Ghép 2 tầng) nếu được chọn
     const editAspectRatio = document.getElementById('editCampaignAspectRatio')?.value || '9:16_blur';
     let editSplitSourceType = 'local';
@@ -2775,3 +2775,79 @@ window.triggerCampaignTestRun = triggerCampaignTestRun;
 window.triggerDirectCampaignRun = triggerDirectCampaignRun;
 window.stopCampaignRun = stopCampaignRun;
 window.triggerProcessUploads = triggerProcessUploads;
+
+function syncCampaignDuplicateCheckboxes(mode = 'new') {
+    const isNew = mode === 'new';
+    const listId = isNew ? 'campaignGpmList' : 'editCampaignGpmList';
+    const checkClass = isNew ? '.campaign-gpm-check' : '.edit-campaign-gpm-check';
+    const listEl = document.getElementById(listId);
+    if (!listEl) return;
+
+    const allBoxes = Array.from(listEl.querySelectorAll(checkClass));
+    const checkedMap = new Map();
+
+    allBoxes.forEach(b => {
+        if (b.checked && !b.disabled) {
+            const k = b.dataset.accountKey;
+            if (k && !checkedMap.has(k)) {
+                checkedMap.set(k, {
+                    browserLabel: b.dataset.browserLabel || 'GPMLogin',
+                    profileName: b.dataset.profileName || '',
+                    channelName: b.dataset.channelName || '',
+                    box: b
+                });
+            }
+        }
+    });
+
+    allBoxes.forEach(b => {
+        const k = b.dataset.accountKey;
+        const label = b.closest('label');
+        if (!label) return;
+
+        let noteBadge = label.querySelector('.dup-disabled-note');
+
+        if (k && checkedMap.has(k)) {
+            const source = checkedMap.get(k);
+            if (source.box !== b) {
+                b.checked = false;
+                b.disabled = true;
+                label.style.opacity = '0.45';
+                label.style.cursor = 'not-allowed';
+                label.setAttribute('data-duplicate-disabled', 'true');
+                const noteText = `Tài khoản này đã được chọn qua ${source.browserLabel} (${source.profileName})`;
+                if (!noteBadge) {
+                    noteBadge = document.createElement('span');
+                    noteBadge.className = 'badge dup-disabled-note';
+                    noteBadge.style.cssText = 'background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); font-size:9.5px; padding:1px 6px; font-weight:600; white-space:nowrap; margin-left:4px; flex-shrink:0;';
+                    const targetContainer = label.querySelector('div') || label;
+                    targetContainer.appendChild(noteBadge);
+                }
+                noteBadge.innerHTML = `<i class="fa-solid fa-lock"></i> Đã chọn qua ${typeof escapeHtml === 'function' ? escapeHtml(source.browserLabel) : source.browserLabel} (${typeof escapeHtml === 'function' ? escapeHtml(source.profileName) : source.profileName})`;
+                noteBadge.style.display = 'inline-flex';
+                label.title = noteText;
+            } else {
+                b.disabled = false;
+                label.style.opacity = '1';
+                label.style.cursor = 'pointer';
+                label.removeAttribute('data-duplicate-disabled');
+                label.removeAttribute('title');
+                if (noteBadge) noteBadge.style.display = 'none';
+            }
+        } else {
+            b.disabled = false;
+            label.style.opacity = '1';
+            label.style.cursor = 'pointer';
+            label.removeAttribute('data-duplicate-disabled');
+            label.removeAttribute('title');
+            if (noteBadge) noteBadge.style.display = 'none';
+        }
+    });
+
+    if (isNew) {
+        if (typeof updateSelectedGpmCount === 'function') updateSelectedGpmCount();
+    } else {
+        if (typeof updateEditSelectedGpmCount === 'function') updateEditSelectedGpmCount();
+    }
+}
+window.syncCampaignDuplicateCheckboxes = syncCampaignDuplicateCheckboxes;

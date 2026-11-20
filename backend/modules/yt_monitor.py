@@ -10,6 +10,7 @@ from backend.modules.yt_downloader import yt_downloader
 
 import urllib.parse
 import threading
+import concurrent.futures
 import yt_dlp
 
 _abort_scan_flag = threading.Event()
@@ -1070,76 +1071,120 @@ class YouTubeRSSMonitor:
             "items": new_items
         }
 
-    def scan_all_monitored_channels(self, max_per_channel: int = 5, delay: float = 2.0) -> int:
-        """Quét toàn bộ danh sách kênh theo dõi đang hoạt động (is_active = 1 và auto_download = 1)"""
+    def _scan_and_process_channel(self, ch: dict, max_per_channel: int) -> int:
+        """Kiểm tra RSS và xử lý tải/render video mới cho 1 kênh cụ thể"""
+        ch_id = ch["channel_id"]
+        ch_name = ch.get("display_name") or ch.get("title") or ""
+        proxy = ch.get("custom_proxy") or None
+        target_dir = self.get_effective_download_dir(ch)
+
+        videos = self.check_channel_rss(ch_id)
+        if not videos:
+            return 0
+
+        channel_downloaded = 0
+        min_dur, max_dur, inc_shorts, inc_longform = self.get_effective_duration_limits(ch_id)
+
+        for v in videos:
+            try:
+                from backend.scheduler import scheduler
+                if not scheduler.is_running:
+                    return channel_downloaded
+            except Exception:
+                pass
+
+            if max_per_channel > 0 and channel_downloaded >= max_per_channel:
+                break
+            vid = v["video_id"]
+            if not self.is_video_already_downloaded(vid):
+                log_event("INFO", f"Phát hiện video mới từ kênh '{ch_name}': {v['title']}")
+                res = yt_downloader.download_video(
+                    v["url"],
+                    proxy=proxy,
+                    target_dir=target_dir,
+                    channel_name=ch_name,
+                    min_duration=min_dur,
+                    max_duration=max_dur,
+                    include_shorts=inc_shorts,
+                    include_longform=inc_longform
+                )
+                if res:
+                    channel_downloaded += 1
+                    self.handle_video_post_download(
+                        file_path=str(res.get("file_path") or ""),
+                        video_id=vid,
+                        channel_id=ch_id,
+                        channel_name=ch_name,
+                        video_title=v["title"],
+                        duration=res.get("duration", 65),
+                        channel_obj=ch
+                    )
+        return channel_downloaded
+
+    def scan_all_monitored_channels(self, max_per_channel: int = 5, delay: float = 2.0, max_workers: Optional[int] = None) -> int:
+        """Quét toàn bộ danh sách kênh theo dõi đang hoạt động (hỗ trợ cả đa luồng ThreadPool cho 3000-4000 kênh)"""
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM channels WHERE is_active = 1 AND auto_download = 1")
         channels = [dict(r) for r in cursor.fetchall()]
+
+        if max_workers is None:
+            cursor.execute("SELECT value FROM settings WHERE key = 'rss_concurrent_workers'")
+            row = cursor.fetchone()
+            max_workers = int(row["value"]) if row and row["value"] else 15
         conn.close()
 
-        total_new_downloaded = 0
-        for idx, ch in enumerate(channels):
-            # Kiểm tra nếu Scheduler đã bị người dùng tạm dừng thì dừng ngay lập tức
-            try:
-                from backend.scheduler import scheduler
-                if not scheduler.is_running:
-                    log_event("INFO", "[RSS WORKER] Đã dừng quét các kênh tiếp theo vì Background Scheduler đã tạm dừng.")
-                    break
-            except Exception:
-                pass
+        if not channels:
+            return 0
 
-            if idx > 0 and delay > 0:
-                time.sleep(delay)
-
-            ch_id = ch["channel_id"]
-            ch_name = ch.get("display_name") or ch.get("title") or ""
-            proxy = ch.get("custom_proxy") or None
-            target_dir = self.get_effective_download_dir(ch)
-
-            videos = self.check_channel_rss(ch_id)
-            channel_downloaded = 0
-            min_dur, max_dur, inc_shorts, inc_longform = self.get_effective_duration_limits(ch_id)
-
-            for v in videos:
-                # Kiểm tra nếu Scheduler đã bị người dùng tạm dừng giữa chừng
+        # Nếu cấu hình chạy đơn luồng (max_workers <= 1) hoặc chỉ có 1 kênh: chạy tuần tự an toàn
+        if max_workers <= 1 or len(channels) == 1:
+            total_new_downloaded = 0
+            for idx, ch in enumerate(channels):
                 try:
                     from backend.scheduler import scheduler
                     if not scheduler.is_running:
-                        log_event("INFO", f"[RSS WORKER] Đã dừng tải/render kênh '{ch_name}' vì Background Scheduler đã tạm dừng.")
-                        return total_new_downloaded
+                        log_event("INFO", "[RSS WORKER] Đã dừng quét các kênh tiếp theo vì Background Scheduler đã tạm dừng.")
+                        break
                 except Exception:
                     pass
 
-                if max_per_channel > 0 and channel_downloaded >= max_per_channel:
-                    break
-                vid = v["video_id"]
-                if not self.is_video_already_downloaded(vid):
-                    log_event("INFO", f"Phát hiện video mới từ kênh '{ch_name}': {v['title']}")
-                    res = yt_downloader.download_video(
-                        v["url"],
-                        proxy=proxy,
-                        target_dir=target_dir,
-                        channel_name=ch_name,
-                        min_duration=min_dur,
-                        max_duration=max_dur,
-                        include_shorts=inc_shorts,
-                        include_longform=inc_longform
-                    )
-                    if res:
-                        total_new_downloaded += 1
-                        channel_downloaded += 1
+                if idx > 0 and delay > 0:
+                    time.sleep(delay)
 
-                        self.handle_video_post_download(
-                            file_path=str(res.get("file_path") or ""),
-                            video_id=vid,
-                            channel_id=ch_id,
-                            channel_name=ch_name,
-                            video_title=v["title"],
-                            duration=res.get("duration", 65),
-                            channel_obj=ch
-                        )
+                total_new_downloaded += self._scan_and_process_channel(ch, max_per_channel)
+            return total_new_downloaded
 
+        # Đa luồng song song (High-Concurrency RSS Thread Pool cho 3000-4000 kênh)
+        active_workers = max(1, min(max_workers, len(channels), 50))
+        log_event("INFO", f"[RSS WORKER] 🚀 Bắt đầu quét đa luồng {len(channels)} kênh theo dõi với {active_workers} workers song song...")
+
+        total_new_downloaded = 0
+        total_lock = threading.Lock()
+
+        def _worker_task(ch_item):
+            nonlocal total_new_downloaded
+            try:
+                from backend.scheduler import scheduler
+                if not scheduler.is_running:
+                    return
+            except Exception:
+                pass
+
+            try:
+                count = self._scan_and_process_channel(ch_item, max_per_channel)
+                if count > 0:
+                    with total_lock:
+                        total_new_downloaded += count
+            except Exception as ex:
+                ch_title = ch_item.get("display_name") or ch_item.get("title") or ch_item.get("channel_id")
+                log_event("WARNING", f"[RSS WORKER] Lỗi quét kênh '{ch_title}': {ex}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=active_workers, thread_name_prefix="RssPool") as executor:
+            futures = [executor.submit(_worker_task, ch) for ch in channels]
+            concurrent.futures.wait(futures)
+
+        log_event("INFO", f"[RSS WORKER] 🏁 Đã hoàn tất quét song song {len(channels)} kênh: {total_new_downloaded} video mới được tải về.")
         return total_new_downloaded
 
 yt_monitor = YouTubeRSSMonitor()

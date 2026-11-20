@@ -31,7 +31,7 @@ async function loadApiKeySettings() {
 
         const falEl = document.getElementById('settingFalKey');
         if (falEl) falEl.value = data.fal_api_key || '';
-                const klingAkEl = document.getElementById('settingKlingAccessKey');
+        const klingAkEl = document.getElementById('settingKlingAccessKey');
         if (klingAkEl) klingAkEl.value = data.kling_access_key || '';
         const klingSkEl = document.getElementById('settingKlingSecretKey');
         if (klingSkEl) klingSkEl.value = data.kling_secret_key || '';
@@ -97,7 +97,7 @@ async function loadApiKeySettings() {
             invEl.checked = Boolean(data.invisible_browser_automation);
         }
 
-        
+
         // Sync language dropdown without overriding the user's active session language
         const activeLang = (window.i18n ? window.i18n.currentLang : localStorage.getItem('app_language')) || data.app_language || 'vi';
         const langEl = document.getElementById('settingAppLanguage');
@@ -485,7 +485,7 @@ async function saveApiKeySettings(btn) {
         pexels_api_key: document.getElementById('settingPexelsKey')?.value || '',
         pixabay_api_key: document.getElementById('settingPixabayKey')?.value || '',
         pollinations_api_key: document.getElementById('settingPollinationsKey')?.value || '',
-                ai_provider: document.getElementById('settingAiProvider')?.value || 'deepseek',
+        ai_provider: document.getElementById('settingAiProvider')?.value || 'deepseek',
         deepseek_model: document.getElementById('settingDeepSeekModel')?.value || 'deepseek-chat',
         gemini_model: document.getElementById('settingGeminiModel')?.value || 'gemini-2.0-flash',
         gemini_base_url: document.getElementById('settingGeminiBaseUrl')?.value || '',
@@ -501,7 +501,7 @@ async function saveApiKeySettings(btn) {
         gpm_api_base_url: gpmUrl,
         adspower_api_base_url: (document.getElementById('settingAdsPowerUrl')?.value || '').trim(),
         dolphin_api_base_url: (document.getElementById('settingDolphinUrl')?.value || '').trim(),
-                app_language: document.getElementById('settingAppLanguage')?.value || 'vi',
+        app_language: document.getElementById('settingAppLanguage')?.value || 'vi',
         app_theme: document.getElementById('settingAppTheme')?.value || 'dark',
         follower_threshold_tiktok: parseInt(document.getElementById('settingThresholdTiktok')?.value, 10) || followerThresholds.tiktok,
         follower_threshold_youtube: parseInt(document.getElementById('settingThresholdYoutube')?.value, 10) || followerThresholds.youtube,
@@ -1301,6 +1301,20 @@ async function loadSchedulerSettings() {
         const maxParallel = data.max_parallel_uploads !== undefined ? data.max_parallel_uploads : 1;
         setParallelUploadsPreset(maxParallel);
 
+        // Mega-Scale Concurrency Pools
+        const rssWorkers = data.rss_concurrent_workers || 15;
+        const profileWorkers = data.profile_sync_concurrent_workers || 3;
+        const mRss = document.getElementById('modalRssConcurrentWorkers');
+        if (mRss) mRss.value = rssWorkers;
+        const sRss = document.getElementById('settingRssConcurrentWorkers');
+        if (sRss) sRss.value = rssWorkers;
+        const sSchedProfile = document.getElementById('schedProfileSyncConcurrentWorkers');
+        if (sSchedProfile) sSchedProfile.value = profileWorkers;
+        const mProfile = document.getElementById('modalProfileSyncConcurrentWorkers');
+        if (mProfile) mProfile.value = profileWorkers;
+        const sProfile = document.getElementById('settingProfileSyncConcurrentWorkers');
+        if (sProfile) sProfile.value = profileWorkers;
+
         // Populate Settings Tab Fields
         const sInterval = document.getElementById('settingSchedulerInterval');
         if (sInterval) sInterval.value = interval;
@@ -1328,6 +1342,7 @@ async function saveSchedulerSettings(btn, fromModal = true) {
 
     let intervalInput, uploadInput, maxVidsInput, delayInput, autoDl, autoRd, saveByFolder;
     let autoRetry = true, maxRetries = 2, retryDelay = 15, watchdog = true, stuckTimeout = 15, minAccountCooldown = 60, maxParallelUploads = 1;
+    let rssConcurrentWorkers = 15, profileSyncConcurrentWorkers = 3;
 
     if (fromModal) {
         intervalInput = document.getElementById('modalSchedulerInterval');
@@ -1344,6 +1359,8 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         stuckTimeout = parseInt(document.getElementById('modalStuckTimeout')?.value, 10) || 15;
         minAccountCooldown = parseInt(document.getElementById('modalMinAccountCooldown')?.value, 10) || 60;
         maxParallelUploads = Math.max(1, Math.min(6, parseInt(document.getElementById('modalMaxParallelUploads')?.value || 1, 10)));
+        rssConcurrentWorkers = Math.max(1, Math.min(50, parseInt(document.getElementById('modalRssConcurrentWorkers')?.value || document.getElementById('settingRssConcurrentWorkers')?.value || 15, 10)));
+        profileSyncConcurrentWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || document.getElementById('modalProfileSyncConcurrentWorkers')?.value || document.getElementById('settingProfileSyncConcurrentWorkers')?.value || 3, 10)));
     } else {
         intervalInput = document.getElementById('settingSchedulerInterval');
         uploadInput = document.getElementById('settingUploadInterval');
@@ -1358,6 +1375,8 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         watchdog = document.getElementById('modalWatchdogToggle')?.checked ?? true;
         stuckTimeout = parseInt(document.getElementById('modalStuckTimeout')?.value, 10) || 15;
         minAccountCooldown = parseInt(document.getElementById('settingMinAccountCooldown')?.value, 10) || 60;
+        rssConcurrentWorkers = Math.max(1, Math.min(50, parseInt(document.getElementById('settingRssConcurrentWorkers')?.value || document.getElementById('modalRssConcurrentWorkers')?.value || 15, 10)));
+        profileSyncConcurrentWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || document.getElementById('settingProfileSyncConcurrentWorkers')?.value || document.getElementById('modalProfileSyncConcurrentWorkers')?.value || 3, 10)));
     }
 
     const interval = parseInt(intervalInput?.value, 10);
@@ -1412,7 +1431,9 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         watchdog_enabled: watchdog,
         stuck_timeout_minutes: stuckTimeout,
         min_account_cooldown_minutes: minAccountCooldown,
-        max_parallel_uploads: maxParallelUploads
+        max_parallel_uploads: maxParallelUploads,
+        rss_concurrent_workers: rssConcurrentWorkers,
+        profile_sync_concurrent_workers: profileSyncConcurrentWorkers
     };
 
     try {
@@ -1503,7 +1524,7 @@ async function loadTelegramChannels() {
             const chJsonStr = JSON.stringify(ch).replace(/"/g, '&quot;');
 
             let typeBadges = [];
-                        if (ch.notify_issues !== 0) {
+            if (ch.notify_issues !== 0) {
                 typeBadges.push(`<span class="tele-type-badge tele-type-issues" title="Nhận cảnh báo lỗi nghiêm trọng & cách khắc phục"><i class="fa-solid fa-triangle-exclamation"></i> Báo Lỗi</span>`);
             }
             if (ch.notify_daily_report !== 0) {
@@ -1716,7 +1737,7 @@ async function saveTelegramChannelModal(btn) {
     const chatId = (document.getElementById('teleModalChatId')?.value || '').trim();
     const isActive = !!document.getElementById('teleModalActive')?.checked;
 
-        const notifyIssues = !!document.getElementById('teleModalNotifyIssues')?.checked;
+    const notifyIssues = !!document.getElementById('teleModalNotifyIssues')?.checked;
     const notifyDaily = !!document.getElementById('teleModalNotifyDailyReport')?.checked;
     const reportTime = (document.getElementById('teleModalReportTime')?.value || '21:00').trim();
 
@@ -1743,7 +1764,7 @@ async function saveTelegramChannelModal(btn) {
         name: name,
         chat_id: chatId,
         is_active: isActive,
-                notify_issues: notifyIssues,
+        notify_issues: notifyIssues,
         notify_daily_report: notifyDaily,
         daily_report_time: reportTime
     };
@@ -1822,7 +1843,7 @@ async function testTelegramChannelMode(channelId, mode, e) {
 
     const modeLabels = {
         'connection': 'kết nối',
-                'issue': 'báo lỗi & cách sửa',
+        'issue': 'báo lỗi & cách sửa',
         'daily_report': 'báo cáo ngày'
     };
     showToast(`Đang gửi tin nhắn thử nghiệm (${modeLabels[mode] || mode}) tới kênh...`);

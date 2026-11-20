@@ -1,295 +1,347 @@
-    <div id="followerSchedulerModal" class="modal">
-        <div class="modal-content" style="max-width: 580px;">
-            <div class="modal-header">
-                <div style="max-width: 440px;">
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Follower Định Kỳ
-                    </h3>
-                    <p class="modal-sub"
-                        style="max-width: 400px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
-                        Cấu hình thời gian tự động quét tăng trưởng follower của các tài khoản</p>
-                </div>
-                <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeFollowerSchedulerModal()"
-                    data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
+<div id="followerSchedulerModal" class="modal">
+    <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-header">
+            <div style="max-width: 440px;">
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-clock-rotate-left text-accent"></i> Lịch Quét Định Kỳ
+                </h3>
+                <p class="modal-sub"
+                    style="max-width: 400px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
+                    Cấu hình tự động quét và cập nhật số liệu TikTok của dàn tài khoản</p>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <!-- Trạng thái bật/tắt -->
-                <div
-                    style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Follower</div>
-                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Chạy ngầm theo lịch đã
-                            đặt, không phụ thuộc vào lúc đăng bài</div>
-                    </div>
-                    <label class="tele-toggle-switch has-tooltip tooltip-side-left"
-                        data-tooltip="Bật hoặc tắt quét định kỳ">
-                        <input type="checkbox" id="chkFollowerSchedulerEnable" checked>
-                        <span class="tele-toggle-slider"></span>
-                    </label>
-                </div>
-
-                <!-- Chế độ quét -->
-                <div class="form-group">
-                    <label
-                        style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: block;">
-                        <i class="fa-solid fa-calendar-check"></i> Chế độ quét lịch trình:
-                    </label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <label
-                            style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
-                            <input type="radio" name="followerScanMode" id="scanModeDaily" value="daily_times" checked
-                                onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
-                            <div>
-                                <strong style="font-size: 13px; color: #fff;">Giờ Cố Định Hàng Ngày</strong>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Quét vào các
-                                    khung giờ vàng trong ngày (VD: 08:00, 20:00)</div>
-                            </div>
-                        </label>
-                        <label
-                            style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
-                            <input type="radio" name="followerScanMode" id="scanModeInterval" value="interval"
-                                onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
-                            <div>
-                                <strong style="font-size: 13px; color: #fff;">Chu Kỳ Cách N Tiếng</strong>
-                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Cứ mỗi 6 tiếng
-                                    hoặc 12 tiếng tự động quét lại một lần</div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Cấu hình giờ cố định -->
-                <div id="wrapDailyTimes" class="form-group">
-                    <label
-                        style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
-                        <i class="fa-regular fa-clock"></i> Các mốc giờ quét trong ngày (phân tách bởi dấu phẩy):
-                    </label>
-                    <input type="text" id="inputFollowerScanTimes" class="input-field" placeholder="08:00, 20:00"
-                        value="08:00, 20:00">
-                    <small class="form-hint"
-                        style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
-                        Ví dụ: <code>08:00, 14:00, 20:00</code> hoặc chỉ 1 giờ cụ thể như <code>21:00</code> (định dạng
-                        24 giờ).
-                    </small>
-                </div>
-
-                <!-- Cấu hình chu kỳ N tiếng -->
-                <div id="wrapIntervalHours" class="form-group" style="display: none;">
-                    <label
-                        style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
-                        <i class="fa-solid fa-hourglass-half"></i> Khoảng cách giữa các lần quét:
-                    </label>
-                    <select id="selectFollowerIntervalHours" class="custom-select" style="width: 100%; height: 42px;">
-                        <option value="2">Mỗi 2 tiếng một lần</option>
-                        <option value="4">Mỗi 4 tiếng một lần</option>
-                        <option value="6" selected>Mỗi 6 tiếng một lần (Khuyên Dùng)</option>
-                        <option value="8">Mỗi 8 tiếng một lần</option>
-                        <option value="12">Mỗi 12 tiếng một lần</option>
-                        <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
-                    </select>
-                </div><!-- Banner thông tin bảo vệ -->
-                <div
-                    style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
-                    <div
-                        style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                        <i class="fa-solid fa-shield-halved"></i> Cơ Chế Vận Hành Thông Minh:
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px;">
-                        <li><strong>Ưu tiên ZeroRAM (Không mở trình duyệt):</strong> Đọc trực tiếp cookie từ ổ đĩa và
-                            gọi API TikTok thần tốc (~0.5s/nick), không tốn RAM và không mở cửa sổ trình duyệt. Chỉ mở
-                            app/trình duyệt làm dự phòng khi cookie hết hạn.</li>
-                        <li><strong>Chống Xung Đột:</strong> Profile nào đang bận upload bài sẽ được tự động
-                            bỏ qua và quét lại sau, tuyệt đối không làm gián đoạn việc đăng video.</li>
-                        <li><strong>Đạt Chỉ Tiêu:</strong> Khi phát hiện nick/kênh đạt ngưỡng cài đặt (TikTok,
-                            YouTube, Facebook), hệ thống sẽ tự động cập nhật trạng thái và gắn huy hiệu Đạt Chỉ Tiêu trên danh sách.</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                <button type="button" class="btn btn-warning" onclick="scanAllProfilesFollowers(this)">
-                    <i class="fa-solid fa-bolt"></i> Quét Thử Ngay
-                </button>
-                <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-secondary"
-                        onclick="closeFollowerSchedulerModal()">Đóng</button>
-                    <button type="button" class="btn btn-primary" onclick="saveFollowerSchedulerSettings(this)">
-                        <i class="fa-solid fa-check"></i> Lưu Cài Đặt
-                    </button>
-                </div>
-            </div>
+            <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeFollowerSchedulerModal()"
+                data-tooltip="Đóng cửa sổ"><i class="fa-solid fa-xmark"></i></button>
         </div>
-    </div><!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
-    <div id="editProfileUsernameModal" class="modal">
-        <div class="modal-content" style="max-width: 480px;">
-            <div class="modal-header">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- Trạng thái bật/tắt -->
+            <div
+                style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i id="editProfileModalIcon" class="fa-solid fa-user-pen text-accent"></i> <span id="editProfileModalTitle">Sửa Thông Tin & Chỉ Số Tài Khoản</span>
-                    </h3>
-                    <p class="modal-sub" id="editProfileModalSub">Gán thủ công hoặc đồng bộ thông số cho profile / kênh</p>
+                    <div style="font-weight: 700; color: #fff; font-size: 14px;">Bật Tự Động Quét Định Kỳ</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Tự động chạy ngầm theo lịch
+                        để quét và cập nhật số liệu TikTok của dàn tài khoản</div>
                 </div>
-                <button type="button" class="close-btn has-tooltip" onclick="closeEditUsernameModal()"
-                    data-tooltip="Đóng"><i class="fa-solid fa-xmark"></i></button>
+                <label class="tele-toggle-switch has-tooltip tooltip-side-left"
+                    data-tooltip="Bật hoặc tắt quét định kỳ">
+                    <input type="checkbox" id="chkFollowerSchedulerEnable" checked>
+                    <span class="tele-toggle-slider"></span>
+                </label>
             </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
-                <input type="hidden" id="editProfileGpmId">
-                <input type="hidden" id="editProfileChannelId">
-                <div class="form-group">
-                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Tên Profile
-                        :</label>
-                    <input type="text" id="editProfileName" class="input-field" disabled
-                        style="background: rgba(255,255,255,0.05); color: var(--text-primary);">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr; gap:10px;">
-                    <!-- Trình duyệt (Preserved in DOM for future development) -->
-                    <div class="form-group" style="display: none;">
-                        <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
-                                class="fa-solid fa-window-restore"></i> Trình Duyệt:</label>
-                        <select id="editProfileBrowserType" class="input-field" style="height:38px;">
-                            <option value="gpm" selected>GPMLogin</option>
-                            <option value="adspower">AdsPower</option>
-                            <option value="dolphin">Dolphin Anty</option>
-                            <option value="genlogin">GenLogin</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
-                                class="fa-brands fa-tiktok text-pink"></i> Nền Tảng:</label>
-                        <select id="editProfilePlatform" class="input-field" style="height:38px;" onchange="onEditProfilePlatformChange(this.value)">
-                            <option value="tiktok" selected>TikTok</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
-                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quốc Gia VPN (WireGuard SOCKS5 / Extension):
-                    </label>
-                    <select id="editProfileCountry" class="input-field" style="height:38px; border:1px solid rgba(56, 189, 248, 0.4); font-weight:600;">
-                        <option value="NONE" selected>🌐 Không Dùng Proxy (Direct IP - Tắt Proxy GPMLogin)</option>
-                        <option value="US">🇺🇸 Hoa Kỳ (United States)</option>
-                        <option value="GB">🇬🇧 Vương Quốc Anh (United Kingdom)</option>
-                        <option value="DE">🇩🇪 Đức (Germany)</option>
-                        <option value="FR">🇫🇷 Pháp (France)</option>
-                        <option value="JP">🇯🇵 Nhật Bản (Japan)</option>
-                        <option value="KR">🇰🇷 Hàn Quốc (South Korea)</option>
-                        <option value="CA">🇨🇦 Canada</option>
-                        <option value="AU">🇦🇺 Úc (Australia)</option>
-                        <option value="SG">🇸🇬 Singapore</option>
-                        <option value="NL">🇳🇱 Hà Lan (Netherlands)</option>
-                        <option value="MX">🇲🇽 Mexico</option>
-                        <option value="ID">🇮🇩 Indonesia (Indo)</option>
-                        <option value="MY">🇲🇾 Malaysia (Malay)</option>
-                        <option value="PH">🇵🇭 Philippines (Philippin)</option>
-                        <option value="VN">🇻🇳 Việt Nam (Vietnam)</option>
-                    </select>
-                    <small class="form-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
-                        Tự động gán cổng Proxy WireGuard SOCKS5 (0.05s) trực tiếp vào GPMLogin qua API, không mở trình duyệt.
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileUsername" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileUserIcon" class="fa-brands fa-tiktok"></i> <span id="editProfileUserLabel">Tài Khoản / Username:</span>
-                    </label>
-                    <div style="position: relative;">
-                        <span id="editProfileUserPrefix"
-                            style="position: absolute; left: 12px; top: 10px; color: var(--text-muted); font-weight: 700;">@</span>
-                        <input type="text" id="editProfileUsername" class="input-field" placeholder="username_cua_ban"
-                            style="padding-left: 28px;">
-                    </div>
-                    <small id="editProfileUserHint" class="form-hint"
-                        style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
-                        Không cần nhập dấu @. Ví dụ: <code>dat.nguyen261096</code>
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileNickname" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileNickIcon" class="fa-solid fa-id-badge"></i> <span id="editProfileNickLabel">Tên Kênh / Hiển Thị:</span>
-                    </label>
-                    <input type="text" id="editProfileNickname" class="input-field"
-                        placeholder="Ví dụ: Hoàng Minh, Iamcooked...">
-                </div>
-                <div class="form-group">
-                    <label id="lblEditProfileFollowers" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-                        <i id="editProfileFollowersIcon" class="fa-solid fa-users"></i> <span id="editProfileFollowersLabel">Số Follower / Người Đăng Ký:</span>
-                    </label>
-                    <input type="number" id="editProfileFollowers" class="input-field" placeholder="0">
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
-                <button type="button" class="btn btn-primary" onclick="saveProfileUsernameFromModal(this)"
-                    style="min-width: 140px;">
-                    <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
-                </button>
-            </div>
-        </div>
-    </div>
 
-    <!-- MODAL: QUẢN LÝ WIREGUARD VPN SOCKS5 CHO 1.000 PROFILE GPM -->
-    <div id="wireguardStatusModal" class="modal">
-        <div class="modal-content" style="max-width: 980px; width: 94%;">
-            <div class="modal-header">
-                <div>
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quản Lý WireGuard VPN SOCKS5
-                    </h3>
-                    <p class="modal-sub">Cổng Proxy cục bộ tốc độ cao hỗ trợ 1.000 Profile GPMLogin dùng đồng thời</p>
-                </div>
-                <button type="button" class="close-btn has-tooltip" onclick="closeWireguardStatusModal()" data-tooltip="Đóng">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
-                <!-- Hộp thông báo tổng quan & hướng dẫn -->
-                <div style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 14px 18px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
-                        <strong style="color: var(--accent-cyan); font-size: 13.5px;">
-                            <i class="fa-solid fa-circle-check"></i> Trạng thái: <span id="wireguardActiveSummary">Đang tải...</span>
-                        </strong>
-                        <div style="display:flex; gap:8px;">
-                            <button class="btn btn-sm btn-secondary" onclick="openWireguardFolderOnWindows()" title="Mở thư mục data/vpn_configs trên máy tính" style="padding: 6px 14px;">
-                                <i class="fa-regular fa-folder-open text-warning"></i> Mở Thư Mục Config
-                            </button>
-                            <button class="btn btn-sm btn-primary" onclick="rescanWireguardConfigs()" title="Quét lại file .conf và khởi động các cổng mới" style="padding: 6px 14px;">
-                                <i class="fa-solid fa-arrows-rotate"></i> Quét Lại
-                            </button>
+            <!-- Chế độ quét -->
+            <div class="form-group">
+                <label
+                    style="font-weight: 600; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; display: block;">
+                    <i class="fa-solid fa-calendar-check"></i> Chế độ quét lịch trình:
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <label
+                        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
+                        <input type="radio" name="followerScanMode" id="scanModeDaily" value="daily_times" checked
+                            onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
+                        <div>
+                            <strong style="font-size: 13px; color: #fff;">Giờ Cố Định Hàng Ngày</strong>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Quét vào các
+                                khung giờ vàng trong ngày (VD: 08:00, 20:00)</div>
                         </div>
-                    </div>
-                    <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.6;">
-                        Chỉ cần tải file <code>.conf</code> WireGuard từ Proton VPN thả vào thư mục <code>data/vpn_configs/</code>. ClipFlow tự động mở cổng SOCKS5 cục bộ (10801, 10802,...). Khi chọn quốc gia cho profile, proxy được gán trong 0.1s không cần mở extension hay đăng nhập lại!
-                    </div>
-                </div>
-
-                <!-- Bảng danh sách Proxy Quốc Gia đang hoạt động -->
-                <div>
-                    <h4 style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
-                        <i class="fa-solid fa-network-wired text-cyan"></i> Danh Sách Cổng Proxy Quốc Gia & Địa Điểm:
-                    </h4>
-                    <div style="max-height: 380px; overflow-y: auto; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                            <thead>
-                                <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: var(--text-secondary); white-space: nowrap;">
-                                    <th style="padding: 12px 16px; min-width: 220px;">Quốc Gia & Địa Điểm</th>
-                                    <th style="padding: 12px 16px; min-width: 180px;">Cổng SOCKS5 Cục Bộ</th>
-                                    <th style="padding: 12px 16px; min-width: 220px;">File Cấu Hình Nguồn</th>
-                                    <th style="padding: 12px 16px; min-width: 120px; text-align: center;">Trạng Thái</th>
-                                    <th style="padding: 12px 16px; text-align: center; min-width: 110px;">Thao Tác</th>
-                                </tr>
-                            </thead>
-                            <tbody id="wireguardProxyTableBody">
-                                <tr>
-                                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
-                                        <i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách cổng proxy...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    </label>
+                    <label
+                        style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
+                        <input type="radio" name="followerScanMode" id="scanModeInterval" value="interval"
+                            onchange="toggleFollowerScanModeUI()" style="margin-top: 3px;">
+                        <div>
+                            <strong style="font-size: 13px; color: #fff;">Chu Kỳ Cách N Tiếng</strong>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Cứ mỗi 6 tiếng
+                                hoặc 12 tiếng tự động quét lại một lần</div>
+                        </div>
+                    </label>
                 </div>
             </div>
-            <div class="modal-footer" style="display:flex; justify-content:flex-end;">
-                <button type="button" class="btn btn-secondary" onclick="closeWireguardStatusModal()" style="min-width: 100px;">Đóng</button>
+
+            <!-- Cấu hình giờ cố định -->
+            <div id="wrapDailyTimes" class="form-group">
+                <label
+                    style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                    <i class="fa-regular fa-clock"></i> Các mốc giờ quét trong ngày (phân tách bởi dấu phẩy):
+                </label>
+                <input type="text" id="inputFollowerScanTimes" class="input-field" placeholder="08:00, 20:00"
+                    value="08:00, 20:00">
+                <small class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+                    Ví dụ: <code>08:00, 14:00, 20:00</code> hoặc chỉ 1 giờ cụ thể như <code>21:00</code> (định dạng
+                    24 giờ).
+                </small>
+            </div>
+
+            <!-- Cấu hình chu kỳ N tiếng -->
+            <div id="wrapIntervalHours" class="form-group" style="display: none;">
+                <label
+                    style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                    <i class="fa-solid fa-hourglass-half"></i> Khoảng cách giữa các lần quét:
+                </label>
+                <select id="selectFollowerIntervalHours" class="custom-select" style="width: 100%; height: 42px;">
+                    <option value="2">Mỗi 2 tiếng một lần</option>
+                    <option value="4">Mỗi 4 tiếng một lần</option>
+                    <option value="6" selected>Mỗi 6 tiếng một lần (Khuyên Dùng)</option>
+                    <option value="8">Mỗi 8 tiếng một lần</option>
+                    <option value="12">Mỗi 12 tiếng một lần</option>
+                    <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
+                </select>
+            </div>
+
+            <!-- Cấu hình trình duyệt đồng bộ Profile (Đa luồng) -->
+            <div
+                style="background: rgba(168, 85, 247, 0.05); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(168, 85, 247, 0.25);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label style="font-weight:600; font-size:12.5px; color:#fff; margin:0;">
+                        <i class="fa-solid fa-users-gear" style="color:#c084fc;"></i> Trình Duyệt Đồng Bộ Profile (Đa
+                        Luồng):
+                    </label>
+                    <span class="badge"
+                        style="background:rgba(168,85,247,0.2); color:#c084fc; font-size:10px; font-weight:700;">Invisible
+                        Pool</span>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="number" id="schedProfileSyncConcurrentWorkers" class="input-field" min="1" max="10"
+                        value="3"
+                        style="width:90px; font-size:14px; font-weight:700; color:#c084fc; text-align:center;">
+                    <span style="font-size:12px; color:var(--text-muted); font-weight:600;">profile / luồng cùng lúc
+                        (mặc định: 3)</span>
+                </div>
+                <small class="form-hint"
+                    style="font-size:11px; margin-top:6px; color:var(--text-muted); line-height:1.4; display:block;">
+                    Mở song song 3–5 profile ẩn ngầm ngoài màn hình khi cần cào dữ liệu TikTok Studio. Rút ngắn thời
+                    gian quét 1.000 tài khoản từ 3.3 tiếng xuống còn <b>~40 phút</b>.
+                </small>
+            </div>
+
+            <!-- Banner thông tin bảo vệ -->
+            <div
+                style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+                <div
+                    style="font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-shield-halved"></i> Cơ Chế Vận Hành Thông Minh:
+                </div>
+                <ul style="margin: 0; padding-left: 18px;">
+                    <li><strong>Ưu tiên ZeroRAM (Không mở trình duyệt):</strong> Đọc trực tiếp cookie từ ổ đĩa và
+                        gọi API TikTok thần tốc (~0.5s/nick), không tốn RAM và không mở cửa sổ trình duyệt. Chỉ mở
+                        app/trình duyệt làm dự phòng khi cookie hết hạn.</li>
+                    <li><strong>Chống Xung Đột:</strong> Profile nào đang bận upload bài sẽ được tự động
+                        bỏ qua và quét lại sau, tuyệt đối không làm gián đoạn việc đăng video.</li>
+                    <li><strong>Đạt Chỉ Tiêu:</strong> Khi phát hiện nick/kênh đạt ngưỡng cài đặt (TikTok,
+                        YouTube, Facebook), hệ thống sẽ tự động cập nhật trạng thái và gắn huy hiệu Đạt Chỉ Tiêu trên
+                        danh sách.</li>
+                </ul>
+            </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+            <button type="button" class="btn btn-warning" onclick="scanAllProfilesFollowers(this)">
+                <i class="fa-solid fa-bolt"></i> Quét Thử Ngay
+            </button>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary" onclick="closeFollowerSchedulerModal()">Đóng</button>
+                <button type="button" class="btn btn-primary" onclick="saveFollowerSchedulerSettings(this)">
+                    <i class="fa-solid fa-check"></i> Lưu Lịch Quét Định Kỳ
+                </button>
             </div>
         </div>
     </div>
+</div><!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
+<div id="editProfileUsernameModal" class="modal">
+    <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+            <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i id="editProfileModalIcon" class="fa-solid fa-user-pen text-accent"></i> <span
+                        id="editProfileModalTitle">Sửa Thông Tin & Chỉ Số Tài Khoản</span>
+                </h3>
+                <p class="modal-sub" id="editProfileModalSub">Gán thủ công hoặc đồng bộ thông số cho profile / kênh</p>
+            </div>
+            <button type="button" class="close-btn has-tooltip" onclick="closeEditUsernameModal()"
+                data-tooltip="Đóng"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+            <input type="hidden" id="editProfileGpmId">
+            <input type="hidden" id="editProfileChannelId">
+            <div class="form-group">
+                <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Tên Profile
+                    :</label>
+                <input type="text" id="editProfileName" class="input-field" disabled
+                    style="background: rgba(255,255,255,0.05); color: var(--text-primary);">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+                <!-- Trình duyệt (Preserved in DOM for future development) -->
+                <div class="form-group" style="display: none;">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
+                            class="fa-solid fa-window-restore"></i> Trình Duyệt:</label>
+                    <select id="editProfileBrowserType" class="input-field" style="height:38px;">
+                        <option value="gpm" selected>GPMLogin</option>
+                        <option value="adspower">AdsPower</option>
+                        <option value="dolphin">Dolphin Anty</option>
+                        <option value="genlogin">GenLogin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
+                            class="fa-brands fa-tiktok text-pink"></i> Nền Tảng:</label>
+                    <select id="editProfilePlatform" class="input-field" style="height:38px;"
+                        onchange="onEditProfilePlatformChange(this.value)">
+                        <option value="tiktok" selected>TikTok</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label
+                    style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-shield-halved text-cyan"></i> Quốc Gia VPN (WireGuard SOCKS5 / Extension):
+                </label>
+                <select id="editProfileCountry" class="input-field"
+                    style="height:38px; border:1px solid rgba(56, 189, 248, 0.4); font-weight:600;">
+                    <option value="NONE" selected>🌐 Không Dùng Proxy (Direct IP - Tắt Proxy GPMLogin)</option>
+                    <option value="US">🇺🇸 Hoa Kỳ (United States)</option>
+                    <option value="GB">🇬🇧 Vương Quốc Anh (United Kingdom)</option>
+                    <option value="DE">🇩🇪 Đức (Germany)</option>
+                    <option value="FR">🇫🇷 Pháp (France)</option>
+                    <option value="JP">🇯🇵 Nhật Bản (Japan)</option>
+                    <option value="KR">🇰🇷 Hàn Quốc (South Korea)</option>
+                    <option value="CA">🇨🇦 Canada</option>
+                    <option value="AU">🇦🇺 Úc (Australia)</option>
+                    <option value="SG">🇸🇬 Singapore</option>
+                    <option value="NL">🇳🇱 Hà Lan (Netherlands)</option>
+                    <option value="MX">🇲🇽 Mexico</option>
+                    <option value="ID">🇮🇩 Indonesia (Indo)</option>
+                    <option value="MY">🇲🇾 Malaysia (Malay)</option>
+                    <option value="PH">🇵🇭 Philippines (Philippin)</option>
+                    <option value="VN">🇻🇳 Việt Nam (Vietnam)</option>
+                </select>
+                <small class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
+                    Tự động gán cổng Proxy WireGuard SOCKS5 (0.05s) trực tiếp vào GPMLogin qua API, không mở trình
+                    duyệt.
+                </small>
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileUsername"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileUserIcon" class="fa-brands fa-tiktok"></i> <span id="editProfileUserLabel">Tài
+                        Khoản / Username:</span>
+                </label>
+                <div style="position: relative;">
+                    <span id="editProfileUserPrefix"
+                        style="position: absolute; left: 12px; top: 10px; color: var(--text-muted); font-weight: 700;">@</span>
+                    <input type="text" id="editProfileUsername" class="input-field" placeholder="username_cua_ban"
+                        style="padding-left: 28px;">
+                </div>
+                <small id="editProfileUserHint" class="form-hint"
+                    style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
+                    Không cần nhập dấu @. Ví dụ: <code>dat.nguyen261096</code>
+                </small>
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileNickname"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileNickIcon" class="fa-solid fa-id-badge"></i> <span id="editProfileNickLabel">Tên
+                        Kênh / Hiển Thị:</span>
+                </label>
+                <input type="text" id="editProfileNickname" class="input-field"
+                    placeholder="Ví dụ: Hoàng Minh, Iamcooked...">
+            </div>
+            <div class="form-group">
+                <label id="lblEditProfileFollowers"
+                    style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+                    <i id="editProfileFollowersIcon" class="fa-solid fa-users"></i> <span
+                        id="editProfileFollowersLabel">Số Follower / Người Đăng Ký:</span>
+                </label>
+                <input type="number" id="editProfileFollowers" class="input-field" placeholder="0">
+            </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+            <button type="button" class="btn btn-primary" onclick="saveProfileUsernameFromModal(this)"
+                style="min-width: 140px;">
+                <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
+            </button>
+        </div>
+    </div>
+</div>
 
-    <!-- MODAL 1: SYSTEM ACTIVE ISSUES -->
+<!-- MODAL: QUẢN LÝ WIREGUARD VPN SOCKS5 CHO 1.000 PROFILE GPM -->
+<div id="wireguardStatusModal" class="modal">
+    <div class="modal-content" style="max-width: 980px; width: 94%;">
+        <div class="modal-header">
+            <div>
+                <h3 style="display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-shield-halved text-cyan"></i> Quản Lý WireGuard VPN SOCKS5
+                </h3>
+                <p class="modal-sub">Cổng Proxy cục bộ tốc độ cao hỗ trợ 1.000 Profile GPMLogin dùng đồng thời</p>
+            </div>
+            <button type="button" class="close-btn has-tooltip" onclick="closeWireguardStatusModal()"
+                data-tooltip="Đóng">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Hộp thông báo tổng quan & hướng dẫn -->
+            <div
+                style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 14px 18px;">
+                <div
+                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                    <strong style="color: var(--accent-cyan); font-size: 13.5px;">
+                        <i class="fa-solid fa-circle-check"></i> Trạng thái: <span id="wireguardActiveSummary">Đang
+                            tải...</span>
+                    </strong>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="openWireguardFolderOnWindows()"
+                            title="Mở thư mục data/vpn_configs trên máy tính" style="padding: 6px 14px;">
+                            <i class="fa-regular fa-folder-open text-warning"></i> Mở Thư Mục Config
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="rescanWireguardConfigs()"
+                            title="Quét lại file .conf và khởi động các cổng mới" style="padding: 6px 14px;">
+                            <i class="fa-solid fa-arrows-rotate"></i> Quét Lại
+                        </button>
+                    </div>
+                </div>
+                <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.6;">
+                    Chỉ cần tải file <code>.conf</code> WireGuard từ Proton VPN thả vào thư mục
+                    <code>data/vpn_configs/</code>. ClipFlow tự động mở cổng SOCKS5 cục bộ (10801, 10802,...). Khi chọn
+                    quốc gia cho profile, proxy được gán trong 0.1s không cần mở extension hay đăng nhập lại!
+                </div>
+            </div>
+
+            <!-- Bảng danh sách Proxy Quốc Gia đang hoạt động -->
+            <div>
+                <h4
+                    style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-network-wired text-cyan"></i> Danh Sách Cổng Proxy Quốc Gia & Địa Điểm:
+                </h4>
+                <div
+                    style="max-height: 380px; overflow-y: auto; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr
+                                style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: var(--text-secondary); white-space: nowrap;">
+                                <th style="padding: 12px 16px; min-width: 220px;">Quốc Gia & Địa Điểm</th>
+                                <th style="padding: 12px 16px; min-width: 180px;">Cổng SOCKS5 Cục Bộ</th>
+                                <th style="padding: 12px 16px; min-width: 220px;">File Cấu Hình Nguồn</th>
+                                <th style="padding: 12px 16px; min-width: 120px; text-align: center;">Trạng Thái</th>
+                                <th style="padding: 12px 16px; text-align: center; min-width: 110px;">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wireguardProxyTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách cổng proxy...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeWireguardStatusModal()"
+                style="min-width: 100px;">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 1: SYSTEM ACTIVE ISSUES -->

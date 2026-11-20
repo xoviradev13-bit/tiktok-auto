@@ -80,6 +80,10 @@ class BackgroundScheduler:
         self._active_upload_lock = threading.Lock()
         self._upload_pool = concurrent.futures.ThreadPoolExecutor(max_workers=6, thread_name_prefix="UploadWorker")
         
+        # Cấu hình đa luồng xử lý quy mô lớn (Mega-Scale Farm: 3000-4000 kênh & 1000 profiles)
+        self.rss_concurrent_workers = 15
+        self.profile_sync_concurrent_workers = 3
+        
         # Cấu hình quét follower định kỳ & giờ cố định hàng ngày
         self.follower_scan_enabled = True
         self.follower_scan_mode = "daily_times"  # "daily_times" hoặc "interval"
@@ -130,6 +134,16 @@ class BackgroundScheduler:
                     self.max_parallel_uploads = max(1, min(6, int(db_settings["max_parallel_uploads"])))
                 except Exception:
                     pass
+            if "rss_concurrent_workers" in db_settings:
+                try:
+                    self.rss_concurrent_workers = max(1, min(50, int(db_settings["rss_concurrent_workers"])))
+                except Exception:
+                    pass
+            if "profile_sync_concurrent_workers" in db_settings:
+                try:
+                    self.profile_sync_concurrent_workers = max(1, min(10, int(db_settings["profile_sync_concurrent_workers"])))
+                except Exception:
+                    pass
             if "follower_scan_enabled" in db_settings:
                 self.follower_scan_enabled = db_settings["follower_scan_enabled"] == "1"
             if "follower_scan_mode" in db_settings:
@@ -144,7 +158,7 @@ class BackgroundScheduler:
                       max_videos_per_scan=None, channel_delay_seconds=None, save_by_channel_folder=None,
                       auto_retry_enabled=None, max_retries=None, retry_delay_minutes=None,
                       watchdog_enabled=None, stuck_timeout_minutes=None, min_account_cooldown_minutes=None,
-                      max_parallel_uploads=None):
+                      max_parallel_uploads=None, rss_concurrent_workers=None, profile_sync_concurrent_workers=None):
         """Cập nhật cấu hình runtime ngay lập tức"""
         if interval_minutes is not None:
             self.rss_interval_minutes = max(1, int(interval_minutes))
@@ -174,6 +188,10 @@ class BackgroundScheduler:
             self.min_account_cooldown_minutes = max(15, int(min_account_cooldown_minutes))
         if max_parallel_uploads is not None:
             self.max_parallel_uploads = max(1, min(6, int(max_parallel_uploads)))
+        if rss_concurrent_workers is not None:
+            self.rss_concurrent_workers = max(1, min(50, int(rss_concurrent_workers)))
+        if profile_sync_concurrent_workers is not None:
+            self.profile_sync_concurrent_workers = max(1, min(10, int(profile_sync_concurrent_workers)))
     def update_follower_config(self, enabled=None, mode=None, times=None, interval_hours=None):
         """Cập nhật cấu hình quét follower runtime"""
         if enabled is not None:
@@ -387,7 +405,8 @@ class BackgroundScheduler:
                     try:
                         total_new = yt_monitor.scan_all_monitored_channels(
                             max_per_channel=self.max_videos_per_scan,
-                            delay=float(self.channel_delay_seconds)
+                            delay=float(self.channel_delay_seconds),
+                            max_workers=self.rss_concurrent_workers
                         )
                         if total_new > 0:
                             log_event("INFO", f"[RSS WORKER] Đã quét chu kỳ ({self.rss_interval_minutes}p): phát hiện và tải về {total_new} video mới qua RSS.")
@@ -487,8 +506,8 @@ class BackgroundScheduler:
             def _async_scan():
                 try:
                     from backend.modules.tiktok_tracker import tiktok_tracker
-                    log_event("INFO", f"[SCHEDULER] ⏰ Kích hoạt quét Follower tự động ({self.follower_scan_mode})...")
-                    tiktok_tracker.scan_all_profiles()
+                    log_event("INFO", f"[SCHEDULER] ⏰ Kích hoạt quét Follower tự động ({self.follower_scan_mode}) với {self.profile_sync_concurrent_workers} luồng...")
+                    tiktok_tracker.scan_all_profiles(max_workers=self.profile_sync_concurrent_workers)
                 except Exception as e:
                     log_event("WARNING", f"[SCHEDULER] Lỗi quét follower tự động: {e}")
             t = threading.Thread(target=_async_scan, daemon=True)
