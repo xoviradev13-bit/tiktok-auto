@@ -50,7 +50,7 @@ def check_active_license(action_name: str = "Tác vụ này"):
     """
     return True
 
-app = FastAPI(title="ShortsStack & AI Video Engine", version="1.0.0")
+app = FastAPI(title="ClipFlow & AI Video Engine", version="1.0.0")
 
 # --- Security Hardening (OWASP / NIST SP 800-218 / ISO 27034) ---
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -244,8 +244,27 @@ class UpdateProfileUsernameRequest(BaseModel):
     sec_uid: Optional[str] = ""
     browser_type: Optional[str] = "gpm"
     platform: Optional[str] = "tiktok"
+    country: Optional[str] = ""
+    auto_connect_vpn: Optional[bool] = False
+
+class ConnectProtonVpnRequest(BaseModel):
+    country: Optional[str] = None
+    keep_browser_open: Optional[bool] = True
+
+class BatchAssignCountryRequest(BaseModel):
+    gpm_ids: List[str]
+    country: str
+
+class UpdateProfileCountryRequest(BaseModel):
+    country: str
 
 class UpdateProfileNotifyStatusRequest(BaseModel):
+    status: str
+
+class UpdateCreatorProgramRequest(BaseModel):
+    status: str
+
+class UpdateFlopStatusRequest(BaseModel):
     status: str
 
 class UpdateProfileChannelRequest(BaseModel):
@@ -265,6 +284,7 @@ class FollowerSchedulerRequest(BaseModel):
     follower_threshold_tiktok: Optional[int] = None
     follower_threshold_youtube: Optional[int] = None
     follower_threshold_facebook: Optional[int] = None
+    invisible_browser_automation: Optional[bool] = True
 
 class ThresholdSettingsRequest(BaseModel):
     follower_threshold_tiktok: Optional[int] = 10000
@@ -395,6 +415,7 @@ class SaveApiKeysRequest(BaseModel):
     follower_threshold_tiktok: Optional[int] = None
     follower_threshold_youtube: Optional[int] = None
     follower_threshold_facebook: Optional[int] = None
+    invisible_browser_automation: Optional[bool] = True
 
 class UIPreferencesRequest(BaseModel):
     language: Optional[str] = None
@@ -437,9 +458,14 @@ class TelegramSendIssueRequest(BaseModel):
 class TestApiKeyRequest(BaseModel):
     key: str
 
+class TestAiKeyRequest(BaseModel):
+    provider: str
+    key: str
+    model: Optional[str] = None
+
 class CreateCampaignRequest(BaseModel):
     name: str
-    source_mode: Optional[str] = "hybrid"
+    source_mode: Optional[str] = "youtube"
     local_folder_path: Optional[str] = ""
     target_platforms: Optional[str] = "tiktok"
     youtube_profile_ids: Optional[str] = ""
@@ -475,6 +501,7 @@ class CreateCampaignRequest(BaseModel):
     max_video_duration: Optional[int] = None
     include_shorts: Optional[int] = 1
     include_longform: Optional[int] = 1
+    shorts_keep_original: Optional[int] = 1
     disable_subtitle_for_shorts: Optional[int] = 1
     bgm_folder: Optional[str] = ""
     bgm_volume: Optional[float] = 0.15
@@ -696,46 +723,7 @@ def sync_gpm_profiles():
             conn.close()
             return {"status": "warning", "message": f"Không tìm thấy profile nào từ trình duyệt {active_browser.upper()} (hoặc ứng dụng chưa bật)", "synced": 0}
 
-    from backend.modules.license_manager import get_license_tier_limits
-    tier_limits = get_license_tier_limits()
-    max_allowed_profiles = tier_limits.get("max_profiles", 999999)
-    profile_limit_hit = False
-
-    if len(profiles) > max_allowed_profiles:
-        profile_limit_hit = True
-        total_found = len(profiles)
-
-        # Cơ chế Pinned Active Profiles (Khóa 5 Profile cố định - Chống nhảy thứ tự khi Sync lại):
-        # 1. Đọc danh sách các profile ĐÃ CÓ trong DB trước đó theo thứ tự tạo
-        cursor.execute("SELECT gpm_id FROM gpm_profiles ORDER BY id ASC")
-        existing_db_ids = [r["gpm_id"] for r in cursor.fetchall()]
-
-        # 2. Ưu tiên giữ lại các profile đã được liên kết trước đó
-        selected_profiles = []
-        unselected_candidates = []
-
-        # Tạo map id -> profile từ danh sách GPM app
-        gpm_map = {str(p["id"]): p for p in profiles}
-
-        for pid in existing_db_ids:
-            if str(pid) in gpm_map and len(selected_profiles) < max_allowed_profiles:
-                selected_profiles.append(gpm_map[str(pid)])
-
-        # 3. Nếu chưa đủ 5 profiles (lần đầu sync hoặc user vừa xóa bớt profile cũ):
-        # Sắp xếp các profile còn lại theo id/tên cố định (Deterministic Order) để đảm bảo không phụ thuộc thứ tự API
-        selected_ids_set = set(str(p["id"]) for p in selected_profiles)
-        remaining = [p for p in profiles if str(p["id"]) not in selected_ids_set]
-        remaining_sorted = sorted(remaining, key=lambda x: (str(x.get("name", "")).lower(), str(x.get("id", ""))))
-
-        for p in remaining_sorted:
-            if len(selected_profiles) < max_allowed_profiles:
-                selected_profiles.append(p)
-            else:
-                break
-
-        profiles = selected_profiles
-        log_event("WARNING", f"[{tier_limits.get('tier_display')}] Giới hạn tối đa {max_allowed_profiles} Profiles Antidetect. Đã cố định {len(profiles)}/{total_found} profiles (Pinned Active Profiles). Nâng cấp Gói Studio Team để sử dụng không giới hạn!")
-
+    # Không giới hạn số lượng tài khoản (Hỗ trợ 1.000+ profile không cần license key)
     active_gpm_ids = set()
     synced = 0
     for p in profiles:
@@ -768,6 +756,24 @@ def sync_gpm_profiles():
 
     conn.commit()
     conn.close()
+
+    # Tự động đồng bộ Proxy WireGuard đã lưu trong ClipFlow sang ứng dụng GPMLogin
+    try:
+        from backend.modules.wireproxy_manager import wireproxy_manager
+        conn_proxy = get_connection()
+        cur_proxy = conn_proxy.cursor()
+        cur_proxy.execute("SELECT gpm_id, country, raw_proxy FROM gpm_profiles WHERE country != '' AND country != 'NONE'")
+        proxy_profiles = cur_proxy.fetchall()
+        conn_proxy.close()
+
+        for pp in proxy_profiles:
+            gid = pp["gpm_id"]
+            cntry = (pp["country"] or "").upper()
+            desired_proxy = pp["raw_proxy"] or wireproxy_manager.get_proxy_for_country(cntry)
+            if desired_proxy:
+                gpm_client.update_profile_proxy(gid, desired_proxy)
+    except Exception as sync_p_err:
+        log_event("WARNING", f"Lỗi đồng bộ proxy tự động sang GPMLogin: {sync_p_err}")
 
     # Tự động cập nhật TikTok Handle (Username) & Profile Name (Nickname) từ local cookies (ZeroRAM cho GPM / CDP cho GenLogin)
     tt_synced = 0
@@ -846,8 +852,6 @@ def sync_gpm_profiles():
         msg += f" (đã cập nhật thông tin TikTok của {tt_synced} profile)"
     if removed_count > 0:
         msg += f" (đã gỡ bỏ {removed_count} profile không còn tồn tại)"
-    if profile_limit_hit:
-        msg += f" (⚠️ Gói Cá Nhân Pro giới hạn tối đa {max_allowed_profiles} profiles. Nâng cấp Gói Studio Team để sử dụng không giới hạn)."
     log_event("INFO", msg)
     try:
         from backend.modules.gpm_profile_reader import propagate_linked_profile_channels
@@ -859,25 +863,18 @@ def sync_gpm_profiles():
         "synced": synced,
         "tiktok_synced": tt_synced,
         "removed": removed_count,
-        "limit_reached": profile_limit_hit,
-        "max_allowed_profiles": max_allowed_profiles,
+        "limit_reached": False,
+        "max_allowed_profiles": 999999,
         "message": msg
     }
 
 @app.get("/api/gpm/profiles")
 def list_gpm_profiles():
-    from backend.modules.license_manager import get_license_tier_limits
-    tier_limits = get_license_tier_limits()
-    max_allowed = tier_limits.get("max_profiles", 999999)
-
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM gpm_profiles ORDER BY followers_count DESC, id DESC")
     rows = [dict(r) for r in cursor.fetchall()]
-    
-    # Bắt buộc giới hạn hiển thị tối đa 5 profiles cho Gói Cá Nhân Pro
-    if len(rows) > max_allowed:
-        rows = rows[:max_allowed]
+    # Không giới hạn số lượng tài khoản hiển thị (Hỗ trợ 1.000+ profiles)
     
     try:
         cursor.execute("SELECT * FROM profile_channels ORDER BY is_default DESC, id ASC")
@@ -890,6 +887,53 @@ def list_gpm_profiles():
     except Exception:
         for r in rows:
             r["channels"] = []
+
+    # Thống kê video: ưu tiên profile_videos, fallback upload_tasks
+    try:
+        cursor.execute("""
+            SELECT gpm_profile_id,
+                   COUNT(*) as total_posts,
+                   COALESCE(AVG(views_count), 0) as avg_views,
+                   COALESCE(MAX(views_count), 0) as max_views
+            FROM profile_videos
+            WHERE video_status = 'published'
+            GROUP BY gpm_profile_id
+        """)
+        pv_stats = {r["gpm_profile_id"]: dict(r) for r in cursor.fetchall()}
+    except Exception:
+        pv_stats = {}
+
+    try:
+        cursor.execute("""
+            SELECT gpm_profile_id,
+                   COUNT(*) as total_posts,
+                   COALESCE(AVG(views_count), 0) as avg_views,
+                   COALESCE(MAX(views_count), 0) as max_views
+            FROM upload_tasks
+            WHERE status = 'completed' AND gpm_profile_id IS NOT NULL
+            GROUP BY gpm_profile_id
+        """)
+        ut_stats = {r["gpm_profile_id"]: dict(r) for r in cursor.fetchall()}
+    except Exception:
+        ut_stats = {}
+
+    for r in rows:
+        pid = r.get("id")
+        p_stat = pv_stats.get(pid) or ut_stats.get(pid, {})
+        r["total_posts"] = p_stat.get("total_posts", 0)
+        r["avg_views"] = round(p_stat.get("avg_views", 0.0), 1)
+        r["max_views"] = p_stat.get("max_views", 0)
+
+        # Đọc trực tiếp từ DB (Write path đã tính toán chuẩn xác và lưu lại)
+        r["flop_status"] = (r.get("flop_status") or "new").strip().lower()
+        r["is_breakout"] = bool(r.get("is_breakout") or 0)
+        r["flop_recovering"] = bool(r.get("flop_recovering") or 0)
+        r["flop_since"] = r.get("flop_since") or ""
+        r["flop_median_views"] = float(r.get("flop_median_views") or 0.0)
+        try:
+            r["flop_window_views"] = json.loads(r.get("flop_window_views") or "[]")
+        except Exception:
+            r["flop_window_views"] = []
 
     conn.close()
     return rows
@@ -1137,6 +1181,16 @@ def trigger_gpm_profile_warmup(gpm_id: str, bg_tasks: BackgroundTasks, minutes: 
             with sync_playwright() as p:
                 browser = p.chromium.connect_over_cdp(f"http://{remote_addr}")
                 ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+                try:
+                    _cdp = ctx.new_cdp_session(ctx.pages[0] if ctx.pages else ctx.new_page())
+                    _win = _cdp.send("Browser.getWindowForTarget")
+                    if _win and "windowId" in _win:
+                        _cdp.send("Browser.setWindowBounds", {
+                            "windowId": _win["windowId"],
+                            "bounds": {"left": -3200, "top": -3200, "width": 1280, "height": 800, "windowState": "normal"}
+                        })
+                except Exception:
+                    pass
                 page = ctx.new_page()
                 account_warmup.run_feed_warmup(page, duration_minutes=minutes, gpm_profile_id=gpm_id)
         except Exception as e:
@@ -2006,24 +2060,14 @@ def create_campaign(req: CreateCampaignRequest):
     check_active_license("Tạo & Kích Hoạt Chiến Dịch")
     if not req.name or not req.name.strip():
         raise HTTPException(status_code=400, detail="Tên chiến dịch không được để trống!")
-    source_mode = req.source_mode or "hybrid"
-    local_folder = (req.local_folder_path or "").strip()
+    source_mode = "youtube"
+    local_folder = ""
     ch_ids = req.channel_ids if req.channel_ids else ([req.channel_id] if req.channel_id else [])
     
-    if source_mode == "youtube" and not ch_ids:
+    if not ch_ids:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
-    elif source_mode == "local_folder" and not local_folder:
-        raise HTTPException(status_code=400, detail="Vui lòng chỉ định thư mục chứa video cục bộ trên máy tính!")
-    elif source_mode == "hybrid" and not ch_ids and not local_folder:
-        raise HTTPException(status_code=400, detail="Vui lòng chọn kênh YouTube nguồn hoặc nhập đường dẫn thư mục video!")
     gpm_ids = req.gpm_profile_ids if req.gpm_profile_ids else ([req.gpm_profile_id] if req.gpm_profile_id else [])
 
-    from backend.modules.license_manager import get_license_tier_limits
-    tier_limits = get_license_tier_limits()
-    max_allowed = tier_limits.get("max_profiles", 999999)
-    if len(gpm_ids) > max_allowed:
-        gpm_ids = gpm_ids[:max_allowed]
-        log_event("WARNING", f"[{tier_limits.get('tier_display')}] Chiến dịch tự động giới hạn ở {max_allowed} Profiles antidetect đầu tiên.")
 
     if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một Profile GPMLogin đích (hoặc bỏ chọn 'Tự động tải lên TikTok' nếu chỉ muốn render video)!")
@@ -2056,14 +2100,14 @@ def create_campaign(req: CreateCampaignRequest):
             random_delay_minutes, warmup_mode, ai_provider, ai_model,
             min_video_duration, max_video_duration, add_part_label, clips_per_video,
             bgm_folder, bgm_volume, is_active, min_post_interval_minutes,
-            include_shorts, include_longform, disable_subtitle_for_shorts, subtitle_position,
+            include_shorts, include_longform, shorts_keep_original, disable_subtitle_for_shorts, subtitle_position,
             auto_engagement_enabled, auto_pin_comment, pin_comment_delay_mins,
             auto_reply_comments, reply_comments_delay_mins,
             narration_enabled, narration_language, voice_gender, narration_style, disable_narration_for_shorts, keep_original_script_for_shorts, ken_burns_enabled, endcard_enabled, use_ai_images, image_style, visual_source, ai_image_model, ai_video_model, stock_provider, auto_upload,
             tts_engine, elevenlabs_voice_id, elevenlabs_model,
             split_source_type, split_folder, split_keywords, split_provider
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         req.name,
         source_mode,
@@ -2104,6 +2148,7 @@ def create_campaign(req: CreateCampaignRequest):
         req.min_post_interval_minutes,
         1 if req.include_shorts != 0 else 0,
         1 if req.include_longform != 0 else 0,
+        1 if req.shorts_keep_original is None or req.shorts_keep_original != 0 else 0,
         1 if req.disable_subtitle_for_shorts else 0,
         req.subtitle_position or 'center',
         1 if req.auto_engagement_enabled else 0,
@@ -2204,23 +2249,14 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
     if not req.name or not req.name.strip():
         conn.close()
         raise HTTPException(status_code=400, detail="Tên chiến dịch không được để trống!")
-    source_mode = req.source_mode or "hybrid"
-    local_folder = (req.local_folder_path or "").strip()
+    source_mode = "youtube"
+    local_folder = ""
     ch_ids = req.channel_ids if req.channel_ids else ([req.channel_id] if req.channel_id else [])
-    if source_mode == "youtube" and not ch_ids:
+    if not ch_ids:
         conn.close()
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
-    elif source_mode == "local_folder" and not local_folder:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Vui lòng chỉ định thư mục chứa video cục bộ trên máy tính!")
     gpm_ids = req.gpm_profile_ids if req.gpm_profile_ids else ([req.gpm_profile_id] if req.gpm_profile_id else [])
 
-    from backend.modules.license_manager import get_license_tier_limits
-    tier_limits = get_license_tier_limits()
-    max_allowed = tier_limits.get("max_profiles", 999999)
-    if len(gpm_ids) > max_allowed:
-        gpm_ids = gpm_ids[:max_allowed]
-        log_event("WARNING", f"[{tier_limits.get('tier_display')}] Chiến dịch tự động giới hạn ở {max_allowed} Profiles antidetect đầu tiên.")
 
     if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
         conn.close()
@@ -2283,6 +2319,7 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
             min_post_interval_minutes = ?,
             include_shorts = ?,
             include_longform = ?,
+            shorts_keep_original = ?,
             disable_subtitle_for_shorts = ?,
             subtitle_position = ?,
             auto_engagement_enabled = ?,
@@ -2352,6 +2389,7 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
         req.min_post_interval_minutes,
         1 if req.include_shorts != 0 else 0,
         1 if req.include_longform != 0 else 0,
+        1 if req.shorts_keep_original is None or req.shorts_keep_original != 0 else 0,
         1 if req.disable_subtitle_for_shorts else 0,
         req.subtitle_position or 'center',
         1 if req.auto_engagement_enabled else 0,
@@ -3222,7 +3260,8 @@ def render_video_ai(req: RenderVideoRequest):
             split_source_type=req.split_source_type or "local",
             split_folder=req.split_folder or "data/gameplay",
             split_keywords=req.split_keywords or "minecraft parkour, satisfying asmr, subway surfers",
-            split_provider=req.split_provider or "all"
+            split_provider=req.split_provider or "all",
+            force_edit=True
         )
         if not parts:
             raise HTTPException(status_code=500, detail="Lỗi khi render các part video AI")
@@ -3355,7 +3394,8 @@ def render_smart_ai_video(req: SmartRenderVideoRequest):
         split_provider=req.split_provider or "all",
         tts_engine=getattr(req, "tts_engine", "edge-tts") or "edge-tts",
         elevenlabs_voice_id=getattr(req, "elevenlabs_voice_id", None),
-        elevenlabs_model=getattr(req, "elevenlabs_model", "eleven_multilingual_v2")
+        elevenlabs_model=getattr(req, "elevenlabs_model", "eleven_multilingual_v2"),
+        force_edit=True
     )
 
     if result.get("status") != "success":
@@ -3384,20 +3424,7 @@ def upload_tiktok(req: UploadVideoRequest):
     if not req.gpm_profile_id or not req.gpm_profile_id.strip():
         raise HTTPException(status_code=400, detail="Vui lòng chọn Profile GPMLogin để upload!")
 
-    from backend.modules.license_manager import get_license_tier_limits
-    tier_limits = get_license_tier_limits()
-    max_allowed = tier_limits.get("max_profiles", 999999)
-    if max_allowed < 999999:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT gpm_id FROM gpm_profiles ORDER BY followers_count DESC, id DESC LIMIT ?", (max_allowed,))
-        allowed_gpm_ids = [r["gpm_id"] for r in cursor.fetchall()]
-        conn.close()
-        if req.gpm_profile_id not in allowed_gpm_ids:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Gói Cá Nhân Pro giới hạn tối đa {max_allowed} Profiles antidetect. Profile này nằm ngoài danh sách 5 profile được cấp phép upload. Vui lòng nâng cấp lên Gói Studio Team để đăng bài không giới hạn!"
-            )
+
     if not req.video_path or not req.video_path.strip():
         raise HTTPException(status_code=400, detail="Đường dẫn file video không được để trống!")
     if not os.path.exists(req.video_path):
@@ -3502,6 +3529,7 @@ def update_profile_username(gpm_id: str, req: UpdateProfileUsernameRequest):
     cleaned_nick = (req.nickname or "").strip()
     cleaned_uid = (req.tiktok_uid or "").strip()
     cleaned_sec = (req.sec_uid or "").strip()
+    cleaned_country = (req.country or "").strip().upper()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -3511,13 +3539,225 @@ def update_profile_username(gpm_id: str, req: UpdateProfileUsernameRequest):
             tiktok_uid = COALESCE(NULLIF(?, ''), tiktok_uid),
             sec_uid = COALESCE(NULLIF(?, ''), sec_uid),
             browser_type = COALESCE(NULLIF(?, ''), browser_type),
-            platform = COALESCE(NULLIF(?, ''), platform)
+            platform = COALESCE(NULLIF(?, ''), platform),
+            country = ?
         WHERE gpm_id = ?
-    """, (cleaned_u, cleaned_nick, cleaned_uid, cleaned_sec, req.browser_type or 'gpm', req.platform or 'tiktok', gpm_id))
+    """, (cleaned_u, cleaned_nick, cleaned_uid, cleaned_sec, req.browser_type or 'gpm', req.platform or 'tiktok', cleaned_country, gpm_id))
     conn.commit()
     conn.close()
-    log_event("INFO", f"Đã gán TikTok username @{cleaned_u} ({cleaned_nick}) cho GPM profile {gpm_id}")
-    return {"status": "success", "gpm_id": gpm_id, "username": cleaned_u, "nickname": cleaned_nick, "tiktok_uid": cleaned_uid, "sec_uid": cleaned_sec}
+
+    wireproxy_assigned = False
+    wireproxy_url = None
+    try:
+        from backend.modules.wireproxy_manager import wireproxy_manager
+        if cleaned_country and cleaned_country != "NONE":
+            wireproxy_url = wireproxy_manager.get_proxy_for_country(cleaned_country)
+            if wireproxy_url:
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("UPDATE gpm_profiles SET raw_proxy = ? WHERE gpm_id = ?", (wireproxy_url, gpm_id))
+                conn.commit()
+                conn.close()
+
+                if gpm_client.update_profile_proxy(gpm_id, wireproxy_url):
+                    wireproxy_assigned = True
+                    log_event("INFO", f"⚡ Đã tự động gán proxy WireGuard ({wireproxy_url}) cho GPM profile {gpm_id}")
+        elif cleaned_country == "NONE":
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("UPDATE gpm_profiles SET raw_proxy = '' WHERE gpm_id = ?", (gpm_id,))
+            conn.commit()
+            conn.close()
+            gpm_client.update_profile_proxy(gpm_id, "")
+    except Exception as wp_err:
+        log_event("WARNING", f"Lỗi gán proxy WireGuard tự động: {wp_err}")
+
+    log_event("INFO", f"Đã cập nhật TikTok username @{cleaned_u} ({cleaned_nick}) - Quốc gia: {cleaned_country or 'Mặc định'} cho GPM profile {gpm_id}")
+    return {
+        "status": "success",
+        "gpm_id": gpm_id,
+        "username": cleaned_u,
+        "nickname": cleaned_nick,
+        "tiktok_uid": cleaned_uid,
+        "sec_uid": cleaned_sec,
+        "country": cleaned_country,
+        "wireproxy_assigned": wireproxy_assigned,
+        "proxy_url": wireproxy_url,
+        "vpn_triggered": False
+    }
+
+@app.put("/api/profiles/{gpm_id}/country")
+@app.post("/api/profiles/{gpm_id}/country")
+def update_profile_country(gpm_id: str, req: UpdateProfileCountryRequest):
+    cleaned_country = (req.country or "").strip().upper()
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE gpm_profiles SET country = ? WHERE gpm_id = ?", (cleaned_country, gpm_id))
+    conn.commit()
+    conn.close()
+
+    wireproxy_assigned = False
+    wireproxy_url = None
+    gpm_synced = False
+    try:
+        from backend.modules.wireproxy_manager import wireproxy_manager
+        if cleaned_country and cleaned_country != "NONE":
+            wireproxy_url = wireproxy_manager.get_proxy_for_country(cleaned_country)
+            if wireproxy_url:
+                wireproxy_assigned = True
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("UPDATE gpm_profiles SET raw_proxy = ? WHERE gpm_id = ?", (wireproxy_url, gpm_id))
+                conn.commit()
+                conn.close()
+
+                if gpm_client.update_profile_proxy(gpm_id, wireproxy_url):
+                    gpm_synced = True
+                    log_event("INFO", f"⚡ Đã tự động gán proxy WireGuard ({wireproxy_url}) cho GPM profile {gpm_id}")
+        elif cleaned_country == "NONE" or not cleaned_country:
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("UPDATE gpm_profiles SET raw_proxy = '' WHERE gpm_id = ?", (gpm_id,))
+            conn.commit()
+            conn.close()
+
+            gpm_client.update_profile_proxy(gpm_id, "")
+            gpm_synced = True
+            log_event("INFO", f"🌐 Đã gỡ bỏ proxy cho GPM profile {gpm_id} (Dùng Direct IP)")
+    except Exception as e:
+        log_event("WARNING", f"Lỗi gán proxy WireGuard: {e}")
+
+    log_event("INFO", f"Đã cập nhật quốc gia {cleaned_country} cho GPM profile {gpm_id}")
+    return {
+        "status": "success",
+        "gpm_id": gpm_id,
+        "country": cleaned_country,
+        "wireproxy_assigned": wireproxy_assigned,
+        "gpm_synced": gpm_synced,
+        "proxy_url": wireproxy_url
+    }
+
+@app.post("/api/vpn/wireproxy/batch-assign")
+def batch_assign_wireproxy(req: BatchAssignCountryRequest):
+    country = (req.country or "").strip().upper()
+    if not country:
+        raise HTTPException(status_code=400, detail="Mã quốc gia không được để trống")
+
+    from backend.modules.wireproxy_manager import wireproxy_manager
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    success_count = 0
+    gpm_updated = 0
+    assigned_proxies = []
+
+    for gid in req.gpm_ids:
+        proxy_url = wireproxy_manager.get_proxy_for_country(country) if country != "NONE" else ""
+        cursor.execute("UPDATE gpm_profiles SET country = ?, raw_proxy = ? WHERE gpm_id = ?", (country, proxy_url, gid))
+        success_count += 1
+        if proxy_url or country == "NONE":
+            if gpm_client.update_profile_proxy(gid, proxy_url):
+                gpm_updated += 1
+        if proxy_url:
+            assigned_proxies.append(proxy_url)
+
+    conn.commit()
+    conn.close()
+
+    log_event("INFO", f"Đã gán quốc gia {country} cho {success_count} profiles (GPMLogin đã đồng bộ: {gpm_updated})")
+    return {
+        "status": "success",
+        "total_assigned": success_count,
+        "gpm_synced": gpm_updated,
+        "country": country,
+        "sample_proxy": assigned_proxies[0] if assigned_proxies else ""
+    }
+
+@app.get("/api/vpn/wireproxy/status")
+def get_wireproxy_status():
+    from backend.modules.wireproxy_manager import wireproxy_manager
+    from backend.config import VPN_CONFIGS_DIR
+    configs = [f.name for f in VPN_CONFIGS_DIR.glob("*.conf")]
+    return {
+        "active_proxies": wireproxy_manager.get_status(),
+        "config_files": configs,
+        "config_folder": str(VPN_CONFIGS_DIR),
+        "total_configs": len(configs)
+    }
+
+@app.post("/api/vpn/wireproxy/rescan")
+def rescan_wireproxy():
+    from backend.modules.wireproxy_manager import wireproxy_manager
+    return wireproxy_manager.start_all()
+
+@app.delete("/api/vpn/wireproxy/{proxy_id}")
+@app.post("/api/vpn/wireproxy/delete/{proxy_id}")
+def delete_wireproxy(proxy_id: str):
+    from backend.modules.wireproxy_manager import wireproxy_manager
+    meta = wireproxy_manager.proxies.get(proxy_id)
+    old_proxy_url = meta.get("proxy_url") if meta else None
+
+    res = wireproxy_manager.delete_proxy(proxy_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Lỗi xoá proxy"))
+
+    if old_proxy_url:
+        try:
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT gpm_id, country FROM gpm_profiles WHERE raw_proxy = ?", (old_proxy_url,))
+            affected = c.fetchall()
+            for row in affected:
+                gid = row["gpm_id"]
+                cntry = row["country"]
+                new_proxy = wireproxy_manager.get_proxy_for_country(cntry) if cntry else None
+                if new_proxy:
+                    c.execute("UPDATE gpm_profiles SET raw_proxy = ? WHERE gpm_id = ?", (new_proxy, gid))
+                    gpm_client.update_profile_proxy(gid, new_proxy)
+                else:
+                    c.execute("UPDATE gpm_profiles SET raw_proxy = NULL, country = NULL WHERE gpm_id = ?", (gid,))
+                    gpm_client.update_profile_proxy(gid, "")
+            conn.commit()
+            conn.close()
+        except Exception as db_err:
+            log_event("WARNING", f"Lỗi cập nhật profile sau khi xoá proxy: {db_err}")
+
+    return res
+
+@app.post("/api/vpn/wireproxy/test/{country}")
+def test_wireproxy_country(country: str):
+    from backend.modules.wireproxy_manager import wireproxy_manager
+    return wireproxy_manager.test_proxy(country)
+
+@app.post("/api/vpn/wireproxy/open-folder")
+def open_wireproxy_folder():
+    from backend.config import VPN_CONFIGS_DIR
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(VPN_CONFIGS_DIR))
+        return {"status": "success", "folder": str(VPN_CONFIGS_DIR)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/profiles/{gpm_id}/proton-vpn")
+def connect_profile_proton_vpn(gpm_id: str, req: Optional[ConnectProtonVpnRequest] = None):
+    country = (req.country if req else "") or ""
+    keep_open = req.keep_browser_open if req else True
+
+    if not country:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT country FROM gpm_profiles WHERE gpm_id = ?", (gpm_id,))
+        row = cur.fetchone()
+        conn.close()
+        if row and row["country"]:
+            country = row["country"]
+        else:
+            country = "US"
+
+    from backend.modules.proton_vpn_controller import proton_vpn_controller
+    res = proton_vpn_controller.connect_profile_vpn(gpm_id, country, keep_browser_open=keep_open)
+    return res
 
 @app.put("/api/profiles/{gpm_id}/notify-status")
 @app.post("/api/profiles/{gpm_id}/notify-status")
@@ -3548,6 +3788,92 @@ def update_profile_notify_status(gpm_id: str, req: UpdateProfileNotifyStatusRequ
     label = status_labels.get(status, status)
     log_event("INFO", f"Đã cập nhật trạng thái theo dõi 10K cho profile '{profile_name}' thành: {label}")
     return {"status": "success", "gpm_id": gpm_id, "notify_status": status, "label": label}
+
+@app.put("/api/profiles/{gpm_id}/creator-program")
+@app.post("/api/profiles/{gpm_id}/creator-program")
+def update_profile_creator_program(gpm_id: str, req: UpdateCreatorProgramRequest):
+    valid_statuses = {"active", "banned", "not_enrolled", "ineligible", "unknown"}
+    status = (req.status or "").strip().lower()
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Trạng thái Creator Program không hợp lệ")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM gpm_profiles WHERE gpm_id = ?", (gpm_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile GPMLogin")
+
+    profile_name = row["name"]
+    cursor.execute("UPDATE gpm_profiles SET creator_program = ? WHERE gpm_id = ?", (status, gpm_id))
+    conn.commit()
+    conn.close()
+    log_event("INFO", f"Đã cập nhật trạng thái Creator Program cho profile '{profile_name}' thành: {status}")
+    return {"status": "success", "gpm_id": gpm_id, "creator_program": status}
+
+class SyncProfileVideosRequest(BaseModel):
+    videos: List[Dict[str, Any]]
+
+@app.put("/api/profiles/{gpm_id}/flop-status")
+@app.post("/api/profiles/{gpm_id}/flop-status")
+def update_profile_flop_status(gpm_id: str, req: UpdateFlopStatusRequest):
+    valid_statuses = {"0_view", "200_view", "good", "unstable", "new"}
+    status = (req.status or "").strip().lower()
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Trạng thái Flop không hợp lệ (0_view, 200_view, good, unstable, new)")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM gpm_profiles WHERE gpm_id = ?", (gpm_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile GPMLogin")
+
+    profile_name = row["name"]
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        UPDATE gpm_profiles SET
+            flop_status = ?,
+            flop_since = ?,
+            consecutive_0_count = 0,
+            flop_recovering = 0
+        WHERE gpm_id = ?
+    """, (status, now_str, gpm_id))
+    conn.commit()
+    conn.close()
+    log_event("INFO", f"Đã cập nhật tình trạng Flop thủ công cho profile '{profile_name}' thành: {status}")
+    return {"status": "success", "gpm_id": gpm_id, "flop_status": status, "flop_since": now_str}
+
+@app.post("/api/profiles/{gpm_id}/sync-videos")
+def sync_profile_videos_endpoint(gpm_id: str, req: SyncProfileVideosRequest):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM gpm_profiles WHERE gpm_id = ?", (gpm_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile GPMLogin")
+
+    from backend.modules.channel_evaluator import upsert_profile_videos, recalculate_profile_flop
+    inserted = upsert_profile_videos(row["id"], req.videos)
+    eval_res = recalculate_profile_flop(row["id"])
+    return {"status": "success", "profile_name": row["name"], "synced_videos": inserted, "evaluation": eval_res}
+
+@app.post("/api/profiles/{gpm_id}/recalculate-flop")
+def recalculate_profile_flop_endpoint(gpm_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM gpm_profiles WHERE gpm_id = ?", (gpm_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile GPMLogin")
+
+    from backend.modules.channel_evaluator import recalculate_profile_flop
+    eval_res = recalculate_profile_flop(row["id"])
+    return {"status": "success", "profile_name": row["name"], "evaluation": eval_res}
 
 @app.get("/api/settings/follower-scheduler")
 def get_follower_scheduler_settings():
@@ -3839,7 +4165,7 @@ def test_specific_telegram_channel(channel_id: int, mode: Optional[str] = "conne
     types_str = "\n".join([f"• {t}" for t in types_active]) if types_active else "• (Chưa bật loại thông báo nào)"
 
     msg = (
-        "🔔 *[SHORTSSTACK] KIỂM TRA KẾT NỐI KÊNH THÀNH CÔNG!*\n"
+        "🔔 *[CLIPFLOW] KIỂM TRA KẾT NỐI KÊNH THÀNH CÔNG!*\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📢 *Tên Kênh:* `{row['name']}`\n"
         f"🆔 *Chat ID:* `{row['chat_id']}`\n"
@@ -3848,7 +4174,7 @@ def test_specific_telegram_channel(channel_id: int, mode: Optional[str] = "conne
         "📋 *Loại thông báo đang đăng ký nhận:*\n"
         f"{types_str}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "✅ Kênh này đã sẵn sàng hoạt động cùng ShortsStack Auto-Pilot!"
+        "✅ Kênh này đã sẵn sàng hoạt động cùng ClipFlow Auto-Pilot!"
     )
     ok, err_msg = notifier.send_message_to_chat(bot_token, row["chat_id"], msg)
     if ok:
@@ -3991,10 +4317,13 @@ def get_api_keys():
     sub_pos = os.getenv("SUBTITLE_POSITION", db_settings.get("SUBTITLE_POSITION", getattr(cfg, 'SUBTITLE_POSITION', 'center')))
     sub_size = int(os.getenv("SUBTITLE_FONT_SIZE", db_settings.get("SUBTITLE_FONT_SIZE", getattr(cfg, 'SUBTITLE_FONT_SIZE', 54))))
 
+    from backend.modules.ai_addon.llm_curator import llm_curator
     pool_status = yt_scanner.key_pool.get_keys_status()
+    ai_pools = llm_curator.get_pool_status()
     return {
         "youtube_api_keys": raw,
         "youtube_key_pool": pool_status,
+        "ai_key_pools": ai_pools,
         "deepseek_api_key": deepseek,
         "gemini_api_key": gemini,
         "gemini_base_url": gemini_base_url,
@@ -4025,6 +4354,7 @@ def get_api_keys():
         "follower_threshold_tiktok": thresholds["tiktok"],
         "follower_threshold_youtube": thresholds["youtube"],
         "follower_threshold_facebook": thresholds["facebook"],
+        "invisible_browser_automation": os.getenv("INVISIBLE_BROWSER_AUTOMATION", db_settings.get("INVISIBLE_BROWSER_AUTOMATION", "true")).lower() in ("true", "1", "yes"),
     }
 
 @app.post("/api/settings/keys")
@@ -4042,13 +4372,16 @@ def save_api_keys(req: SaveApiKeysRequest):
         updates["YOUTUBE_API_KEY"] = raw
         updates["YOUTUBE_API_KEYS"] = raw
     if req.deepseek_api_key is not None:
-        updates["DEEPSEEK_API_KEY"] = req.deepseek_api_key.strip()
+        ds_keys = [k.strip() for k in req.deepseek_api_key.replace(";", ",").replace("\n", ",").split(",") if k.strip()]
+        updates["DEEPSEEK_API_KEY"] = ",".join(ds_keys)
     if req.gemini_api_key is not None:
-        updates["GEMINI_API_KEY"] = req.gemini_api_key.strip()
+        gem_keys = [k.strip() for k in req.gemini_api_key.replace(";", ",").replace("\n", ",").split(",") if k.strip()]
+        updates["GEMINI_API_KEY"] = ",".join(gem_keys)
     if req.gemini_base_url is not None:
         updates["GEMINI_BASE_URL"] = req.gemini_base_url.strip().rstrip("/")
     if req.openai_api_key is not None:
-        updates["OPENAI_API_KEY"] = req.openai_api_key.strip()
+        oai_keys = [k.strip() for k in req.openai_api_key.replace(";", ",").replace("\n", ",").split(",") if k.strip()]
+        updates["OPENAI_API_KEY"] = ",".join(oai_keys)
     if req.pexels_api_key is not None:
         updates["PEXELS_API_KEY"] = req.pexels_api_key.strip()
     if req.pixabay_api_key is not None:
@@ -4104,6 +4437,8 @@ def save_api_keys(req: SaveApiKeysRequest):
         updates["follower_threshold_youtube"] = str(max(1, req.follower_threshold_youtube))
     if req.follower_threshold_facebook is not None:
         updates["follower_threshold_facebook"] = str(max(1, req.follower_threshold_facebook))
+    if req.invisible_browser_automation is not None:
+        updates["INVISIBLE_BROWSER_AUTOMATION"] = "true" if req.invisible_browser_automation else "false"
 
     # 1. Save to .env file
     save_env_config(updates)
@@ -4126,6 +4461,15 @@ def save_api_keys(req: SaveApiKeysRequest):
     yt_scanner.reload_keys(updates.get("YOUTUBE_API_KEYS", ""))
     if "TELEGRAM_BOT_TOKEN" in updates:
         notifier.bot_token = updates["TELEGRAM_BOT_TOKEN"]
+
+    # Tự động đồng bộ Key Pool cho các nhà cung cấp AI Cloud
+    from backend.modules.ai_addon.llm_curator import llm_curator
+    if "DEEPSEEK_API_KEY" in updates:
+        llm_curator.pools["deepseek"].update_keys(updates["DEEPSEEK_API_KEY"])
+    if "GEMINI_API_KEY" in updates:
+        llm_curator.pools["gemini"].update_keys(updates["GEMINI_API_KEY"])
+    if "OPENAI_API_KEY" in updates:
+        llm_curator.pools["openai"].update_keys(updates["OPENAI_API_KEY"])
     log_event("INFO", f"Đã cập nhật cấu hình API keys và lưu vào DB: {list(updates.keys())}")
     return {"status": "ok", "message": "Đã lưu cấu hình thành công", "pool_size": yt_scanner.key_pool.total_keys}
 
@@ -4326,6 +4670,19 @@ def test_youtube_key(req: TestApiKeyRequest):
     result = yt_scanner.test_key(req.key.strip())
     return result
 
+@app.post("/api/settings/test-ai-key")
+def test_ai_key_endpoint(req: TestAiKeyRequest):
+    if not req.key or not req.key.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng nhập API Key cần kiểm tra!")
+    from backend.modules.ai_addon.llm_curator import llm_curator
+    # Nếu người dùng nhập danh sách nhiều key, lấy key đầu tiên để kiểm tra kết nối
+    parsed = [k.strip() for k in req.key.replace(";", ",").replace("\n", ",").split(",") if k.strip()]
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Không tìm thấy API Key hợp lệ!")
+    first_key = parsed[0]
+    result = llm_curator.test_ai_key(req.provider, first_key, req.model)
+    return result
+
 _browse_folder_lock = threading.Lock()
 
 @app.post("/api/utils/browse-folder")
@@ -4346,7 +4703,7 @@ def browse_folder():
                 root.attributes("-topmost", True)
                 root.focus_force()
                 path = filedialog.askdirectory(
-                    title="Chọn thư mục lưu trữ video ShortsStack",
+                    title="Chọn thư mục lưu trữ video ClipFlow",
                     mustexist=False
                 )
                 root.destroy()
@@ -4697,6 +5054,21 @@ def on_startup():
             log_event("INFO", "Background Automation Scheduler đang ở trạng thái TẠM DỪNG theo thiết lập đã lưu.")
     except Exception as e:
         log_event("WARNING", f"Không thể tự khởi động Background Scheduler: {e}")
+
+    try:
+        # 3. Start WireGuard Proxies for ClipFlow profiles
+        from backend.modules.wireproxy_manager import wireproxy_manager
+        wireproxy_manager.start_all()
+    except Exception as wp_start_err:
+        log_event("WARNING", f"Không thể tự khởi động WireGuard Proxies: {wp_start_err}")
+
+@app.on_event("shutdown")
+def on_shutdown():
+    try:
+        from backend.modules.wireproxy_manager import wireproxy_manager
+        wireproxy_manager.stop_all()
+    except Exception:
+        pass
 
 # --- Static Frontend & Media Mount ---
 # Chỉ mount các thư mục media video cụ thể (downloads, rendered), bảo vệ SQLite DB và file logs (OWASP A01 / Broken Access Control)

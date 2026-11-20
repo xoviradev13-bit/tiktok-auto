@@ -101,34 +101,67 @@
 
                 <!-- Active Campaigns Section -->
                 <div class="glass-panel">
-                    <div class="panel-header">
+                    <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
                         <div>
-                            <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy
-                            </h3>
-                            <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick
-                                nhận bài</p>
+                            <h3><i class="fa-solid fa-layer-group text-primary"></i> Danh Sách Chiến Dịch Đang Chạy</h3>
+                            <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
                         </div>
-                        <div style="display:flex; gap:8px;">
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                             <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
-                                data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm
-                                Mới</button>
+                                data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
                             <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
-                                data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm
-                                Chiến Dịch</button>
+                                data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến Dịch</button>
+                        </div>
+                    </div>
+
+                    <!-- Toolbar: Tìm kiếm & Lọc chiến dịch -->
+                    <div class="table-toolbar mb-3" style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <div class="table-search-box" style="min-width: 280px;">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="searchCampaignKeyword" placeholder="Tìm tên chiến dịch, kênh nguồn, nick..." oninput="filterAndRenderCampaigns()">
+                            </div>
+                            <div class="sort-control">
+                                <label for="filterCampaignStatus"><i class="fa-solid fa-filter text-cyan"></i> Trạng thái:</label>
+                                <select id="filterCampaignStatus" class="custom-select" style="min-width: 140px;" onchange="filterAndRenderCampaigns()">
+                                    <option value="ALL" selected>Tất cả trạng thái</option>
+                                    <option value="ACTIVE">🟢 Đang kích hoạt</option>
+                                    <option value="PAUSED">⏸️ Tạm dừng</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="badge badge-info" id="badgeCampaignCount" style="font-size:12px; padding:6px 12px;">0 Chiến Dịch</span>
                         </div>
                     </div>
 
                     <div class="campaign-flow-grid" id="campaignsFlowGrid">
-                        <!-- Dynamic Campaign Cards rendered by app.js -->
+                        <!-- Dynamic Campaign Cards rendered by campaigns.js -->
                         <div class="card-empty-state">
                             <i class="fa-solid fa-robot"></i>
                             <h4>Chưa có chiến dịch tự động nào</h4>
-                            <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick
-                                TikTok nhận video.</p>
+                            <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận video.</p>
                             <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()"
                                 style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
                                 <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Campaigns Pagination Bar -->
+                    <div id="campaignsPaginationBar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; padding: 14px 18px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 16px; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
+                            <span>Hiển thị</span>
+                            <select id="campaignsPageSizeSelect" class="custom-select" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 100px;" onchange="changeCampaignsPageSize(this.value)">
+                                <option value="5">5 / trang</option>
+                                <option value="10" selected>10 / trang</option>
+                                <option value="20">20 / trang</option>
+                                <option value="50">50 / trang</option>
+                                <option value="100">100 / trang</option>
+                            </select>
+                            <span id="campaignsPaginationInfo">0 chiến dịch</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;" id="campaignsPaginationNav">
                         </div>
                     </div>
                 </div>

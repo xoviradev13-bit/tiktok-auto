@@ -556,7 +556,7 @@ async function loadVideoLibraryTable() {
         const res = await fetch('/api/v2/videos/library?limit=300');
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
-            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation me-1"></i> Lỗi tải danh sách video: ${escapeHtml(errData.detail || res.statusText)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation me-1"></i> Lỗi tải danh sách video: ${escapeHtml(errData.detail || res.statusText)}</td></tr>`;
             return;
         }
         const data = await res.json();
@@ -565,7 +565,7 @@ async function loadVideoLibraryTable() {
     } catch (e) {
         console.error('Lỗi tải video library:', e);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-circle-exclamation me-1"></i> Lỗi kết nối: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-circle-exclamation me-1"></i> Lỗi kết nối: ${e.message}</td></tr>`;
         }
     }
 }
@@ -579,24 +579,13 @@ function filterVideoLibrary(resetPage = false) {
     }
 
     const searchInput = document.getElementById('videoLibSearchInput');
-    const platformFilter = document.getElementById('videoLibPlatformFilter');
     const statusFilter = document.getElementById('videoLibStatusFilter');
     const countBadge = document.getElementById('videoLibCountBadge');
 
     const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
-    const plat = (platformFilter ? platformFilter.value : '').trim().toLowerCase();
     const st = (statusFilter ? statusFilter.value : '').trim().toLowerCase();
 
     const filtered = allLibraryVideos.filter(v => {
-        // Lọc nền tảng
-        if (plat) {
-            const vPlat = (v.platform || '').toLowerCase();
-            if (plat === 'xiaohongshu' || plat === 'rednote') {
-                if (vPlat !== 'xiaohongshu' && vPlat !== 'rednote') return false;
-            } else if (vPlat !== plat) {
-                return false;
-            }
-        }
         // Lọc trạng thái
         if (st && (v.status || '').toLowerCase() !== st) {
             return false;
@@ -660,7 +649,7 @@ function filterVideoLibrary(resetPage = false) {
     }
 
     if (pagedVideos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-film" style="margin-right:6px;"></i> Không tìm thấy video nào phù hợp với bộ lọc tìm kiếm.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-film" style="margin-right:6px;"></i> Không tìm thấy video nào phù hợp với bộ lọc tìm kiếm.</td></tr>`;
         return;
     }
 
@@ -687,7 +676,6 @@ function filterVideoLibrary(resetPage = false) {
                 ? `<span class="badge" style="background:rgba(239, 68, 68, 0.15); color:#f87171; border:1px solid rgba(239, 68, 68, 0.3); font-size:11px; white-space:nowrap;" title="${escapeHtml(sourceText)}"><i class="fa-brands fa-youtube" style="margin-right:4px;"></i>${escapeHtml(sourceText)}</span>`
                 : `<span class="badge" style="background:rgba(245, 158, 11, 0.15); color:#fbbf24; border:1px solid rgba(245, 158, 11, 0.3); font-size:11px; white-space:nowrap;"><i class="fa-solid fa-folder" style="margin-right:4px;"></i>${escapeHtml(sourceText)}</span>`;
 
-        const platformBadge = getPlatformBadge(v.platform);
         const vKey = String(v.yt_video_id || v.id || '');
         const timeFormatted = formatDateTime(v.created_at);
 
@@ -715,7 +703,6 @@ function filterVideoLibrary(resetPage = false) {
                         </button>
                     </div>
                 </td>
-                <td>${platformBadge}</td>
                 <td>${sourceBadge}</td>
                 <td style="color:var(--text-primary); font-size:12px; font-weight:500; white-space:nowrap;">${v.size_mb ? v.size_mb + ' MB' : (v.duration ? v.duration + 's' : 'N/A')}</td>
                 <td style="color:var(--text-muted); font-size:11.5px; white-space:nowrap;">${escapeHtml(timeFormatted)}</td>

@@ -936,8 +936,8 @@ function switchTab(tabId) {
                 sub: 'Tùy chỉnh mẫu cắt >60s chuẩn Quỹ Beta & xem trước trực tiếp trên điện thoại mô phỏng'
             },
             'tab-video-manager': {
-                title: 'Quản Lý Video & Tải Đa Nền Tảng',
-                sub: 'Tải video sạch không watermark từ 7 nền tảng, nạp kho video cục bộ & quản lý thư viện video'
+                title: 'Quản Lý Video',
+                sub: 'Quản lý kho video đã tải từ các kênh YouTube nguồn và thư viện video sẵn sàng xử lý & đăng bài'
             },
             'tab-elevenlabs': {
                 title: 'Phòng Thu Giọng Đọc ElevenLabs AI',
@@ -948,8 +948,8 @@ function switchTab(tabId) {
                 sub: 'Theo dõi nguồn RSS chất lượng cao và quét từ khóa tự động tìm kênh mới'
             },
             'tab-gpm-farm': {
-                title: 'Dàn Tài Khoản Đa Nền Tảng',
-                sub: 'Quản lý profile, theo dõi tăng trưởng follower và cấu hình thông báo Telegram'
+                title: 'Quản Lý Dàn Profile',
+                sub: 'Quản lý dàn profile TikTok, tự động trích xuất follower và upload video'
             },
             'tab-overview': {
                 title: 'Bảng Điều Khiển Tổng Quan',
@@ -3207,3 +3207,102 @@ window.showConfirmDialog = showConfirmDialog;
 window.showToast = showToast;
 window.escapeHtml = escapeHtml;
 window.copyTextToClipboard = copyTextToClipboard;
+
+// Floating Audio Preview Dock
+let currentPreviewAudio = null;
+let currentPreviewMode = null;
+let currentPlayingBtnId = null;
+
+function updateAudioPreviewDockState(isPlaying, updatedTitle) {
+    const playPauseBtn = document.getElementById('btnDockPlayPause');
+    const eq = document.getElementById('audioDockEqualizer');
+    const titleEl = document.getElementById('audioDockTitle');
+
+    if (updatedTitle && titleEl) {
+        titleEl.textContent = updatedTitle;
+        titleEl.title = updatedTitle;
+    }
+
+    if (playPauseBtn) {
+        playPauseBtn.innerHTML = isPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+    }
+    if (eq) {
+        if (isPlaying) eq.classList.remove('paused');
+        else eq.classList.add('paused');
+    }
+}
+
+function stopAudioPreview() {
+    if (currentPreviewAudio) {
+        currentPreviewAudio.pause();
+        currentPreviewAudio.src = '';
+        currentPreviewAudio = null;
+    }
+    const ytContainer = document.getElementById('audioDockYtContainer');
+    if (ytContainer) ytContainer.innerHTML = '';
+
+    if (currentPlayingBtnId) {
+        const btn = document.getElementById(currentPlayingBtnId);
+        if (btn) {
+            btn.classList.remove('playing');
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        }
+        currentPlayingBtnId = null;
+    }
+
+    currentPreviewMode = null;
+    const dock = document.getElementById('audioPreviewDock');
+    if (dock) dock.style.display = 'none';
+}
+
+function toggleDockPlayPause() {
+    const playPauseBtn = document.getElementById('btnDockPlayPause');
+    const rowBtn = currentPlayingBtnId ? document.getElementById(currentPlayingBtnId) : null;
+
+    if (currentPreviewMode === 'html5' && currentPreviewAudio) {
+        if (currentPreviewAudio.paused) {
+            currentPreviewAudio.play().then(() => {
+                updateAudioPreviewDockState(true);
+                if (rowBtn) {
+                    rowBtn.classList.add('playing');
+                    rowBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                }
+            }).catch(e => showToast('Không thể tiếp tục phát: ' + e.message, true));
+        } else {
+            currentPreviewAudio.pause();
+            updateAudioPreviewDockState(false);
+            if (rowBtn) {
+                rowBtn.classList.remove('playing');
+                rowBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            }
+        }
+    } else if (currentPreviewMode === 'iframe') {
+        const iframe = document.getElementById('ytAudioPreviewIframe');
+        const isPaused = playPauseBtn && playPauseBtn.innerHTML.includes('fa-play');
+
+        if (isPaused) {
+            iframe?.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+            updateAudioPreviewDockState(true);
+            if (rowBtn) {
+                rowBtn.classList.add('playing');
+                rowBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            }
+        } else {
+            iframe?.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+            updateAudioPreviewDockState(false);
+            if (rowBtn) {
+                rowBtn.classList.remove('playing');
+                rowBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            }
+        }
+    }
+}
+
+function closeAudioPreviewDock() {
+    stopAudioPreview();
+}
+
+window.toggleDockPlayPause = toggleDockPlayPause;
+window.closeAudioPreviewDock = closeAudioPreviewDock;
+window.stopAudioPreview = stopAudioPreview;
+window.updateAudioPreviewDockState = updateAudioPreviewDockState;

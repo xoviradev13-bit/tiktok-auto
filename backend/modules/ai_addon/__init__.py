@@ -1,5 +1,5 @@
 """
-AI Add-on Module for ShortsStack
+AI Add-on Module for ClipFlow
 Includes:
 - LLM Curation (DeepSeek, Gemini, OpenAI)
 - Speech-to-Text Transcription (faster-whisper)

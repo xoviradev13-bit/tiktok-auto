@@ -177,12 +177,25 @@ def init_db():
     # Migration columns cho gpm_profiles nếu chưa có
     cursor.execute("PRAGMA table_info(gpm_profiles)")
     existing_gpm_cols = {row["name"] for row in cursor.fetchall()}
-    for col in ["tiktok_nickname", "tiktok_uid", "sec_uid", "browser_type", "platform", "channel_handle", "fb_page_id"]:
+    for col in ["tiktok_nickname", "tiktok_uid", "sec_uid", "browser_type", "platform", "channel_handle", "fb_page_id", "country", "creator_program", "flop_status", "flop_since", "flop_window_views"]:
         if col not in existing_gpm_cols:
             try:
                 cursor.execute(f"ALTER TABLE gpm_profiles ADD COLUMN {col} TEXT DEFAULT ''")
             except Exception:
                 pass
+    for col, col_type in [("is_breakout", "INTEGER DEFAULT 0"), ("flop_recovering", "INTEGER DEFAULT 0"), ("flop_median_views", "REAL DEFAULT 0.0"), ("consecutive_0_count", "INTEGER DEFAULT 0")]:
+        if col not in existing_gpm_cols:
+            try:
+                cursor.execute(f"ALTER TABLE gpm_profiles ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+    if "creator_program" not in existing_gpm_cols:
+        try:
+            # Khởi tạo mặc định: tài khoản >= 10k follower đặt active (chuẩn Beta), dưới 10k đặt ineligible
+            cursor.execute("UPDATE gpm_profiles SET creator_program = 'active' WHERE eligible_10k = 1 OR followers_count >= 10000")
+            cursor.execute("UPDATE gpm_profiles SET creator_program = 'ineligible' WHERE followers_count < 10000 AND (creator_program IS NULL OR creator_program = '')")
+        except Exception:
+            pass
     if "status_reason" not in existing_gpm_cols:
         try:
             cursor.execute("ALTER TABLE gpm_profiles ADD COLUMN status_reason TEXT DEFAULT ''")
@@ -264,6 +277,24 @@ def init_db():
                 cursor.execute(f"ALTER TABLE upload_tasks ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+
+    # Bảng Danh sách Video chi tiết theo Profile (phục vụ Flop & Rolling Window Analysis)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS profile_videos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        gpm_profile_id INTEGER,
+        video_id_str TEXT,
+        title TEXT DEFAULT '',
+        views_count INTEGER DEFAULT 0,
+        likes_count INTEGER DEFAULT 0,
+        video_status TEXT DEFAULT 'published', -- published, under_review, restricted, removed
+        posted_at TEXT,
+        scraped_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (gpm_profile_id) REFERENCES gpm_profiles(id),
+        UNIQUE(gpm_profile_id, video_id_str)
+    )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_profile_videos_pid_posted ON profile_videos(gpm_profile_id, posted_at DESC)")
 
     # Bảng Nhật ký hệ thống (Logs)
     cursor.execute('''
@@ -394,6 +425,7 @@ def init_db():
         "min_post_interval_minutes": "INTEGER DEFAULT 60",
         "include_shorts": "INTEGER DEFAULT 1",
         "include_longform": "INTEGER DEFAULT 1",
+        "shorts_keep_original": "INTEGER DEFAULT 1",
         "disable_subtitle_for_shorts": "INTEGER DEFAULT 1",
         "subtitle_position": "TEXT DEFAULT 'center'",
         "auto_engagement_enabled": "INTEGER DEFAULT 0",

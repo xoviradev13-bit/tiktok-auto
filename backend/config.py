@@ -22,9 +22,12 @@ if getattr(sys, "frozen", False):
     _appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
     _legacy_dir = Path(_appdata) / "TikTok Auto Farm"
     _legacy_dir2 = Path(_appdata) / "ShortsFarm"
-    _new_dir = Path(_appdata) / "ShortsStack"
+    _legacy_dir3 = Path(_appdata) / "ShortsStack"
+    _new_dir = Path(_appdata) / "ClipFlow"
     if _new_dir.exists():
         DATA_DIR = _new_dir
+    elif _legacy_dir3.exists():
+        DATA_DIR = _legacy_dir3
     elif _legacy_dir2.exists():
         DATA_DIR = _legacy_dir2
     elif _legacy_dir.exists():
@@ -45,14 +48,27 @@ DOWNLOADS_DIR = DATA_DIR / "downloads"
 RENDERED_DIR = DATA_DIR / "rendered"
 LOGS_DIR = DATA_DIR / "logs"
 MUSIC_DIR = DATA_DIR / "music"
+VPN_CONFIGS_DIR = DATA_DIR / "vpn_configs"
+WIREPROXY_EXE = BASE_DIR / "tools" / "wireproxy" / "wireproxy.exe"
 LOG_FILE_PATH = LOGS_DIR / "app.log"
-DB_PATH = DATA_DIR / "shortsstack.db"
+DB_PATH = DATA_DIR / "clipflow.db"
+
+# Tự động di chuyển dữ liệu từ shortsstack.db nếu chưa có clipflow.db
+if not DB_PATH.exists():
+    _legacy_db = DATA_DIR / "shortsstack.db"
+    if _legacy_db.exists():
+        try:
+            import shutil
+            shutil.copy2(str(_legacy_db), str(DB_PATH))
+        except Exception:
+            DB_PATH = _legacy_db
 
 # Tự động tạo thư mục nếu chưa tồn tại
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 RENDERED_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+VPN_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Khởi tạo các thư mục chủ đề nhạc nền mặc định
 DEFAULT_BGM_THEMES = [

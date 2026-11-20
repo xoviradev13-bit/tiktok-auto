@@ -399,8 +399,11 @@ def fetch_account_info_from_gpm(profile_id: str, storage_path_hint: Optional[str
             except Exception:
                 pass
 
+        # Bước 1.5: Kiểm tra Creator Program (TikTok Beta / Creator Rewards)
+        creator_program = "ineligible" if followers < 10000 else "active"
+
         if is_logged_in and username:
-            log_event("INFO", f"✅ [GPMZeroRAM] {profile_id}: TikTok @{username} ({nickname}) - {followers:,} followers")
+            log_event("INFO", f"✅ [GPMZeroRAM] {profile_id}: TikTok @{username} ({nickname}) - {followers:,} followers (Creator Program: {creator_program})")
             return {
                 "found": True,
                 "is_logged_in": True,
@@ -414,6 +417,7 @@ def fetch_account_info_from_gpm(profile_id: str, storage_path_hint: Optional[str
                 "fb_page_id": "",
                 "followers": followers,
                 "views_7d": views_7d,
+                "creator_program": creator_program,
                 "source": "gpm_profile",
                 "message": f"OK: @{username} ({followers:,} followers)"
             }

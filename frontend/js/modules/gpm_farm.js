@@ -56,6 +56,10 @@ function resetGpmFilters() {
     gpmCurrentPage = 1;
     const sortSel = document.getElementById('sortGpmField');
     if (sortSel) sortSel.value = 'followers_count';
+    const filterCountry = document.getElementById('filterGpmCountry');
+    if (filterCountry) filterCountry.value = 'ALL';
+    const filterBeta = document.getElementById('filterGpmBeta');
+    if (filterBeta) filterBeta.value = 'ALL';
     const filter10k = document.getElementById('filterGpm10k');
     if (filter10k) filter10k.value = 'all';
     const filterNotify = document.getElementById('filterGpmNotify');
@@ -133,8 +137,31 @@ async function exportGpmProfilesCsv() {
             const ea = isProfileEligible(a) ? 1 : 0;
             const eb = isProfileEligible(b) ? 1 : 0;
             res = ea - eb;
+        } else if (gpmSortField === 'creator_program') {
+            const cpWeight = (p) => {
+                const s = (p.creator_program || (isProfileEligible(p) ? 'active' : 'ineligible')).toLowerCase();
+                if (s === 'active') return 4;
+                if (s === 'not_enrolled') return 3;
+                if (s === 'banned') return 2;
+                if (s === 'ineligible') return 1;
+                return 0;
+            };
+            res = cpWeight(a) - cpWeight(b);
+        } else if (gpmSortField === 'flop_status') {
+            const flopWeight = (p) => {
+                const s = (p.flop_status || 'new').toLowerCase();
+                if (s === 'good') return 5;
+                if (s === 'unstable') return 4;
+                if (s === 'new') return 3;
+                if (s === '200_view') return 2;
+                if (s === '0_view') return 1;
+                return 0;
+            };
+            res = flopWeight(a) - flopWeight(b);
         } else if (gpmSortField === 'notify_status') {
             res = (a.notify_status || 'tracking').localeCompare(b.notify_status || 'tracking');
+        } else if (gpmSortField === 'country') {
+            res = (a.country || '').localeCompare(b.country || '');
         } else if (gpmSortField === 'last_checked') {
             res = (a.last_checked || '').localeCompare(b.last_checked || '');
         }
@@ -175,15 +202,34 @@ function renderGpmProfilesTable() {
     const eligibleGrid = document.getElementById('eligibleCardsGrid');
     if (!tbody) return;
 
+    const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+    const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
     const filter10k = document.getElementById('filterGpm10k') ? document.getElementById('filterGpm10k').value : 'all';
     const filterNotify = document.getElementById('filterGpmNotify') ? document.getElementById('filterGpmNotify').value : 'all';
     const filterNick = document.getElementById('filterGpmNick') ? document.getElementById('filterGpmNick').value : 'all';
-    const filterPlatform = document.getElementById('filterAccountPlatform') ? document.getElementById('filterAccountPlatform').value : 'all';
-    const filterBrowser = document.getElementById('filterAccountBrowser') ? document.getElementById('filterAccountBrowser').value : 'all';
+    const filterPlatform = 'tiktok';
+    const filterBrowser = 'gpm';
     const keyword = (document.getElementById('searchGpmKeyword') ? document.getElementById('searchGpmKeyword').value : '').trim().toLowerCase();
 
     // Single-pass combined filter (eliminates 4 intermediate array allocations)
     let list = (cachedGpmProfiles || []).filter(p => {
+        // Only support TikTok platform
+        if ((p.platform || 'tiktok').toLowerCase() !== 'tiktok') return false;
+
+        // Country Filter
+        if (filterCountry !== 'ALL') {
+            const pCountry = (p.country || '').toUpperCase();
+            if (filterCountry === 'NONE') {
+                if (pCountry && pCountry !== 'NONE') return false;
+            } else {
+                if (pCountry !== filterCountry) return false;
+            }
+        }
+
+        // Beta Eligibility Filter
+        if (filterBeta === 'ELIGIBLE' && !isProfileEligible(p)) return false;
+        if (filterBeta === 'INELIGIBLE' && isProfileEligible(p)) return false;
+
         // 1. 10K Filter
         if (filter10k === '10k' && !isProfileEligible(p)) return false;
         if (filter10k === 'growing' && isProfileEligible(p)) return false;
@@ -229,22 +275,51 @@ function renderGpmProfilesTable() {
             const ea = isProfileEligible(a) ? 1 : 0;
             const eb = isProfileEligible(b) ? 1 : 0;
             res = ea - eb;
+        } else if (gpmSortField === 'creator_program') {
+            const cpWeight = (p) => {
+                const s = (p.creator_program || (isProfileEligible(p) ? 'active' : 'ineligible')).toLowerCase();
+                if (s === 'active') return 4;
+                if (s === 'not_enrolled') return 3;
+                if (s === 'banned') return 2;
+                if (s === 'ineligible') return 1;
+                return 0;
+            };
+            res = cpWeight(a) - cpWeight(b);
+        } else if (gpmSortField === 'flop_status') {
+            const flopWeight = (p) => {
+                const s = (p.flop_status || 'new').toLowerCase();
+                if (s === 'good') return 5;
+                if (s === 'unstable') return 4;
+                if (s === 'new') return 3;
+                if (s === '200_view') return 2;
+                if (s === '0_view') return 1;
+                return 0;
+            };
+            res = flopWeight(a) - flopWeight(b);
         } else if (gpmSortField === 'notify_status') {
             res = (a.notify_status || 'tracking').localeCompare(b.notify_status || 'tracking');
+        } else if (gpmSortField === 'country') {
+            res = (a.country || '').localeCompare(b.country || '');
         } else if (gpmSortField === 'last_checked') {
             res = (a.last_checked || '').localeCompare(b.last_checked || '');
         }
         return gpmSortDirection === 'asc' ? res : -res;
     });
 
-    // Cập nhật badge số lượng
+    // Cập nhật badge số lượng (Hiển thị tổng số tài khoản không giới hạn)
     const badgeCount = document.getElementById('badgeGpmCount');
     if (badgeCount) {
-        badgeCount.textContent = `${list.length}/${cachedGpmProfiles.length} Profile`;
+        if (!cachedGpmProfiles || cachedGpmProfiles.length === 0) {
+            badgeCount.textContent = '0 Profile';
+        } else if (list.length === cachedGpmProfiles.length) {
+            badgeCount.textContent = `${cachedGpmProfiles.length.toLocaleString('vi-VN')} Profile`;
+        } else {
+            badgeCount.textContent = `${list.length.toLocaleString('vi-VN')} / ${cachedGpmProfiles.length.toLocaleString('vi-VN')} Profile`;
+        }
     }
 
     // Cập nhật icon sort trên header
-    ['name', 'tiktok_username', 'followers_count', 'eligible_10k', 'notify_status'].forEach(f => {
+    ['name', 'tiktok_username', 'followers_count', 'eligible_10k', 'creator_program', 'flop_status', 'notify_status'].forEach(f => {
         const th = document.getElementById(`th-gpm-${f}`);
         if (!th) return;
         const icon = th.querySelector('.sort-icon');
@@ -300,7 +375,7 @@ function renderGpmProfilesTable() {
     }
 
     if (pagedList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open" style="font-size: 24px; opacity: 0.3; display: block; margin-bottom: 8px;"></i>Không tìm thấy profile nào phù hợp với bộ lọc.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open" style="font-size: 24px; opacity: 0.3; display: block; margin-bottom: 8px;"></i>Không tìm thấy profile nào phù hợp với bộ lọc.</td></tr>`;
     } else {
         tbody.innerHTML = pagedList.map(p => {
             const plat = (p.platform || 'tiktok').toLowerCase();
@@ -463,7 +538,7 @@ function renderGpmProfilesTable() {
                             <a href="https://www.tiktok.com/@${escapeHtml(p.tiktok_username)}" target="_blank" class="table-text-truncate" style="max-width:150px; color:var(--accent-cyan); font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:4px;" title="@${escapeHtml(p.tiktok_username)}${p.tiktok_uid ? ' (UID: ' + escapeHtml(p.tiktok_uid) + ')' : ''}">
                                 <i class="fa-brands fa-tiktok" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@${escapeHtml(p.tiktok_username)}</span>
                             </a>
-                            <button type="button" class="btn-inline-edit has-tooltip tooltip-top" onclick="openEditUsernameModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(p.tiktok_username || '')}', ${p.followers_count || 0}, '${escapeHtml(p.tiktok_nickname || '')}', '${escapeHtml(p.browser_type || 'gpm')}', 'tiktok')" data-tooltip="Sửa nick &amp; chỉ số">
+                            <button type="button" class="btn-inline-edit has-tooltip tooltip-top" onclick="openEditUsernameModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(p.tiktok_username || '')}', ${p.followers_count || 0}, '${escapeHtml(p.tiktok_nickname || '')}', '${escapeHtml(p.browser_type || 'gpm')}', 'tiktok', null, '${escapeHtml(p.country || 'US')}')" data-tooltip="Sửa nick &amp; chỉ số">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
                         </div>
@@ -507,6 +582,53 @@ function renderGpmProfilesTable() {
                 notifyBadge = `<span class="badge badge-tracking badge-interactive has-tooltip tooltip-top" onclick="cycleProfileNotifyStatus('${escapeHtml(p.gpm_id)}', '${nStatus}')" data-tooltip="Đang theo dõi (gửi Telegram khi đạt chỉ tiêu: ${thSummary}). Bấm để bỏ theo dõi"><i class="fa-solid fa-bell"></i> Đang theo dõi</span>`;
             }
 
+            // Creator Program Status (TikTok Beta / Creator Rewards Program)
+            const cpStatus = (p.creator_program || (isEligible ? 'active' : 'ineligible')).toLowerCase();
+            let creatorProgramBadge = '';
+            if (cpStatus === 'active') {
+                creatorProgramBadge = `<span class="badge badge-success badge-interactive has-tooltip tooltip-top" onclick="cycleCreatorProgramStatus('${escapeHtml(p.gpm_id)}', '${cpStatus}')" data-tooltip="Đã bật chương trình Creator Rewards (Bấm để đổi trạng thái)"><i class="fa-solid fa-circle-check"></i> Đã Bật</span>`;
+            } else if (cpStatus === 'banned') {
+                creatorProgramBadge = `<span class="badge badge-banned badge-interactive has-tooltip tooltip-top" onclick="cycleCreatorProgramStatus('${escapeHtml(p.gpm_id)}', '${cpStatus}')" data-tooltip="Bị ngừng chương trình TikTok Beta (Bấm để đổi trạng thái)"><i class="fa-solid fa-triangle-exclamation"></i> Bị Ngừng</span>`;
+            } else if (cpStatus === 'not_enrolled') {
+                creatorProgramBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleCreatorProgramStatus('${escapeHtml(p.gpm_id)}', '${cpStatus}')" style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid rgba(234,179,8,0.3); font-weight:700;" data-tooltip="Đủ 10K followers nhưng chưa tham gia Creator Rewards (Bấm để đổi)"><i class="fa-solid fa-circle-pause"></i> Chưa Bật</span>`;
+            } else if (cpStatus === 'ineligible') {
+                creatorProgramBadge = `<span class="badge has-tooltip tooltip-top" onclick="cycleCreatorProgramStatus('${escapeHtml(p.gpm_id)}', '${cpStatus}')" style="background:rgba(148,163,184,0.12); color:#94a3b8; border:1px solid rgba(148,163,184,0.25); cursor:pointer;" data-tooltip="Chưa đủ điều kiện tham gia (&lt; 10,000 followers)"><i class="fa-solid fa-minus"></i> Chưa Đủ ĐK</span>`;
+            } else {
+                creatorProgramBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleCreatorProgramStatus('${escapeHtml(p.gpm_id)}', '${cpStatus}')" style="background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.2);" data-tooltip="Chưa quét trạng thái Creator Program (Bấm để đổi)"><i class="fa-regular fa-circle-question"></i> Chưa Quét</span>`;
+            }
+
+            // Tình Trạng Kênh (Hiệu Suất / Flop Status)
+            const fStatus = (p.flop_status || 'new').toLowerCase();
+            const totPosts = p.total_posts || 0;
+            const avgViews = p.avg_views || 0;
+            const maxViews = p.max_views || 0;
+            const medViews = p.flop_median_views || 0;
+            const windowViews = Array.isArray(p.flop_window_views) ? p.flop_window_views : [];
+            const windowViewsStr = windowViews.length > 0
+                ? `Cửa sổ 72h (${windowViews.length} clip): [${windowViews.map(v => Number(v).toLocaleString() + 'v').join(', ')}] | Trung vị: ${medViews.toLocaleString()}v`
+                : 'Chưa có đủ clip đã qua 24h';
+            const postStatsHint = `${windowViewsStr} | Trọn đời: ${totPosts} clip (Max: ${maxViews.toLocaleString()}v, TB: ${avgViews.toLocaleString()}v)${p.flop_since ? ` | Từ: ${p.flop_since}` : ''}`;
+
+            let flopBadge = '';
+            if (fStatus === '0_view') {
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(239,68,68,0.18); color:#ef4444; border:1px solid rgba(239,68,68,0.35); font-weight:700;" data-tooltip="🚨 0-View Flop (${escapeHtml(postStatsHint)}). Nghi ngờ Shadowban/IP bẩn. Bấm để đổi"><i class="fa-solid fa-triangle-exclamation"></i> 0-View Flop</span>`;
+            } else if (fStatus === '200_view') {
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(245,158,11,0.18); color:#f59e0b; border:1px solid rgba(245,158,11,0.35); font-weight:700;" data-tooltip="⚠️ Kẹt 200 View (${escapeHtml(postStatsHint)}). Cần đổi công thức Hook/Split-screen. Bấm để đổi"><i class="fa-solid fa-circle-exclamation"></i> Kẹt 200v</span>`;
+            } else if (fStatus === 'unstable') {
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(234,179,8,0.18); color:#eab308; border:1px solid rgba(234,179,8,0.35); font-weight:700;" data-tooltip="🟡 Không Ổn Định (${escapeHtml(postStatsHint)}). Lượt view chênh lệch cao hoặc tỷ lệ 0-view cao. Bấm để đổi"><i class="fa-solid fa-chart-line"></i> Không Ổn Định</span>`;
+            } else if (fStatus === 'good') {
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(34,197,94,0.18); color:#22c55e; border:1px solid rgba(34,197,94,0.35); font-weight:700;" data-tooltip="🚀 Phát Triển Tốt (${escapeHtml(postStatsHint)}). View/Follower tăng trưởng tốt. Bấm để đổi"><i class="fa-solid fa-rocket"></i> Khỏe / Lên</span>`;
+            } else {
+                flopBadge = `<span class="badge badge-interactive has-tooltip tooltip-top" onclick="cycleFlopStatus('${escapeHtml(p.gpm_id)}', '${fStatus}')" style="background:rgba(148,163,184,0.12); color:#94a3b8; border:1px solid rgba(148,163,184,0.25);" data-tooltip="🌱 Đang Nuôi (${escapeHtml(postStatsHint)}). Chưa đủ dữ liệu clip. Bấm để đổi"><i class="fa-solid fa-seedling"></i> Đang Nuôi</span>`;
+            }
+
+            if (p.is_breakout) {
+                flopBadge += ` <span class="badge has-tooltip tooltip-top" style="background:rgba(236,72,153,0.18); color:#f472b6; border:1px solid rgba(236,72,153,0.35); font-size:10px; padding:2px 5px;" data-tooltip="⚡ Breakout: Có video mới đăng bứt phá đạt ≥ 1,000 views!"><i class="fa-solid fa-bolt"></i> Breakout</span>`;
+            }
+            if (p.flop_recovering) {
+                flopBadge += ` <span class="badge has-tooltip tooltip-top" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px; padding:2px 5px;" data-tooltip="🔄 Đang Hồi Phục: Cần 2 clip liên tiếp > 300v để thoát trạng thái Flop"><i class="fa-solid fa-arrows-rotate"></i> Hồi Phục</span>`;
+            }
+
             const mainRowHtml = `
             <tr>
                 <td>
@@ -532,12 +654,55 @@ function renderGpmProfilesTable() {
                 <td>
                     ${(() => {
                     const plat = (p.platform || 'tiktok').toLowerCase();
-                    if (plat === 'youtube') return '<span class="badge" style="background:rgba(255,0,0,0.12); color:#ff4d4d; font-size:10px;"><i class="fa-brands fa-youtube"></i> YouTube</span>';
-                    if (plat === 'facebook') return '<span class="badge" style="background:rgba(24,119,242,0.12); color:#60a5fa; font-size:10px;"><i class="fa-brands fa-facebook"></i> Facebook</span>';
-                    return '<span class="badge" style="background:rgba(255,0,80,0.12); color:#ff0050; font-size:10px;"><i class="fa-brands fa-tiktok"></i> TikTok</span>';
+                    if (plat === 'youtube') return '<span class="badge" style="background:rgba(239,68,68,0.15); color:#f87171; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-youtube"></i> YouTube</span>';
+                    if (plat === 'facebook') return '<span class="badge" style="background:rgba(24,119,242,0.15); color:#60a5fa; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-facebook"></i> Facebook</span>';
+                    return '<span class="badge" style="background:rgba(255,0,80,0.12); color:#ff0050; font-size:11px; padding:3px 8px;"><i class="fa-brands fa-tiktok"></i> TikTok</span>';
                 })()}
                 </td>
                 <td>${usernameDisplay}</td>
+                <td>
+                    ${(() => {
+                    const cCode = (p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE';
+                    const countryOpts = [
+                        { code: 'NONE', flag: '🌐', name: 'Không dùng Proxy (Direct)' },
+                        { code: 'US', flag: '🇺🇸', name: 'US - Hoa Kỳ' },
+                        { code: 'GB', flag: '🇬🇧', name: 'GB - Vương Quốc Anh' },
+                        { code: 'DE', flag: '🇩🇪', name: 'DE - Đức' },
+                        { code: 'FR', flag: '🇫🇷', name: 'FR - Pháp' },
+                        { code: 'JP', flag: '🇯🇵', name: 'JP - Nhật Bản' },
+                        { code: 'KR', flag: '🇰🇷', name: 'KR - Hàn Quốc' },
+                        { code: 'CA', flag: '🇨🇦', name: 'CA - Canada' },
+                        { code: 'AU', flag: '🇦🇺', name: 'AU - Úc' },
+                        { code: 'SG', flag: '🇸🇬', name: 'SG - Singapore' },
+                        { code: 'NL', flag: '🇳🇱', name: 'NL - Hà Lan' },
+                        { code: 'MX', flag: '🇲🇽', name: 'MX - Mexico' },
+                        { code: 'ID', flag: '🇮🇩', name: 'ID - Indonesia' },
+                        { code: 'MY', flag: '🇲🇾', name: 'MY - Malaysia' },
+                        { code: 'PH', flag: '🇵🇭', name: 'PH - Philippines' },
+                        { code: 'VN', flag: '🇻🇳', name: 'VN - Việt Nam' }
+                    ];
+                    const isNone = cCode === 'NONE';
+                    const selBg = isNone ? 'rgba(100, 116, 139, 0.15)' : 'rgba(56, 189, 248, 0.12)';
+                    const selBorder = isNone ? 'rgba(148, 163, 184, 0.35)' : 'rgba(56, 189, 248, 0.4)';
+                    const selColor = isNone ? '#94a3b8' : '#38bdf8';
+                    const activeProxy = p.raw_proxy || '';
+                    const proxyHint = activeProxy
+                        ? `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:11px; font-family:monospace; color:var(--accent-cyan); margin-top:3px; display:flex; align-items:center; gap:4px; font-weight:600;"><i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8;"></i> ${escapeHtml(activeProxy.replace('socks5://', ''))}</div>`
+                        : `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:11px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6;"></i> Direct IP</div>`;
+                    return `
+                        <div style="display:flex; flex-direction:column; min-width:130px;">
+                            <select class="custom-select country-cell-select"
+                                id="cellCountry_${escapeHtml(p.gpm_id)}"
+                                onchange="onTableCountryChange('${escapeHtml(p.gpm_id)}', this.value)"
+                                title="Chọn quốc gia VPN cho profile này hoặc Không Dùng Proxy"
+                                style="height:30px; font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; background:${selBg}; border:1px solid ${selBorder}; color:${selColor}; cursor:pointer; width:100%;">
+                                ${countryOpts.map(opt => `<option value="${opt.code}" ${cCode === opt.code ? 'selected' : ''} style="background:#1e293b; color:#fff;">${opt.flag} ${opt.name}</option>`).join('')}
+                            </select>
+                            ${proxyHint}
+                        </div>
+                        `;
+                })()}
+                </td>
                 <td>${followersDisplay}</td>
                 <td>
                     ${(() => {
@@ -566,6 +731,8 @@ function renderGpmProfilesTable() {
                     }
                 })()}
                 </td>
+                <td>${creatorProgramBadge}</td>
+                <td>${flopBadge}</td>
                 <td>${notifyBadge}</td>
                 <td style="text-align: center;">
                     <div class="action-dropdown-wrap">
@@ -578,25 +745,12 @@ function renderGpmProfilesTable() {
                             <button type="button" class="action-dropdown-item" onclick="scanSingleProfileFollowers('${escapeHtml(p.gpm_id)}', this); closeAllActionMenus();">
                                 <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--accent-pink);"></i> Quét Follower ngay
                             </button>
-                            <button type="button" class="action-dropdown-item" onclick="openEditUsernameModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(p.tiktok_username || '')}', ${followersCount}, '${escapeHtml(p.tiktok_nickname || '')}', '${escapeHtml(p.browser_type || 'gpm')}', '${escapeHtml(plat)}'); closeAllActionMenus();">
+                            <button type="button" class="action-dropdown-item" onclick="openEditUsernameModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(p.tiktok_username || '')}', ${followersCount}, '${escapeHtml(p.tiktok_nickname || '')}', '${escapeHtml(p.browser_type || 'gpm')}', '${escapeHtml(plat)}', null, '${escapeHtml((p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE')}'); closeAllActionMenus();">
                                 <i class="fa-solid fa-pen-to-square" style="color:var(--accent-cyan);"></i> Sửa Nick & Chỉ số
                             </button>
-                            ${nStatus === 'tracking' ? `
-                            <button type="button" class="action-dropdown-item" onclick="setProfileNotifyStatus('${escapeHtml(p.gpm_id)}', 'muted'); closeAllActionMenus();">
-                                <i class="fa-solid fa-bell-slash" style="color:#94a3b8;"></i> Bỏ theo dõi tăng trưởng
+                            <button type="button" class="action-dropdown-item" id="btnActionVpn_${escapeHtml(p.gpm_id)}" onclick="onTableCountryChange('${escapeHtml(p.gpm_id)}', document.getElementById('cellCountry_${escapeHtml(p.gpm_id)}') ? document.getElementById('cellCountry_${escapeHtml(p.gpm_id)}').value : '${escapeHtml((p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE')}'); closeAllActionMenus();">
+                                <i class="fa-solid fa-shield-halved" style="color:#38bdf8;"></i> Đồng bộ Proxy
                             </button>
-                            <button type="button" class="action-dropdown-item" onclick="setProfileNotifyStatus('${escapeHtml(p.gpm_id)}', 'sent'); closeAllActionMenus();">
-                                <i class="fa-solid fa-circle-check" style="color:#60a5fa;"></i> Đánh dấu đã gửi
-                            </button>` : nStatus === 'sent' ? `
-                            <button type="button" class="action-dropdown-item" onclick="setProfileNotifyStatus('${escapeHtml(p.gpm_id)}', 'tracking'); closeAllActionMenus();">
-                                <i class="fa-solid fa-rotate-right" style="color:#fbbf24;"></i> Theo dõi lại (tiếp tục theo dõi)
-                            </button>
-                            <button type="button" class="action-dropdown-item" onclick="setProfileNotifyStatus('${escapeHtml(p.gpm_id)}', 'muted'); closeAllActionMenus();">
-                                <i class="fa-solid fa-bell-slash" style="color:#94a3b8;"></i> Bỏ theo dõi tăng trưởng
-                            </button>` : `
-                            <button type="button" class="action-dropdown-item" onclick="setProfileNotifyStatus('${escapeHtml(p.gpm_id)}', 'tracking'); closeAllActionMenus();">
-                                <i class="fa-solid fa-bell" style="color:#34d399;"></i> Theo dõi tăng trưởng
-                            </button>`}
                             ${plat === 'youtube' ? (() => {
                     const ytTarget = defCh || p;
                     const rawYt = (ytTarget.channel_url || p.channel_handle || '').trim();
@@ -738,6 +892,7 @@ function renderGpmProfilesTable() {
                         </td>
                         <td>${chTypeBadge}</td>
                         <td>${chNameHtml}</td>
+                        <td style="color:var(--text-muted); font-size:11.5px; opacity:0.7;"><i class="fa-solid fa-arrow-turn-up fa-rotate-90"></i> Cùng nick</td>
                         <td>
                             <div>
                                 <strong style="font-size:13.5px; color:${chEligible ? 'var(--accent-gold)' : 'var(--accent-cyan)'};">
@@ -753,6 +908,8 @@ function renderGpmProfilesTable() {
                                 : `<span class="badge badge-success" style="font-size:10px; background:rgba(24,119,242,0.18); color:#60a5fa; border:1px solid rgba(24,119,242,0.3);"><i class="fa-solid fa-trophy"></i> ĐỦ ${formatThresholdDisplay(chTh)} FLW!</span>`
                         ) : '<span class="badge badge-info" style="font-size:10px;"><i class="fa-solid fa-seedling"></i> Đang Nuôi</span>'}
                         </td>
+                        <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
+                        <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
                         <td>${chNotifyBadge}</td>
                         <td style="text-align: center;">
                             <div class="action-dropdown-wrap">
@@ -775,22 +932,6 @@ function renderGpmProfilesTable() {
                                     <button type="button" class="action-dropdown-item" onclick="openEditChannelModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(ch.channel_id)}', '${escapeHtml(ch.channel_name || '')}', ${ch.followers_count || 0}, '${escapeHtml(ch.channel_url || ch.channel_id)}', '${plat}'); closeAllActionMenus();">
                                         <i class="fa-solid fa-pen-to-square" style="color:var(--accent-cyan);"></i> ${plat === 'youtube' ? 'Sửa Kênh & Subscribers' : 'Sửa Trang & Followers'}
                                     </button>
-                                    ${chNotifyStatus === 'tracking' ? `
-                                    <button type="button" class="action-dropdown-item" onclick="setChannelNotifyStatus('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}', 'muted'); closeAllActionMenus();">
-                                        <i class="fa-solid fa-bell-slash" style="color:#94a3b8;"></i> Bỏ theo dõi (Tắt thông báo)
-                                    </button>
-                                    <button type="button" class="action-dropdown-item" onclick="setChannelNotifyStatus('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}', 'sent'); closeAllActionMenus();">
-                                        <i class="fa-solid fa-circle-check" style="color:#60a5fa;"></i> Đánh dấu đã gửi
-                                    </button>` : chNotifyStatus === 'sent' ? `
-                                    <button type="button" class="action-dropdown-item" onclick="setChannelNotifyStatus('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}', 'tracking'); closeAllActionMenus();">
-                                        <i class="fa-solid fa-rotate-right" style="color:#fbbf24;"></i> Theo dõi lại (tiếp tục theo dõi)
-                                    </button>
-                                    <button type="button" class="action-dropdown-item" onclick="setChannelNotifyStatus('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}', 'muted'); closeAllActionMenus();">
-                                        <i class="fa-solid fa-bell-slash" style="color:#94a3b8;"></i> Bỏ theo dõi (Tắt thông báo)
-                                    </button>` : `
-                                    <button type="button" class="action-dropdown-item" onclick="setChannelNotifyStatus('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}', 'tracking'); closeAllActionMenus();">
-                                        <i class="fa-solid fa-bell" style="color:#34d399;"></i> Theo dõi (gửi khi đạt mốc)
-                                    </button>`}
                                     <a href="${chLink}" target="_blank" rel="noopener" class="action-dropdown-item" onclick="closeAllActionMenus()">
                                         <i class="${plat === 'youtube' ? 'fa-brands fa-youtube' : 'fa-brands fa-facebook'}" style="color:${plat === 'youtube' ? '#ef4444' : '#1877f2'};"></i> ${plat === 'youtube' ? 'Mở kênh YouTube' : 'Mở trang Facebook'}
                                     </a>
@@ -893,6 +1034,95 @@ function cycleProfileNotifyStatus(gpmId, currentStatus) {
     }
     setProfileNotifyStatus(gpmId, nextStatus);
 }
+
+async function cycleCreatorProgramStatus(gpmId, currentStatus) {
+    const cur = (currentStatus || 'ineligible').toLowerCase();
+    if (cur === 'ineligible') {
+        showToast('ℹ️ Tài khoản này chưa đạt 10,000 followers nên chưa đủ điều kiện Creator Rewards.');
+        return;
+    }
+    let nextStatus = 'active';
+    if (cur === 'active') {
+        nextStatus = 'not_enrolled';
+    } else if (cur === 'not_enrolled') {
+        nextStatus = 'banned';
+    } else if (cur === 'banned') {
+        nextStatus = 'active';
+    } else {
+        nextStatus = 'active';
+    }
+    try {
+        const res = await fetch(`/api/profiles/${gpmId}/creator-program`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            const p = cachedGpmProfiles.find(x => x.gpm_id === gpmId);
+            if (p) p.creator_program = nextStatus;
+            renderGpmProfilesTable();
+            const labelMap = {
+                'active': 'ĐÃ BẬT (CREATOR REWARDS)',
+                'not_enrolled': 'CHƯA BẬT',
+                'banned': 'BỊ NGỪNG'
+            };
+            showToast(`✅ Đã chuyển Creator Program thành: ${labelMap[nextStatus] || nextStatus.toUpperCase()}`);
+        }
+    } catch(e) {
+        showToast(`❌ Lỗi cập nhật Creator Program: ${e.message}`, 'error');
+    }
+}
+window.cycleCreatorProgramStatus = cycleCreatorProgramStatus;
+
+async function cycleFlopStatus(gpmId, currentStatus) {
+    const cur = (currentStatus || 'new').toLowerCase();
+    let nextStatus = 'good';
+    if (cur === 'new') {
+        nextStatus = 'good';
+    } else if (cur === 'good') {
+        nextStatus = 'unstable';
+    } else if (cur === 'unstable') {
+        nextStatus = '200_view';
+    } else if (cur === '200_view') {
+        nextStatus = '0_view';
+    } else if (cur === '0_view') {
+        nextStatus = 'new';
+    } else {
+        nextStatus = 'good';
+    }
+    try {
+        const res = await fetch(`/api/profiles/${gpmId}/flop-status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            const p = cachedGpmProfiles.find(x => x.gpm_id === gpmId);
+            if (p) {
+                p.flop_status = nextStatus;
+                if (data.flop_since) p.flop_since = data.flop_since;
+                p.flop_recovering = false;
+            }
+            renderGpmProfilesTable();
+            const labelMap = {
+                '0_view': '🚨 0-VIEW (FLOP / SHADOWBAN)',
+                '200_view': '⚠️ KẸT 200 VIEW',
+                'unstable': '🟡 KHÔNG ỔN ĐỊNH',
+                'good': '🚀 KHỎE / TĂNG TRƯỞNG TỐT',
+                'new': '🌱 ĐANG NUÔI (CHƯA ĐỦ SỐ LIỆU)'
+            };
+                'good': '🚀 PHÁT TRIỂN TỐT',
+                'new': '🌱 ĐANG NUÔI'
+            };
+            showToast(`✅ Đã chuyển tình trạng kênh thành: ${labelMap[nextStatus] || nextStatus.toUpperCase()}`);
+        }
+    } catch(e) {
+        showToast(`❌ Lỗi cập nhật Tình trạng kênh: ${e.message}`, 'error');
+    }
+}
+window.cycleFlopStatus = cycleFlopStatus;
 
 async function deleteGpmProfileFromList(gpmId, profileName) {
     closeAllActionMenus();
@@ -1241,8 +1471,8 @@ function openEditChannelModal(gpmId, profileName, channelId, channelName, follow
 }
 window.openEditChannelModal = openEditChannelModal;
 
-function openEditUsernameModal(gpmId, profileName, currentUsername, followers, currentNickname, browserType, platform, channelId) {
-    console.log('[DEBUG MODAL] openEditUsernameModal CALLED with:', { gpmId, profileName, currentUsername, followers, currentNickname, browserType, platform, channelId });
+function openEditUsernameModal(gpmId, profileName, currentUsername, followers, currentNickname, browserType, platform, channelId, country) {
+    console.log('[DEBUG MODAL] openEditUsernameModal CALLED with:', { gpmId, profileName, currentUsername, followers, currentNickname, browserType, platform, channelId, country });
     const gpmIdEl = document.getElementById('editProfileGpmId');
     if (gpmIdEl) gpmIdEl.value = gpmId;
     const channelIdEl = document.getElementById('editProfileChannelId');
@@ -1260,6 +1490,11 @@ function openEditUsernameModal(gpmId, profileName, currentUsername, followers, c
     const platSelect = document.getElementById('editProfilePlatform');
     const effPlat = (platform || 'tiktok').toLowerCase();
     if (platSelect) platSelect.value = effPlat;
+
+    const countrySelect = document.getElementById('editProfileCountry');
+    if (countrySelect) {
+        countrySelect.value = (country && country.toUpperCase() !== 'NONE') ? country.toUpperCase() : 'NONE';
+    }
 
     updateEditProfileModalLabels(effPlat, channelId);
 
@@ -1347,6 +1582,8 @@ async function saveProfileUsernameFromModal(btn) {
             return;
         }
 
+        const countryVal = (document.getElementById('editProfileCountry')?.value || 'NONE').toUpperCase();
+
         const resU = await fetch(`/api/profiles/${gpmId}/username`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1354,13 +1591,21 @@ async function saveProfileUsernameFromModal(btn) {
                 username: username,
                 nickname: nickname,
                 browser_type: document.getElementById('editProfileBrowserType')?.value || 'gpm',
-                platform: platform
+                platform: platform,
+                country: countryVal
             })
         });
         const dataU = await resU.json();
         if (!resU.ok) {
             showToast('Lỗi cập nhật username: ' + (dataU.detail || dataU.message || 'Thất bại'), 'error');
             return;
+        }
+        if (countryVal === 'NONE') {
+            showToast('🌐 Đã cập nhật profile & gỡ bỏ Proxy (Dùng IP mạng trực tiếp)!', 'info');
+        } else if (dataU.wireproxy_assigned) {
+            showToast(`⚡ Đã gán WireGuard SOCKS5 [${countryVal}] (${dataU.proxy_url}) vào GPMLogin!`, 'success');
+        } else {
+            showToast('✅ Đã lưu thay đổi thông tin profile thành công!', 'success');
         }
 
         const resS = await fetch('/api/profiles/stats', {
@@ -1618,7 +1863,8 @@ function closeFollowerSchedulerModal() {
 window.closeFollowerSchedulerModal = closeFollowerSchedulerModal;
 
 function openThresholdSettingsModal() {
-    console.log('[DEBUG MODAL] openThresholdSettingsModal CALLED');
+    const modal = document.getElementById('thresholdSettingsModal');
+    if (!modal) return;
     const inputTiktok = document.getElementById('modalThTiktok');
     const inputYoutube = document.getElementById('modalThYoutube');
     const inputFacebook = document.getElementById('modalThFacebook');
@@ -1627,17 +1873,10 @@ function openThresholdSettingsModal() {
     if (inputYoutube) inputYoutube.value = followerThresholds.youtube || 1000;
     if (inputFacebook) inputFacebook.value = followerThresholds.facebook || 1000;
 
-    const modal = document.getElementById('thresholdSettingsModal');
     console.log('[DEBUG MODAL] #thresholdSettingsModal element:', modal);
-    if (modal) {
-        modal.classList.add('active');
-        modal.classList.add('show');
-        modal.style.display = 'flex';
-        const computed = window.getComputedStyle(modal);
-        console.log('[DEBUG MODAL] #thresholdSettingsModal after open -> style.display:', modal.style.display, 'computed display:', computed.display, 'z-index:', computed.zIndex, 'visibility:', computed.visibility, 'opacity:', computed.opacity);
-    } else {
-        console.error('[DEBUG MODAL] #thresholdSettingsModal NOT FOUND in DOM!');
-    }
+    modal.classList.add('active');
+    modal.classList.add('show');
+    modal.style.display = 'flex';
 
     // Nạp lại giá trị mới nhất từ backend
     fetch('/api/settings/thresholds')
@@ -1658,17 +1897,15 @@ function openThresholdSettingsModal() {
 window.openThresholdSettingsModal = openThresholdSettingsModal;
 
 function closeThresholdSettingsModal() {
-    console.log('[DEBUG MODAL] closeThresholdSettingsModal CALLED');
+    const modal = document.getElementById('thresholdSettingsModal');
+    if (!modal) return;
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
     }
-    const modal = document.getElementById('thresholdSettingsModal');
-    if (modal) {
-        modal.classList.remove('active');
-        modal.classList.remove('show');
-        modal.style.display = 'none';
-        console.log('[DEBUG MODAL] #thresholdSettingsModal closed');
-    }
+    modal.classList.remove('active');
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+    console.log('[DEBUG MODAL] #thresholdSettingsModal closed');
 }
 window.closeThresholdSettingsModal = closeThresholdSettingsModal;
 
@@ -2223,3 +2460,239 @@ window.openUploadModal = openUploadModal;
 window.closeUploadModal = closeUploadModal;
 window.executeUploadVideo = executeUploadVideo;
 window.stopUploadVideo = stopUploadVideo;
+
+// Thay đổi quốc gia trực tiếp từ ô dropdown trong bảng
+async function onTableCountryChange(gpmId, newCountry) {
+    const cTarget = (newCountry || 'NONE').toUpperCase();
+    const p = (cachedGpmProfiles || []).find(item => item.gpm_id === gpmId);
+    if (p) p.country = cTarget;
+
+    // Cập nhật style trực tiếp cho ô select ngay lập tức
+    const sel = document.getElementById(`cellCountry_${gpmId}`);
+    if (sel) {
+        const isNone = cTarget === 'NONE';
+        sel.style.background = isNone ? 'rgba(100, 116, 139, 0.15)' : 'rgba(56, 189, 248, 0.12)';
+        sel.style.borderColor = isNone ? 'rgba(148, 163, 184, 0.35)' : 'rgba(56, 189, 248, 0.4)';
+        sel.style.color = isNone ? '#94a3b8' : '#38bdf8';
+    }
+
+    // Cập nhật text trên nút Đổi VPN trong menu Thao Tác
+    const txtSpan = document.getElementById(`txtActionVpnCountry_${gpmId}`);
+    if (txtSpan) txtSpan.textContent = cTarget === 'NONE' ? 'Direct' : cTarget;
+
+    try {
+        const res = await fetch(`/api/profiles/${encodeURIComponent(gpmId)}/country`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country: cTarget })
+        });
+        const data = await res.json();
+        const pb = document.getElementById(`proxyBadge_${gpmId}`);
+        if (cTarget === 'NONE') {
+            if (p) p.raw_proxy = '';
+            if (pb) pb.innerHTML = `<i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6;"></i> Direct IP`;
+            showToast(`🌐 Đã gỡ bỏ Proxy cho profile! Trình duyệt sẽ dùng mạng trực tiếp (Direct IP).`, 'info');
+        } else if (data.wireproxy_assigned) {
+            if (p && data.proxy_url) p.raw_proxy = data.proxy_url;
+            if (pb && data.proxy_url) pb.innerHTML = `<i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8;"></i> ${escapeHtml(data.proxy_url.replace('socks5://', ''))}`;
+            if (data.gpm_synced) {
+                showToast(`⚡ Đã đổi sang [${cTarget}] & gán WireGuard SOCKS5 (${data.proxy_url}) vào GPMLogin! (Bấm icon 🔄 Làm mới trên app GPMLogin để thấy proxy)`, 'success');
+            } else {
+                showToast(`⚡ Đã lưu proxy [${cTarget}] (${data.proxy_url})! Hãy mở app GPMLogin và bấm nút "Đồng bộ" để nạp vào profile.`, 'warning');
+            }
+        } else {
+            showToast(`✅ Đã lưu quốc gia [${cTarget}] cho profile!`, 'success');
+        }
+    } catch (err) {
+        showToast('Lỗi lưu quốc gia: ' + err.message, 'error');
+    }
+}
+window.onTableCountryChange = onTableCountryChange;
+
+// Đồng bộ proxy WireGuard cho Profile (không mở trình duyệt, không làm phiền)
+async function triggerProtonVpn(gpmId, country, btn) {
+    const cTarget = (country || 'NONE').toUpperCase();
+    await onTableCountryChange(gpmId, cTarget);
+}
+window.triggerProtonVpn = triggerProtonVpn;
+
+// Quản lý WireGuard VPN Modal
+async function openWireguardStatusModal() {
+    const modal = document.getElementById('wireguardStatusModal');
+    if (modal) modal.style.display = 'flex';
+    await loadWireguardStatus();
+}
+
+function closeWireguardStatusModal() {
+    const modal = document.getElementById('wireguardStatusModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function loadWireguardStatus() {
+    const tableBody = document.getElementById('wireguardProxyTableBody');
+    const summarySpan = document.getElementById('wireguardActiveSummary');
+    if (!tableBody) return;
+
+    try {
+        const res = await fetch('/api/vpn/wireproxy/status');
+        const data = await res.json();
+        const proxies = data.active_proxies || {};
+        const configFiles = data.config_files || [];
+        const countries = Object.keys(proxies);
+
+        if (summarySpan) {
+            summarySpan.innerHTML = `<span style="color:#22c55e;">${countries.length} cổng đang hoạt động</span> (${configFiles.length} file .conf)`;
+        }
+
+        if (countries.length === 0 && configFiles.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                        <i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
+                        Chưa có file WireGuard <code>.conf</code> nào trong <code>data/vpn_configs/</code>.<br>
+                        Bấm <strong>"Mở Thư Mục Config"</strong> và thả các file tải từ Proton VPN vào đây!
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        const countryNamesMap = {
+            'US': 'Hoa Kỳ (US)',
+            'GB': 'Anh (GB)',
+            'DE': 'Đức (DE)',
+            'FR': 'Pháp (FR)',
+            'JP': 'Nhật Bản (JP)',
+            'KR': 'Hàn Quốc (KR)',
+            'CA': 'Canada (CA)',
+            'AU': 'Úc (AU)',
+            'SG': 'Singapore (SG)',
+            'NL': 'Hà Lan (NL)',
+            'MX': 'Mexico (MX)',
+            'ID': 'Indonesia (ID)',
+            'MY': 'Malaysia (MY)',
+            'PH': 'Philippines (PH)',
+            'VN': 'Việt Nam (VN)'
+        };
+
+        let rowsHtml = '';
+        for (const proxyId of Object.keys(proxies)) {
+            const item = proxies[proxyId];
+            const countryCode = (item.country || 'US').toUpperCase();
+            const flag = item.flag || (window.flagMap && window.flagMap[countryCode]) || '🌐';
+            const countryDisplayName = countryNamesMap[countryCode] || countryCode;
+            const placeName = item.place || 'Default';
+            const isListening = item.is_listening;
+            const statusBadge = isListening
+                ? `<span style="display:inline-flex; align-items:center; gap:6px; background:rgba(34,197,94,0.15); color:#22c55e; border: 1px solid rgba(34,197,94,0.3); padding:4px 10px; border-radius:12px; font-weight:700; font-size:11.5px; white-space:nowrap;"><i class="fa-solid fa-circle" style="font-size:7px;"></i> Hoạt Động</span>`
+                : `<span style="display:inline-flex; align-items:center; gap:6px; background:rgba(239,68,68,0.15); color:#ef4444; border: 1px solid rgba(239,68,68,0.3); padding:4px 10px; border-radius:12px; font-weight:700; font-size:11.5px; white-space:nowrap;"><i class="fa-solid fa-circle" style="font-size:7px;"></i> Mất Kết Nối</span>`;
+
+            rowsHtml += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 12px 16px; font-weight:600; color:#fff; vertical-align: middle;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:18px;">${flag}</span>
+                            <div>
+                                <div style="font-weight:700; color:#fff; font-size:13px;">${countryDisplayName}</div>
+                                <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">📍 ${placeName}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="padding: 12px 16px; font-family: monospace; font-size: 13px; color: var(--accent-cyan); font-weight:600; vertical-align: middle; white-space: nowrap;">
+                        <i class="fa-solid fa-plug" style="font-size:11px; margin-right:4px; opacity:0.7;"></i> ${item.proxy_url || `socks5://127.0.0.1:${item.port}`}
+                    </td>
+                    <td style="padding: 12px 16px; color: var(--text-muted); font-size: 12px; font-family: monospace; vertical-align: middle;">
+                        <code>${item.source_file}</code>
+                    </td>
+                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
+                        ${statusBadge}
+                    </td>
+                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle; white-space: nowrap;">
+                        <div style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                            <button type="button" class="btn btn-sm has-tooltip" onclick="testWireguardCountry('${proxyId}', this)" data-tooltip="Kiểm tra IP" title="Kiểm tra IP" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.12); color: #f59e0b; cursor: pointer;">
+                                <i class="fa-solid fa-bolt text-warning" style="font-size: 13px;"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger has-tooltip" onclick="deleteWireguardConfig('${proxyId}', '${item.source_file}')" data-tooltip="Xoá Proxy" title="Xoá Proxy" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: #ef4444 !important; border: 1px solid #dc2626 !important; color: #ffffff !important; cursor: pointer;">
+                                <i class="fa-solid fa-trash-can" style="font-size: 12px; color: #ffffff !important;"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        tableBody.innerHTML = rowsHtml;
+    } catch (err) {
+        tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px; color:#ef4444;">Lỗi tải dữ liệu: ${err.message}</td></tr>`;
+    }
+}
+
+async function openWireguardFolderOnWindows() {
+    try {
+        await fetch('/api/vpn/wireproxy/open-folder', { method: 'POST' });
+        showToast('📁 Đã mở thư mục data/vpn_configs trên máy tính', 'info');
+    } catch (err) {
+        showToast('Không thể mở thư mục: ' + err.message, 'error');
+    }
+}
+
+async function rescanWireguardConfigs() {
+    showToast('🔄 Đang quét lại các file .conf và khởi động proxy...', 'info');
+    try {
+        const res = await fetch('/api/vpn/wireproxy/rescan', { method: 'POST' });
+        const data = await res.json();
+        showToast(`✅ Đã kích hoạt ${data.active_count || 0} cổng WireGuard Proxy!`, 'success');
+        await loadWireguardStatus();
+    } catch (err) {
+        showToast('Lỗi quét cấu hình: ' + err.message, 'error');
+    }
+}
+
+async function testWireguardCountry(country, btn) {
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-warning" style="font-size: 12px;"></i>';
+    }
+    try {
+        const res = await fetch(`/api/vpn/wireproxy/test/${encodeURIComponent(country)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`✅ [${country}] IP: ${data.ip} (${data.latency_ms}ms)`, 'success');
+        } else {
+            showToast(`⚠️ [${country}] Kiểm tra thất bại: ${data.error || 'Timeout'}`, 'warning');
+        }
+    } catch (err) {
+        showToast('Lỗi kiểm tra proxy: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-bolt text-warning" style="font-size: 13px;"></i>';
+        }
+    }
+}
+
+async function deleteWireguardConfig(proxyId, sourceFile) {
+    const fileName = sourceFile || proxyId;
+    if (!confirm(`Bạn có chắc muốn xoá file proxy "${fileName}" không?\nFile cấu hình và cổng proxy này sẽ được xoá vĩnh viễn.`)) {
+        return;
+    }
+    try {
+        const res = await fetch(`/api/vpn/wireproxy/${encodeURIComponent(proxyId)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showToast(`🗑️ Đã xoá proxy "${fileName}" thành công!`, 'success');
+            await loadWireguardStatus();
+        } else {
+            showToast(`Lỗi xoá proxy: ${data.detail || data.error || 'Không xác định'}`, 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi kết nối khi xoá proxy: ' + err.message, 'error');
+    }
+}
+
+window.openWireguardStatusModal = openWireguardStatusModal;
+window.closeWireguardStatusModal = closeWireguardStatusModal;
+window.loadWireguardStatus = loadWireguardStatus;
+window.openWireguardFolderOnWindows = openWireguardFolderOnWindows;
+window.rescanWireguardConfigs = rescanWireguardConfigs;
+window.testWireguardCountry = testWireguardCountry;
+window.deleteWireguardConfig = deleteWireguardConfig;

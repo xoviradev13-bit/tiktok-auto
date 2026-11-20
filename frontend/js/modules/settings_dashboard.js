@@ -14,13 +14,13 @@ async function loadApiKeySettings() {
         if (ytEl) ytEl.value = ytLines;
 
         const dsEl = document.getElementById('settingDeepSeekKey');
-        if (dsEl) dsEl.value = data.deepseek_api_key || '';
+        if (dsEl) dsEl.value = (data.deepseek_api_key || '').split(',').map(k => k.trim()).filter(Boolean).join('\n');
 
         const gemEl = document.getElementById('settingGeminiKey');
-        if (gemEl) gemEl.value = data.gemini_api_key || '';
+        if (gemEl) gemEl.value = (data.gemini_api_key || '').split(',').map(k => k.trim()).filter(Boolean).join('\n');
 
         const oaiEl = document.getElementById('settingOpenAiKey');
-        if (oaiEl) oaiEl.value = data.openai_api_key || '';
+        if (oaiEl) oaiEl.value = (data.openai_api_key || '').split(',').map(k => k.trim()).filter(Boolean).join('\n');
 
         const pexEl = document.getElementById('settingPexelsKey');
         if (pexEl) pexEl.value = data.pexels_api_key || '';
@@ -91,6 +91,11 @@ async function loadApiKeySettings() {
 
         const dolEl = document.getElementById('settingDolphinUrl');
         if (dolEl) dolEl.value = data.dolphin_api_base_url || '';
+
+        const invEl = document.getElementById('settingInvisibleAutomationToggle');
+        if (invEl && data.invisible_browser_automation !== undefined) {
+            invEl.checked = Boolean(data.invisible_browser_automation);
+        }
 
         
         // Sync language dropdown without overriding the user's active session language
@@ -474,9 +479,9 @@ async function saveApiKeySettings(btn) {
 
     const payload = {
         youtube_api_keys: ytKeys,
-        deepseek_api_key: document.getElementById('settingDeepSeekKey')?.value || '',
-        gemini_api_key: document.getElementById('settingGeminiKey')?.value || '',
-        openai_api_key: document.getElementById('settingOpenAiKey')?.value || '',
+        deepseek_api_key: (document.getElementById('settingDeepSeekKey')?.value || '').split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).join(','),
+        gemini_api_key: (document.getElementById('settingGeminiKey')?.value || '').split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).join(','),
+        openai_api_key: (document.getElementById('settingOpenAiKey')?.value || '').split(/[\n,;]+/).map(k => k.trim()).filter(Boolean).join(','),
         pexels_api_key: document.getElementById('settingPexelsKey')?.value || '',
         pixabay_api_key: document.getElementById('settingPixabayKey')?.value || '',
         pollinations_api_key: document.getElementById('settingPollinationsKey')?.value || '',
@@ -494,13 +499,14 @@ async function saveApiKeySettings(btn) {
         telegram_bot_token: document.getElementById('settingTelegramToken')?.value || '',
         telegram_chat_id: document.getElementById('settingTelegramChatId')?.value || '',
         gpm_api_base_url: gpmUrl,
-        adspower_api_base_url: document.getElementById('settingAdsPowerUrl')?.value.trim() || '',
-        dolphin_api_base_url: document.getElementById('settingDolphinUrl')?.value.trim() || '',
+        adspower_api_base_url: (document.getElementById('settingAdsPowerUrl')?.value || '').trim(),
+        dolphin_api_base_url: (document.getElementById('settingDolphinUrl')?.value || '').trim(),
                 app_language: document.getElementById('settingAppLanguage')?.value || 'vi',
         app_theme: document.getElementById('settingAppTheme')?.value || 'dark',
         follower_threshold_tiktok: parseInt(document.getElementById('settingThresholdTiktok')?.value, 10) || followerThresholds.tiktok,
         follower_threshold_youtube: parseInt(document.getElementById('settingThresholdYoutube')?.value, 10) || followerThresholds.youtube,
         follower_threshold_facebook: parseInt(document.getElementById('settingThresholdFacebook')?.value, 10) || followerThresholds.facebook,
+        invisible_browser_automation: document.getElementById('settingInvisibleAutomationToggle')?.checked ?? true,
     };
 
     try {
@@ -909,8 +915,17 @@ async function loadAiUsageStats() {
         if (!res.ok) return;
         const data = await res.json();
         const stats = data.stats || {};
-        const breakdown = data.model_breakdown || [];
-        cachedAiLogs = data.recent_logs || [];
+        const allowedAi = ['deepseek', 'gemini', 'openai'];
+        const breakdown = (data.model_breakdown || []).filter(item => {
+            const p = (item.provider || '').toLowerCase();
+            const m = (item.model || '').toLowerCase();
+            return allowedAi.some(a => p.includes(a) || m.includes(a));
+        });
+        cachedAiLogs = (data.recent_logs || []).filter(l => {
+            const p = (l.provider || '').toLowerCase();
+            const m = (l.model || '').toLowerCase();
+            return allowedAi.some(a => p.includes(a) || m.includes(a));
+        });
 
         // 4 Thẻ Summary
         const elTotalCalls = document.getElementById('aiStatTotalCalls');
@@ -1092,6 +1107,52 @@ async function testYoutubeKey(btn) {
     } finally {
         btn.disabled = false;
         btn.innerHTML = original;
+    }
+}
+
+async function testAiKey(provider, btn) {
+    const keyMap = {
+        deepseek: { id: 'settingDeepSeekKey', resultId: 'testDeepSeekResult', modelId: 'settingDeepSeekModel' },
+        gemini: { id: 'settingGeminiKey', resultId: 'testGeminiResult', modelId: 'settingGeminiModel' },
+        openai: { id: 'settingOpenAiKey', resultId: 'testOpenAiResult', modelId: 'settingOpenAiModel' }
+    };
+    const target = keyMap[provider];
+    if (!target) return;
+    const keyVal = (document.getElementById(target.id)?.value || '').trim();
+    const resultEl = document.getElementById(target.resultId);
+    const modelVal = document.getElementById(target.modelId)?.value;
+
+    if (!keyVal) {
+        if (resultEl) resultEl.innerHTML = '<span style="color:#f59e0b;">⚠️ Chưa nhập Key</span>';
+        return;
+    }
+
+    const original = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Test...';
+    }
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Đang gọi API...</span>';
+
+    try {
+        const res = await fetch('/api/settings/test-ai-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, key: keyVal, model: modelVal })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (resultEl) resultEl.innerHTML = `<span style="color:#34d399;"><i class="fa-solid fa-circle-check"></i> ${escapeHtml(data.message)}</span>`;
+        } else {
+            if (resultEl) resultEl.innerHTML = `<span style="color:#f87171;"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(data.message || 'Lỗi test key')}</span>`;
+        }
+    } catch (err) {
+        if (resultEl) resultEl.innerHTML = `<span style="color:#f87171;">Lỗi: ${escapeHtml(err.message)}</span>`;
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
     }
 }
 
@@ -1389,6 +1450,7 @@ async function saveSchedulerSettings(btn, fromModal = true) {
 
 async function loadTelegramChannels() {
     const listEl = document.getElementById('telegramChannelsList');
+    if (!listEl) return;
     const badgeEl = document.getElementById('teleActiveBadge');
     const countTextEl = document.getElementById('teleActiveCountText');
     const totalCountEl = document.getElementById('teleChannelsTotalCount');
@@ -1790,6 +1852,17 @@ async function testTelegramChannel(channelId, btn) {
 function togglePasswordVisibility(inputId, triggerEl, label = 'Token') {
     const input = document.getElementById(inputId);
     if (!input) return;
+    if (input.tagName === 'TEXTAREA') {
+        const isMasked = input.style.webkitTextSecurity === 'disc';
+        if (isMasked) {
+            input.style.webkitTextSecurity = 'none';
+            if (triggerEl) triggerEl.innerHTML = `<i class="fa-solid fa-eye-slash"></i> Ẩn ${label}`;
+        } else {
+            input.style.webkitTextSecurity = 'disc';
+            if (triggerEl) triggerEl.innerHTML = `<i class="fa-solid fa-eye"></i> Hiện ${label}`;
+        }
+        return;
+    }
     if (input.type === 'password') {
         input.type = 'text';
         if (triggerEl) triggerEl.innerHTML = `<i class="fa-solid fa-eye-slash"></i> Ẩn ${label}`;
@@ -1861,6 +1934,7 @@ window.setSchedulerPreset = setSchedulerPreset;
 window.testTelegramChannel = testTelegramChannel;
 window.testTelegramChannelMode = testTelegramChannelMode;
 window.testYoutubeKey = testYoutubeKey;
+window.testAiKey = testAiKey;
 window.toggleAiSortDirection = toggleAiSortDirection;
 window.toggleAutostartSetting = toggleAutostartSetting;
 window.toggleCampaignAutoUpload = toggleCampaignAutoUpload;
@@ -1873,5 +1947,7 @@ window.triggerManualCleanup = triggerManualCleanup;
 window.updateModalIntervalBadge = updateModalIntervalBadge;
 window.updateModalParallelUploadsBadge = updateModalParallelUploadsBadge;
 window.validateMinDurationInput = validateMinDurationInput;
+window.applyMinDurationState = applyMinDurationState;
+window.onToggleFormatCheckbox = onToggleFormatCheckbox;
 window.handleAspectRatioChange = handleAspectRatioChange;
 window.handleSplitSourceChange = handleSplitSourceChange;

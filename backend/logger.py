@@ -173,7 +173,7 @@ def cleanup_old_daily_logs(retention_days: int = 30) -> int:
     return deleted_count
 
 # Configure root app logger
-_logger = logging.getLogger("shortsstack")
+_logger = logging.getLogger("clipflow")
 _logger.setLevel(logging.DEBUG)
 
 # Ensure handlers are set up

@@ -1,5 +1,5 @@
 """
-ShortsStack - Frontend Template Assembler
+ClipFlow - Frontend Template Assembler
 Compiles frontend/index.html (or index.template.html) with all component partials in frontend/components/
 into a standalone bundle if needed.
 """

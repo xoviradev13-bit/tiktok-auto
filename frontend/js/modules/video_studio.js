@@ -664,12 +664,12 @@ async function renderStudioActiveVideo(btn) {
     const addPart = (generateVariants || isShort || clipsCount <= 1) ? false : (document.getElementById('studioAddPartLabel')?.checked ?? true);
     const genHook = document.getElementById('studioGenerateAiHook')?.checked ?? true;
     const selectedModel = document.getElementById('studioAiModelSelect')?.value || 'default';
-    const enableSub = document.getElementById('studioEnableSubtitles')?.checked ?? true;
+    const enableSub = document.getElementById('studioEnableSubtitles')?.checked ?? false;
     const subStyle = document.getElementById('studioSubtitleStyle')?.value || 'karaoke_yellow';
     const subPos = document.getElementById('studioSubtitlePosition')?.value || 'center';
     const isSmartCurate = document.getElementById('studioSmartCurate')?.checked ?? true;
     const hookAngle = document.getElementById('studioHookAngle')?.value || 'auto';
-    const enableNarration = document.getElementById('studioNarrationSwitch')?.checked ?? true;
+    const enableNarration = document.getElementById('studioNarrationSwitch')?.checked ?? false;
     const mpNarrLang = document.getElementById('studioMpNarrationLanguage')?.value || 'vi';
     const mpVoice = document.getElementById('studioMpVoiceGender')?.value || 'male';
     const mpNarrStyle = document.getElementById('studioMpNarrationStyle')?.value || 'giat_gan';

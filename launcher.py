@@ -38,17 +38,17 @@ CURRENT_VERSION = get_version_from_manifest()
 
 def print_banner():
     print("=" * 60)
-    print(f"      SHORTSSTACK AI STUDIO - LAUNCHER")
+    print(f"      CLIPFLOW AI STUDIO - LAUNCHER")
     print(f"                 Phiên bản hiện tại: v{CURRENT_VERSION}")
     print("=" * 60)
 
 def launch_main_app():
     """Khởi động ứng dụng chính"""
-    print("\n[OK] Đang khởi động hệ thống ShortsStack Studio...")
+    print("\n[OK] Đang khởi động hệ thống ClipFlow Studio...")
     main_py = Path(__file__).resolve().parent / "main.py"
     
     if getattr(sys, "frozen", False):
-        app_exe = Path(sys.executable).parent / "ShortsStack.exe"
+        app_exe = Path(sys.executable).parent / "ClipFlow.exe"
         if app_exe.exists():
             subprocess.Popen([str(app_exe)])
             sys.exit(0)

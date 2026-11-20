@@ -13,7 +13,7 @@ DIST_OBF = ROOT_DIR / "dist_obf"
 
 def obfuscate_critical_files():
     print("=" * 60)
-    print(" [ShortsStack] TIẾN HÀNH MÃ HÓA BẢN QUYỀN VỚI PYARMOR")
+    print(" [ClipFlow] TIẾN HÀNH MÃ HÓA BẢN QUYỀN VỚI PYARMOR")
     print("=" * 60)
 
     if DIST_OBF.exists():

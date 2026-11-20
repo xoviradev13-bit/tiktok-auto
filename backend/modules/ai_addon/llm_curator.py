@@ -3,6 +3,7 @@ import json
 import re
 import time
 import requests
+import threading
 from typing import Dict, Any, List, Optional, Tuple
 from backend.config import (
     DEEPSEEK_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, AI_PROVIDER,
@@ -102,6 +103,100 @@ INTRO_TRANSITION_KEYWORDS = [
     "welcome to the podcast", "welcome to the show"
 ]
 
+
+class AIKeyPool:
+    """
+    Quản lý xoay vòng API Keys thông minh cho từng nhà cung cấp AI (Gemini, DeepSeek, OpenAI).
+    - Hỗ trợ nạp 1 hoặc nhiều key (phân tách bởi dấu phẩy, chấm phẩy hoặc xuống dòng).
+    - Tự động xoay vòng Round-Robin phân phối tải giữa các key.
+    - Tự động phát hiện lỗi Rate Limit (HTTP 429), Hết Quota (ResourceExhausted), hoặc Key Lỗi (401/403)
+      và lập tức chuyển sang key tiếp theo trong pool.
+    - Cooldown thông minh: 60s cho 429 Rate Limit (tự động hồi phục sau khi hết chu kỳ RPM/TPM),
+      1800s cho 401/403 Invalid Key.
+    - Thread-safe đảm bảo an toàn khi gọi đa luồng.
+    """
+    def __init__(self, provider: str):
+        self.provider = provider
+        self.keys: List[str] = []
+        self._cursor: int = 0
+        self._cooldowns: Dict[str, float] = {}  # key -> cooldown_expire_timestamp
+        self._raw_str: str = ""
+        self._lock = threading.Lock()
+
+    def update_keys(self, raw_str: str):
+        with self._lock:
+            if raw_str == self._raw_str and self.keys:
+                return
+            self._raw_str = raw_str or ""
+            parsed = []
+            for part in re.split(r'[,;\s]+', self._raw_str):
+
+                clean_k = part.strip()
+                if clean_k and clean_k not in parsed:
+                    parsed.append(clean_k)
+            self.keys = parsed
+            if self._cursor >= len(self.keys):
+                self._cursor = 0
+
+    def get_candidate_keys(self) -> List[str]:
+        """Trả về danh sách keys theo thứ tự xoay vòng round-robin, ưu tiên key chưa bị cooldown"""
+        with self._lock:
+            if not self.keys:
+                return []
+            now = time.time()
+            expired = [k for k, exp in self._cooldowns.items() if now >= exp]
+            for k in expired:
+                del self._cooldowns[k]
+
+            n = len(self.keys)
+            ordered = [self.keys[(self._cursor + i) % n] for i in range(n)]
+            available = [k for k in ordered if k not in self._cooldowns]
+            cooldown_keys = [k for k in ordered if k in self._cooldowns]
+            return available if available else cooldown_keys
+
+    def advance_cursor(self):
+        with self._lock:
+            if self.keys:
+                self._cursor = (self._cursor + 1) % len(self.keys)
+
+    def mark_exhausted(self, key: str, status_code: int, reason: str = ""):
+        with self._lock:
+            now = time.time()
+            cooldown_sec = 60.0 if status_code == 429 else 1800.0
+            self._cooldowns[key] = now + cooldown_sec
+            if self.keys:
+                self._cursor = (self._cursor + 1) % len(self.keys)
+
+            masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "***"
+            total = len(self.keys)
+            avail = sum(1 for k in self.keys if self._cooldowns.get(k, 0) <= now)
+            log_event("WARNING", f"⚡ [AI KEY POOL] {self.provider.upper()} Key ({masked}) gặp lỗi HTTP {status_code} ({reason[:80]}). Tạm ngưng {int(cooldown_sec)}s, xoay sang key kế tiếp ({avail}/{total} key khả dụng).")
+
+    def mark_success(self, key: str):
+        with self._lock:
+            if key in self._cooldowns:
+                del self._cooldowns[key]
+            if len(self.keys) > 1:
+                self._cursor = (self._cursor + 1) % len(self.keys)
+
+    def get_status(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            now = time.time()
+            res = []
+            for idx, k in enumerate(self.keys):
+                cooldown = self._cooldowns.get(k, 0.0)
+                is_active = cooldown <= now
+                masked = k[:6] + "..." + k[-4:] if len(k) > 10 else k
+                res.append({
+                    "index": idx + 1,
+                    "key_masked": masked,
+                    "is_active": is_active,
+                    "cooldown_remaining_sec": max(0, int(cooldown - now)),
+                    "is_current": (idx == self._cursor)
+                })
+            return res
+
+
 class LLMCurator:
     """
     Enterprise-grade multi-provider Cloud LLM Gateway with Usage & Cost Tracking:
@@ -114,6 +209,11 @@ class LLMCurator:
 
     def __init__(self):
         self.timeout = 35
+        self.pools = {
+            "gemini": AIKeyPool("gemini"),
+            "deepseek": AIKeyPool("deepseek"),
+            "openai": AIKeyPool("openai")
+        }
 
     def _get_active_config(self) -> Dict[str, Any]:
         import backend.config as cfg
@@ -190,6 +290,8 @@ class LLMCurator:
                     error_message=f"HTTP {resp.status_code}: {err_msg}"
                 )
                 log_event("WARNING", f"DeepSeek API error {resp.status_code}: {err_msg}")
+                if resp.status_code in (429, 401, 403):
+                    self.pools["deepseek"].mark_exhausted(api_key, resp.status_code, err_msg)
         except Exception as e:
             dur_ms = int((time.time() - t0) * 1000)
             record_ai_usage(
@@ -279,6 +381,9 @@ class LLMCurator:
                         status="error",
                         error_message=f"HTTP {resp.status_code}: {err_msg}"
                     )
+                    if resp.status_code in (429, 401, 403, 400):
+                        self.pools["gemini"].mark_exhausted(api_key, resp.status_code, err_msg)
+                        return None
             except Exception as e:
                 dur_ms = int((time.time() - t0) * 1000)
                 record_ai_usage(
@@ -355,6 +460,8 @@ class LLMCurator:
                     status="error",
                     error_message=f"HTTP {resp.status_code}: {err_msg}"
                 )
+                if resp.status_code in (429, 401, 403):
+                    self.pools["openai"].mark_exhausted(api_key, resp.status_code, err_msg)
         except Exception as e:
             dur_ms = int((time.time() - t0) * 1000)
             record_ai_usage(
@@ -388,29 +495,122 @@ class LLMCurator:
                 providers_order.append(p)
 
         for provider in providers_order:
-            key = cfg.get(f"{provider}_key")
-            if not key:
+            raw_key_cfg = cfg.get(f"{provider}_key")
+            if not raw_key_cfg:
+                continue
+
+            pool = self.pools.get(provider)
+            if not pool:
+                continue
+            pool.update_keys(raw_key_cfg)
+
+            candidate_keys = pool.get_candidate_keys()
+            if not candidate_keys:
                 continue
 
             model = custom_model if custom_model and provider == primary else cfg.get(f"{provider}_model")
 
-            try:
-                if provider == "deepseek":
-                    res = self._call_deepseek(key, model or "deepseek-chat", system_prompt, user_prompt, task, video_id)
-                elif provider == "gemini":
-                    res = self._call_gemini(key, model or "gemini-2.5-flash", system_prompt, user_prompt, task, video_id)
-                elif provider == "openai":
-                    res = self._call_openai(key, model or "gpt-4o-mini", system_prompt, user_prompt, task, video_id)
-                else:
-                    res = None
+            for key in candidate_keys:
+                try:
+                    if provider == "deepseek":
+                        res = self._call_deepseek(key, model or "deepseek-chat", system_prompt, user_prompt, task, video_id)
+                    elif provider == "gemini":
+                        res = self._call_gemini(key, model or "gemini-2.5-flash", system_prompt, user_prompt, task, video_id)
+                    elif provider == "openai":
+                        res = self._call_openai(key, model or "gpt-4o-mini", system_prompt, user_prompt, task, video_id)
+                    else:
+                        res = None
 
-                if res:
-                    return res
-            except Exception as e:
-                log_event("WARNING", f"Thử gọi LLM {provider} ({model}) thất bại: {e}")
-                continue
+                    if res:
+                        pool.mark_success(key)
+                        return res
+                except Exception as e:
+                    pool.mark_exhausted(key, 500, str(e))
+                    log_event("WARNING", f"Thử gọi LLM {provider} ({model}) với key ...{key[-4:]} thất bại: {e}")
+                    continue
 
         return None
+
+    def get_pool_status(self) -> Dict[str, List[Dict[str, Any]]]:
+        cfg = self._get_active_config()
+        for p in ("gemini", "deepseek", "openai"):
+            raw = cfg.get(f"{p}_key", "")
+            self.pools[p].update_keys(raw)
+        return {
+            "gemini": self.pools["gemini"].get_status(),
+            "deepseek": self.pools["deepseek"].get_status(),
+            "openai": self.pools["openai"].get_status(),
+        }
+
+    def test_ai_key(self, provider: str, api_key: str, model: Optional[str] = None) -> Dict[str, Any]:
+        """Kiểm tra hoạt động thực tế của 1 API Key cụ thể (ping test)"""
+        clean_key = (api_key or "").strip()
+        if not clean_key:
+            return {"success": False, "message": "API Key không được để trống"}
+
+        provider = provider.lower()
+        t0 = time.time()
+        try:
+            if provider == "deepseek":
+                m = model or "deepseek-chat"
+                url = "https://api.deepseek.com/chat/completions"
+                headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": m,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5
+                }
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            elif provider == "gemini":
+                m = model or "gemini-2.5-flash"
+                cfg = self._get_active_config()
+                base_url = _resolve_gemini_base_url(cfg.get("gemini_base_url", ""))
+                url = f"{base_url}/v1beta/models/{m}:generateContent?key={clean_key}"
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
+                    "generationConfig": {"maxOutputTokens": 5}
+                }
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            elif provider == "openai":
+                m = model or "gpt-4o-mini"
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": m,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5
+                }
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            else:
+                return {"success": False, "message": f"Nhà cung cấp '{provider}' không được hỗ trợ"}
+
+            dur_ms = int((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                return {
+                    "success": True,
+                    "provider": provider,
+                    "model": m,
+                    "latency_ms": dur_ms,
+                    "message": f"Kết nối {provider.upper()} thành công ({dur_ms}ms)!"
+                }
+            else:
+                err_text = resp.text[:150]
+                return {
+                    "success": False,
+                    "provider": provider,
+                    "status_code": resp.status_code,
+                    "latency_ms": dur_ms,
+                    "message": classify_ai_call_error(resp.status_code, err_text, provider.upper())
+                }
+        except Exception as e:
+            dur_ms = int((time.time() - t0) * 1000)
+            return {
+                "success": False,
+                "provider": provider,
+                "latency_ms": dur_ms,
+                "message": f"Lỗi kết nối mạng đến {provider.upper()}: {str(e)}"
+            }
 
     def curate_viral_segment(
         self,

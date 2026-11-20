@@ -1,13 +1,13 @@
 # 🌐 Hướng Dẫn Tạo Gemini Proxy (Cloudflare Worker)
 
 > Dành cho người dùng tại **Việt Nam** — Google Gemini API bị chặn tại VN.  
-> Tạo proxy riêng miễn phí trong **5 phút** để ShortsStack kết nối bình thường, **không cần VPN**.
+> Tạo proxy riêng miễn phí trong **5 phút** để ClipFlow kết nối bình thường, **không cần VPN**.
 
 ---
 
 ## Tại sao cần làm điều này?
 
-ShortsStack sử dụng **Google Gemini AI** để tạo phụ đề, tóm tắt nội dung và tối ưu video.  
+ClipFlow sử dụng **Google Gemini AI** để tạo phụ đề, tóm tắt nội dung và tối ưu video.  
 Tại Việt Nam, Google chặn IP kết nối đến `generativelanguage.googleapis.com`.  
 Cloudflare Worker đóng vai trò **cầu nối trung gian** — chuyển tiếp request của bạn đến Google qua server ở nước ngoài.
 
@@ -97,14 +97,14 @@ Copy URL này.
 
 ---
 
-## Bước 5 — Cài vào ShortsStack
+## Bước 5 — Cài vào ClipFlow
 
-1. Mở **ShortsStack** → vào **Cài Đặt**
+1. Mở **ClipFlow** → vào **Cài Đặt**
 2. Tìm ô **Gemini Proxy Base URL**
 3. Dán URL Worker vừa copy vào
 4. Nhấn **Lưu Cài Đặt**
 
-✅ Xong! ShortsStack sẽ tự động dùng Worker của bạn thay vì kết nối trực tiếp đến Google.
+✅ Xong! ClipFlow sẽ tự động dùng Worker của bạn thay vì kết nối trực tiếp đến Google.
 
 ---
 
@@ -130,7 +130,7 @@ https://gemini-proxy.<your-subdomain>.workers.dev/v1beta/models?key=test
 ## Câu hỏi thường gặp
 
 **Q: Tôi không ở Việt Nam, có cần làm không?**  
-A: Không cần. ShortsStack tự động kết nối thẳng đến Google nếu IP của bạn không bị chặn. Chỉ cần để trống ô Gemini Proxy Base URL.
+A: Không cần. ClipFlow tự động kết nối thẳng đến Google nếu IP của bạn không bị chặn. Chỉ cần để trống ô Gemini Proxy Base URL.
 
 **Q: Worker miễn phí có giới hạn không?**  
 A: 100,000 request/ngày — đủ dùng cho cá nhân và nhóm nhỏ. Nếu dùng nhiều hơn, nâng lên gói \$5/tháng (10 triệu request/tháng).
@@ -138,6 +138,6 @@ A: 100,000 request/ngày — đủ dùng cho cá nhân và nhóm nhỏ. Nếu d�
 **Q: Tôi có thể dùng chung một Worker với nhiều máy không?**  
 A: Có, nhưng không nên chia sẻ URL Worker với người lạ vì giới hạn request tính chung cho cả Worker.
 
-**Q: ShortsStack có lưu Gemini API key của tôi không?**  
-A: API key lưu **cục bộ trên máy bạn** trong file `.env`, không gửi lên bất kỳ server nào của ShortsStack.
+**Q: ClipFlow có lưu Gemini API key của tôi không?**  
+A: API key lưu **cục bộ trên máy bạn** trong file `.env`, không gửi lên bất kỳ server nào của ClipFlow.
 

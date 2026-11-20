@@ -1362,6 +1362,8 @@ select.input-field:focus {
 #ytChannelsTable td:first-child:not([colspan]),
 #videoLibraryTable th:first-child,
 #videoLibraryTable td:first-child:not([colspan]),
+#gpmProfilesTable th:first-child,
+#gpmProfilesTable td:first-child:not([colspan]),
 #savedChannelsTable th:first-child,
 #savedChannelsTable td:first-child:not([colspan]),
 #audioSearchTable th:first-child,
@@ -1378,6 +1380,7 @@ select.input-field:focus {
 
 #ytChannelsTable th:first-child,
 #videoLibraryTable th:first-child,
+#gpmProfilesTable th:first-child,
 #savedChannelsTable th:first-child,
 #audioSearchTable th:first-child,
 #localTracksTable th:first-child {
@@ -1389,6 +1392,8 @@ select.input-field:focus {
 #ytChannelsTable td:last-child:not([colspan]),
 #videoLibraryTable th:last-child,
 #videoLibraryTable td:last-child:not([colspan]),
+#gpmProfilesTable th:last-child,
+#gpmProfilesTable td:last-child:not([colspan]),
 #savedChannelsTable th:last-child,
 #savedChannelsTable td:last-child:not([colspan]),
 #audioSearchTable th:last-child,
@@ -1406,6 +1411,7 @@ select.input-field:focus {
 
 #ytChannelsTable th:last-child,
 #videoLibraryTable th:last-child,
+#gpmProfilesTable th:last-child,
 #savedChannelsTable th:last-child,
 #audioSearchTable th:last-child,
 #localTracksTable th:last-child {
@@ -6271,8 +6277,9 @@ body.light-mode .studio-platform-opt:hover {
 
 .badge-unlogged {
     background: rgba(148, 163, 184, 0.2);
-    color: #cbd5e1;
-    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    font-weight: 700;
 }
 
 .badge-proxy-dead {

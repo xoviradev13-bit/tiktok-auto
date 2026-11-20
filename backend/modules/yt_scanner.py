@@ -322,19 +322,57 @@ def _extract_initial_data(html: str) -> Optional[Dict[str, Any]]:
 
 
 def _parse_sub_count(text: str) -> int:
-    """'62.6M subscribers' / '504K subscribers' -> int."""
+    """
+    Parses subscriber count string:
+    '62.6M subscribers', '504K subscribers', '527 Tr người đăng ký', '1,25M subs', '500 subscribers' -> int.
+    """
     if not text:
         return 0
-    text = text.upper().replace(",", "").strip()
-    m = re.search(r"(\d+(?:\.\d+)?)\s*([KMB]?)", text)
+    t = text.strip()
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*([KMBTrtT]|triệu|nghìn|ngàn|tỷ)?", t, re.IGNORECASE)
     if not m:
         return 0
+    num_str = m.group(1).replace(",", ".")
     try:
-        num = float(m.group(1))
+        num = float(num_str)
     except ValueError:
         return 0
-    num *= {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}.get(m.group(2), 1)
-    return int(num)
+    unit = (m.group(2) or "").upper()
+    multiplier = 1
+    if unit in ("K", "N", "NGHÌN", "NGÀN"):
+        multiplier = 1_000
+    elif unit in ("M", "TR", "TRIỆU"):
+        multiplier = 1_000_000
+    elif unit in ("B", "TỶ"):
+        multiplier = 1_000_000_000
+    return int(num * multiplier)
+
+
+def _parse_video_count(text: str) -> int:
+    """
+    Parses video count string:
+    '852 videos', '1.2K videos', '119 video', '318M subscribers • 852 videos' -> int.
+    """
+    if not text:
+        return 0
+    t = text.strip()
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*([KMB]?)\s*(?:video|vid)", t, re.IGNORECASE)
+    if not m:
+        return 0
+    num_str = m.group(1).replace(",", ".")
+    try:
+        num = float(num_str)
+    except ValueError:
+        return 0
+    unit = (m.group(2) or "").upper()
+    multiplier = 1
+    if unit == "K":
+        multiplier = 1_000
+    elif unit == "M":
+        multiplier = 1_000_000
+    elif unit == "B":
+        multiplier = 1_000_000_000
+    return int(num * multiplier)
 
 
 def _parse_iso(value: Optional[str]) -> Optional[datetime]:
@@ -408,28 +446,77 @@ def _parse_api_channel(it: Dict[str, Any]) -> Dict[str, Any]:
 
 def _parse_channel_renderer(ch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Convert one channelRenderer into our channel dict. The subscriber count and
-    the @handle swap between videoCountText / subscriberCountText depending on
-    the layout, so we classify by content instead of by field name.
+    Convert one channelRenderer into our channel dict. Robustly extracts
+    avatar (thumbnail), handle, description, subscribers count, and video count.
     """
     channel_id = ch.get("channelId", "")
     if not CHANNEL_ID_RE.match(channel_id or ""):
         return None
 
+    # 1. Handle (@channel)
+    handle = ""
+    canonical = (
+        ch.get("navigationEndpoint", {})
+        .get("browseEndpoint", {})
+        .get("canonicalBaseUrl", "")
+    )
+    if canonical and canonical.startswith("/@"):
+        handle = urllib.parse.unquote(canonical[1:])
+    elif canonical and canonical.startswith("@"):
+        handle = urllib.parse.unquote(canonical)
+    if not handle:
+        for f in ("subscriberCountText", "videoCountText", "shortBylineText"):
+            t = _text(ch.get(f)).strip()
+            if t.startswith("@"):
+                handle = urllib.parse.unquote(t.split()[0])
+                break
+
+    # 2. Thumbnail / Avatar URL
+    thumb_url = ""
+    thumbs = ch.get("thumbnail", {}).get("thumbnails", []) or ch.get("avatar", {}).get("thumbnails", [])
+    if thumbs and isinstance(thumbs, list):
+        last_thumb = thumbs[-1].get("url", "")
+        if last_thumb:
+            thumb_url = ("https:" + last_thumb) if last_thumb.startswith("//") else last_thumb
+
+    # 3. Description
+    desc = _text(ch.get("descriptionSnippet")) or _text(ch.get("description")) or ""
+
+    # 4. Subscriber count and Video count
     sub_text = ""
-    for field in ("subscriberCountText", "videoCountText"):
+    vid_text = ""
+    for field in ("subscriberCountText", "videoCountText", "shortBylineText", "longBylineText"):
         t = _text(ch.get(field))
-        if re.search(r"subscriber", t, re.IGNORECASE):
+        if not t:
+            continue
+        if re.search(r"(?:subscriber|sub|người đăng ký|người theo dõi|follower)", t, re.IGNORECASE):
             sub_text = t
-            break
+        if re.search(r"(?:video|vid)", t, re.IGNORECASE):
+            vid_text = t
+
+    sub_count = _parse_sub_count(sub_text)
+    if not sub_count:
+        # Check if one of the fields is a raw number (not handle or video)
+        for field in ("subscriberCountText", "videoCountText"):
+            t = _text(ch.get(field)).strip()
+            if not t.startswith("@") and not re.search(r"video", t, re.IGNORECASE):
+                candidate = _parse_sub_count(t)
+                if candidate > 0:
+                    sub_count = candidate
+                    break
+
+    vid_count = _parse_video_count(vid_text)
 
     return {
         "channel_id": channel_id,
         "title": _text(ch.get("title")) or "",
-        # /channel/<id> never changes, unlike handles
         "url": f"https://www.youtube.com/channel/{channel_id}",
+        "handle": handle,
+        "thumbnail_url": thumb_url,
+        "description": desc,
         "sample_view_count": 0,
-        "subscriber_count_scraped": _parse_sub_count(sub_text),
+        "subscriber_count_scraped": sub_count,
+        "video_count_scraped": vid_count,
         "hit_count": 1,
     }
 
@@ -633,10 +720,15 @@ class YouTubeScanner:
                     continue
                 hits[cid] = hits.get(cid, 0) + 1
                 if cid not in found:
+                    uploader_id = item.get("uploader_id") or ""
+                    handle = uploader_id if uploader_id.startswith("@") else ""
                     found[cid] = {
                         "channel_id": cid,
                         "title": item.get("channel") or item.get("uploader") or "",
                         "url": f"https://www.youtube.com/channel/{cid}",
+                        "handle": handle,
+                        "thumbnail_url": item.get("thumbnail") or "",
+                        "description": item.get("description") or "",
                         "sample_view_count": item.get("view_count") or 0,
                         "subscriber_count_scraped": 0,
                         "hit_count": 0,
@@ -684,12 +776,17 @@ class YouTubeScanner:
             except ValueError:
                 break
             for it in res.get("items", []):
-                cid = (it.get("id") or {}).get("channelId") or (it.get("snippet") or {}).get("channelId")
+                snippet = it.get("snippet") or {}
+                cid = (it.get("id") or {}).get("channelId") or snippet.get("channelId")
                 if cid and cid not in found:
+                    thumbs = snippet.get("thumbnails") or {}
+                    thumb_url = (thumbs.get("medium") or thumbs.get("default") or {}).get("url", "")
                     found[cid] = {
                         "channel_id": cid,
-                        "title": (it.get("snippet") or {}).get("title", ""),
+                        "title": snippet.get("title", ""),
                         "url": f"https://www.youtube.com/channel/{cid}",
+                        "thumbnail_url": thumb_url,
+                        "description": snippet.get("description", ""),
                         "sample_view_count": 0,
                         "subscriber_count_scraped": 0,
                         "hit_count": 1,
@@ -823,9 +920,10 @@ class YouTubeScanner:
 
         title_node = root.find(f"{atom}title")
         feed_title = (title_node.text or "").strip() if title_node is not None else ""
+        feed_published = (root.findtext(f"{atom}published") or "").strip()
 
         if not dates:
-            return {"feed_title": feed_title, "empty": True}
+            return {"feed_title": feed_title, "created_at": feed_published, "empty": True}
 
         dates.sort(reverse=True)
         titles.sort(key=lambda t: t[0], reverse=True)
@@ -837,6 +935,7 @@ class YouTubeScanner:
 
         return {
             "feed_title": feed_title,
+            "created_at": feed_published,
             "empty": False,
             "last_upload_date": last_date.strftime("%Y-%m-%d"),
             "days_since_last_upload": days_since,
@@ -852,8 +951,67 @@ class YouTubeScanner:
     # ------------------------------------------------------------------ #
     # Per-channel analysis
     # ------------------------------------------------------------------ #
-    def _ytdlp_channel_stats(self, channel_url: str) -> Tuple[int, int]:
-        """Slow fallback: (subscribers, video_count). Returns zeros on failure."""
+    def _scrape_channel_header(self, channel_id: str) -> Dict[str, Any]:
+        """
+        Fast fallback (<0.5s): Scrapes channel page for avatar, handle, subscribers,
+        video count, and description when official API is unavailable or quota is exhausted.
+        """
+        if not channel_id:
+            return {}
+        url = f"https://www.youtube.com/channel/{channel_id}"
+        status, raw = _http_request(url, timeout=6, retries=1)
+        if status != 200 or not raw:
+            return {}
+        html = raw.decode("utf-8", errors="ignore")
+        data = _extract_initial_data(html)
+        if not data:
+            return {}
+        res: Dict[str, Any] = {}
+        for phr in list(_walk_key(data, "pageHeaderRenderer"))[:1]:
+            vm = phr.get("content", {}).get("pageHeaderViewModel", {})
+            for src in list(_walk_key(vm.get("image", {}), "sources"))[:1]:
+                if isinstance(src, list) and src:
+                    u = src[-1].get("url", "")
+                    if u:
+                        res["thumbnail_url"] = ("https:" + u) if u.startswith("//") else u
+            for part in list(_walk_key(vm.get("metadata", {}), "metadataParts")):
+                if isinstance(part, list):
+                    for p in part:
+                        txt = p.get("text", {}).get("content", "")
+                        if not txt:
+                            continue
+                        if txt.startswith("@"):
+                            res["handle"] = urllib.parse.unquote(txt)
+                        elif re.search(r"(?:subscriber|sub|người đăng ký|người theo dõi|follower)", txt, re.IGNORECASE):
+                            res["subscriber_count"] = _parse_sub_count(txt)
+                        elif re.search(r"(?:video|vid)", txt, re.IGNORECASE):
+                            res["video_count"] = _parse_video_count(txt)
+            desc = vm.get("description", {}).get("descriptionPreviewViewModel", {}).get("description", {}).get("content", "")
+            if desc:
+                res["description"] = desc
+
+        # Older layout: c4TabbedHeaderRenderer
+        if not res.get("thumbnail_url") or not res.get("subscriber_count"):
+            for c4 in list(_walk_key(data, "c4TabbedHeaderRenderer"))[:1]:
+                if not res.get("thumbnail_url"):
+                    thumbs = c4.get("avatar", {}).get("thumbnails", [])
+                    if thumbs and isinstance(thumbs, list):
+                        u = thumbs[-1].get("url", "")
+                        if u:
+                            res["thumbnail_url"] = ("https:" + u) if u.startswith("//") else u
+                if not res.get("subscriber_count"):
+                    sub_txt = _text(c4.get("subscriberCountText"))
+                    if sub_txt:
+                        res["subscriber_count"] = _parse_sub_count(sub_txt)
+                if not res.get("video_count"):
+                    vid_txt = _text(c4.get("videosCountText"))
+                    if vid_txt:
+                        res["video_count"] = _parse_video_count(vid_txt)
+
+        return res
+
+    def _ytdlp_channel_stats(self, channel_url: str) -> Dict[str, Any]:
+        """Slow fallback: extracts subscribers, video_count, total_views, avatar, description."""
         try:
             url = channel_url.rstrip("/")
             if not url.endswith("/videos"):
@@ -864,10 +1022,30 @@ class YouTubeScanner:
             if info:
                 subs = info.get("channel_follower_count") or info.get("subscriber_count") or 0
                 vids = info.get("playlist_count") or 0
-                return int(subs), int(vids)
+                views = info.get("view_count") or 0
+                desc = info.get("description") or ""
+                uploader_id = info.get("uploader_id") or ""
+                handle = uploader_id if uploader_id.startswith("@") else ""
+                thumbs = info.get("thumbnails") or []
+                thumb_url = ""
+                if isinstance(thumbs, list) and thumbs:
+                    for t in reversed(thumbs):
+                        u = t.get("url", "")
+                        if u and ("avatar" in t.get("id", "") or "avatar" in u or not thumb_url):
+                            thumb_url = u
+                            if "avatar" in t.get("id", ""):
+                                break
+                return {
+                    "subscriber_count": int(subs),
+                    "video_count": int(vids),
+                    "total_view_count": int(views),
+                    "thumbnail_url": thumb_url,
+                    "handle": handle,
+                    "description": desc,
+                }
         except Exception as e:
             log_event("WARNING", f"yt-dlp stats lỗi cho {channel_url}: {e}")
-        return 0, 0
+        return {}
 
     def analyze_channel_cadence(self, channel_url: str, basic_info: Dict[str, Any]) -> Dict[str, Any]:
         channel_id = basic_info.get("channel_id", "")
@@ -875,13 +1053,15 @@ class YouTubeScanner:
         api = basic_info.get("api_stats") or {}
 
         subscribers = api.get("subscriber_count") or basic_info.get("subscriber_count_scraped", 0)
-        video_count = api.get("video_count", 0)
+        video_count = api.get("video_count", 0) or basic_info.get("video_count_scraped", 0)
         total_views = api.get("total_view_count", 0)
         avg_views = basic_info.get("sample_view_count", 0)
         stats_source = "api" if api else ("scrape" if subscribers else "none")
 
         if not title and api.get("api_title"):
             title = api["api_title"]
+        if not title and basic_info.get("title"):
+            title = basic_info["title"]
 
         last_upload_date = "N/A"
         days_since = 999
@@ -912,13 +1092,40 @@ class YouTubeScanner:
                 if rss["avg_views"] > 0:
                     avg_views = rss["avg_views"]
 
+        # Fast fallback when official API did not provide full metadata (subscribers, avatar, handle, or videos)
+        if not api and (subscribers == 0 or not basic_info.get("thumbnail_url") or video_count == 0):
+            scraped = self._scrape_channel_header(channel_id)
+            if scraped:
+                if not basic_info.get("thumbnail_url") and scraped.get("thumbnail_url"):
+                    basic_info["thumbnail_url"] = scraped["thumbnail_url"]
+                if not basic_info.get("handle") and scraped.get("handle"):
+                    basic_info["handle"] = scraped["handle"]
+                if not basic_info.get("description") and scraped.get("description"):
+                    basic_info["description"] = scraped["description"]
+                if subscribers == 0 and scraped.get("subscriber_count"):
+                    subscribers = scraped["subscriber_count"]
+                    if stats_source == "none":
+                        stats_source = "fast-scrape"
+                if video_count == 0 and scraped.get("video_count"):
+                    video_count = scraped["video_count"]
+
         # Slow fallback only when we still have no subscriber number
         if subscribers == 0 and not api.get("hidden_subs"):
-            yt_subs, yt_vids = self._ytdlp_channel_stats(channel_url)
-            if yt_subs:
-                subscribers, stats_source = yt_subs, "yt-dlp"
-            if yt_vids and not video_count:
-                video_count = yt_vids
+            yt_res = self._ytdlp_channel_stats(channel_url)
+            if yt_res:
+                if yt_res.get("subscriber_count"):
+                    subscribers = yt_res["subscriber_count"]
+                    stats_source = "yt-dlp"
+                if yt_res.get("video_count") and not video_count:
+                    video_count = yt_res["video_count"]
+                if yt_res.get("total_view_count") and not total_views:
+                    total_views = yt_res["total_view_count"]
+                if not basic_info.get("thumbnail_url") and yt_res.get("thumbnail_url"):
+                    basic_info["thumbnail_url"] = yt_res["thumbnail_url"]
+                if not basic_info.get("handle") and yt_res.get("handle"):
+                    basic_info["handle"] = yt_res["handle"]
+                if not basic_info.get("description") and yt_res.get("description"):
+                    basic_info["description"] = yt_res["description"]
 
         # ---- Derived metrics (None = unknown, never stored as a fake 0) ----
         views_per_sub = (
@@ -929,7 +1136,7 @@ class YouTubeScanner:
             int(total_views / video_count) if total_views > 0 and video_count > 0 else 0
         )
         videos_per_month = 0.0
-        created = _parse_iso(api.get("created_at"))
+        created = _parse_iso(api.get("created_at") or (rss.get("created_at") if rss else "") or basic_info.get("created_at"))
         if created and video_count > 0:
             age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400.0
             if age_days > 0:
@@ -942,11 +1149,11 @@ class YouTubeScanner:
             "channel_id": channel_id,
             "title": title or f"Channel {channel_id}",
             "url": channel_url,
-            "handle": api.get("handle", ""),
-            "description": api.get("description", ""),
-            "country": api.get("country", ""),
-            "created_at": api.get("created_at", ""),
-            "thumbnail_url": api.get("thumbnail_url", ""),
+            "handle": api.get("handle", "") or basic_info.get("handle", ""),
+            "description": api.get("description", "") or basic_info.get("description", ""),
+            "country": api.get("country", "") or basic_info.get("country", ""),
+            "created_at": api.get("created_at", "") or (rss.get("created_at", "") if rss else "") or basic_info.get("created_at", ""),
+            "thumbnail_url": api.get("thumbnail_url", "") or basic_info.get("thumbnail_url", ""),
             # size
             "subscriber_count": subscribers,
             "hidden_subs": None if hidden is None else int(bool(hidden)),
@@ -1303,8 +1510,14 @@ class YouTubeScanner:
             "channel_id": cid,
             "title": existing.get("title", ""),
             "url": ch_url,
+            "handle": existing.get("handle", ""),
+            "description": existing.get("description", ""),
+            "country": existing.get("country", ""),
+            "created_at": existing.get("created_at", ""),
+            "thumbnail_url": existing.get("thumbnail_url", ""),
             "sample_view_count": existing.get("avg_views", 0),
             "subscriber_count_scraped": existing.get("subscriber_count", 0),
+            "video_count_scraped": existing.get("video_count", 0),
             "hit_count": 1,
             "rank": 0,
         }

@@ -403,178 +403,288 @@ async function scanAllChannelsPipeline(btn) {
 // ==========================================
 // 9. AUTO CAMPAIGNS HUB (CHIẾN DỊCH TỰ ĐỘNG)
 // ==========================================
-async function loadCampaigns() {
+let campaignCurrentPage = 1;
+let campaignPageSize = 10;
+
+function renderCampaignCard(c) {
+    const chCount = c.channel_count || (c.channel_ids_list ? c.channel_ids_list.length : 1);
+    const gpmCount = c.gpm_count || (c.gpm_profile_ids_list ? c.gpm_profile_ids_list.length : 1);
+    const chTitle = chCount > 1 ? `${chCount} Kênh YouTube Nguồn` : (c.channel_name || 'Kênh nguồn');
+    const gpmTitle = gpmCount > 1 ? `${gpmCount} Dàn Account` : (c.gpm_profile_name ? '@' + (c.tiktok_username || c.gpm_profile_name) : 'Nick');
+
+    const distBadge = c.distribution_mode === 'round_robin'
+        ? '<span class="badge badge-cyan" title="Chống trùng: chia vòng tròn clip"><i class="fa-solid fa-arrows-spin"></i> Round-Robin (Không trùng)</span>'
+        : (c.distribution_mode === 'equal_random'
+            ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
+            : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>');
+
+    let freqBadge = '';
+    let freqText = 'Mỗi ngày';
+    if (c.post_frequency === 'every_2_days') {
+        freqBadge = '<span class="badge badge-purple" title="Đăng cách 2 ngày 1 lần"><i class="fa-solid fa-calendar-days"></i> Cách 2 ngày</span>';
+        freqText = 'Cách 2 ngày/lần';
+    } else if (c.post_frequency === 'every_3_days') {
+        freqBadge = '<span class="badge badge-purple" title="Đăng cách 3 ngày 1 lần"><i class="fa-solid fa-calendar-days"></i> Cách 3 ngày</span>';
+        freqText = 'Cách 3 ngày/lần';
+    } else if (c.post_frequency === 'specific_days') {
+        const daysMap = { 'mon': 'T2', 'tue': 'T3', 'wed': 'T4', 'thu': 'T5', 'fri': 'T6', 'sat': 'T7', 'sun': 'CN' };
+        const daysStr = (c.post_days_of_week || '').split(',').map(d => daysMap[d.trim()] || d).join(', ');
+        freqBadge = `<span class="badge badge-cyan" title="Các ngày: ${daysStr}"><i class="fa-solid fa-calendar-check"></i> ${daysStr}</span>`;
+        freqText = daysStr;
+    } else if (c.post_frequency === 'custom_interval') {
+        freqBadge = `<span class="badge badge-purple" title="Khoảng cách: ${c.post_interval_days} ngày"><i class="fa-solid fa-hourglass-half"></i> Cách ${c.post_interval_days} ngày</span>`;
+        freqText = `Cách ${c.post_interval_days} ngày`;
+    } else {
+        freqBadge = '<span class="badge badge-blue"><i class="fa-solid fa-calendar-days"></i> Mỗi ngày</span>';
+    }
+
+    const warmupBadge = c.warmup_mode ? '<span class="badge badge-gold" title="Chế độ warm-up nuôi nick mới"><i class="fa-solid fa-fire"></i> Warm-up</span>' : '';
+    const uploadBadge = (c.auto_upload === 0)
+        ? '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);" title="Chỉ tải và render video về máy, không upload lên TikTok"><i class="fa-solid fa-film"></i> Chỉ Render</span>'
+        : '<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25);" title="Tự động upload lên dàn Account"><i class="fa-brands fa-tiktok"></i> Auto Upload</span>';
+
+    const narrationBadge = (c.narration_enabled === 1)
+        ? `<span class="badge" style="background:rgba(192, 132, 252, 0.15); color:#c084fc; border:1px solid rgba(192, 132, 252, 0.3); font-size:10.5px; padding:2px 6px;" title="Lồng tiếng AI & phụ đề đồng bộ: ${escapeHtml(c.narration_language || 'Gốc')}, Giọng: ${c.voice_gender === 'female' ? 'Nữ' : 'Nam'}, Style: ${c.narration_style || 'Giật gân'}"><i class="fa-solid fa-microphone-lines"></i> Lồng tiếng AI (${escapeHtml(c.narration_language || 'Gốc')})</span>`
+        : '';
+    
+    const subBadge = c.subtitle_enabled
+        ? `<span class="badge badge-gold" title="Phong cách: ${escapeHtml(c.subtitle_style || '')}"><i class="fa-solid fa-closed-captioning"></i> Phụ Đề AI Karaoke</span>`
+        : '<span class="badge badge-secondary">Không phụ đề</span>';
+
+    const dlDir = c.download_dir || 'data/downloads';
+    const rdDir = c.render_dir || 'data/rendered';
+
+    const filterTypes = [];
+    if (c.include_shorts !== 0) filterTypes.push('Shorts');
+    if (c.include_longform !== 0) filterTypes.push('Video Dài');
+    const filterBadge = filterTypes.length > 0
+        ? `<span class="badge badge-secondary" style="font-size:10px; margin-top:3px;" title="Bộ lọc định dạng tải"><i class="fa-solid fa-filter"></i> ${filterTypes.join(' + ')}</span>`
+        : '';
+
+    return `
+    <div class="campaign-card ${c.is_active ? '' : 'campaign-paused'}">
+        <div class="campaign-header-row">
+            <div class="campaign-header-left">
+                <span class="badge ${c.is_active ? 'badge-success' : 'badge-secondary'}">
+                    <i class="fa-solid fa-circle-dot"></i> ${c.is_active ? 'Đang Chạy Auto' : 'Tạm Dừng'}
+                </span>
+                ${uploadBadge}
+                <h4 class="campaign-card-title has-tooltip" title="${escapeHtml(c.name)}" data-tooltip="${escapeHtml(c.name)}">${escapeHtml(c.name)}</h4>
+                ${distBadge}
+                ${freqBadge}
+                ${warmupBadge}
+            </div>
+            <div class="campaign-header-actions">
+                <button class="btn btn-sm btn-secondary has-tooltip" id="btnDirectRun_${c.id}" onclick="triggerDirectCampaignRun(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', this)" data-tooltip="Quét RSS & chạy thử biên tập AI cho chiến dịch này ngay (Bấm lại để dừng)">
+                    <i class="fa-solid fa-bolt text-gold"></i> Chạy Thử
+                </button>
+                <button class="btn btn-sm btn-secondary has-tooltip" onclick="openCampaignLogs(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}')" data-tooltip="Xem dữ liệu & nhật ký hoạt động chiến dịch này">
+                    <i class="fa-solid fa-list-check text-cyan"></i> Nhật Ký
+                </button>
+                <button class="btn btn-sm btn-secondary has-tooltip" onclick="openEditCampaignModal(${c.id})" data-tooltip="Chỉnh sửa cấu hình chiến dịch này">
+                    <i class="fa-solid fa-pen-to-square text-cyan"></i> Sửa
+                </button>
+                <button class="btn btn-sm ${c.is_active ? 'btn-secondary' : 'btn-success'} has-tooltip" onclick="toggleCampaign(${c.id}, this)" data-tooltip="${c.is_active ? 'Tạm dừng quy trình tự động của chiến dịch này' : 'Bật chạy lại chiến dịch này'}">
+                    <i class="fa-solid ${c.is_active ? 'fa-pause' : 'fa-play'}"></i> ${c.is_active ? 'Tạm Dừng' : 'Kích Hoạt'}
+                </button>
+                <button class="btn btn-sm btn-danger has-tooltip tooltip-left" onclick="deleteCampaign(${c.id})" data-tooltip="Xóa vĩnh viễn chiến dịch này">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="campaign-pipeline-flow">
+            <!-- Node 1: Multi-Channels Source -->
+            <div class="pipeline-node">
+                <div class="node-icon bg-blue"><i class="fa-brands fa-youtube" style="color:#ff0000;"></i></div>
+                <div class="node-text">
+                    <h5 title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</h5>
+                    <p title="${escapeHtml(chCount > 1 ? `Nhóm ${chCount} kênh lấy video tự động` : 'Quét RSS mỗi 15 phút')}">${chCount > 1 ? `Nhóm ${chCount} kênh lấy video tự động` : 'Quét RSS mỗi 15 phút'}</p>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                        <span class="pipeline-dir-tag" title="Thư mục tải MP4 gốc: ${escapeHtml(dlDir)}"><i class="fa-regular fa-folder"></i> ${escapeHtml(dlDir)}</span>
+                        ${filterBadge}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-step-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+
+            <!-- Node 2: Edit Recipe, Folders & Subtitles -->
+            <div class="pipeline-node">
+                <div class="node-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="node-text">
+                    <h5 title="${escapeHtml(c.aspect_ratio === '9:16_blur' ? '9:16 Nền Mờ' : (c.preset_name || 'Chuẩn Beta 9:16'))}">${escapeHtml(c.aspect_ratio === '9:16_blur' ? '9:16 Nền Mờ' : (c.preset_name || 'Chuẩn Beta 9:16'))}</h5>
+                    <p title="${c.video_duration || 65}s Beta • Speed x${c.speed_factor} • ${c.flip_horizontal ? 'Lật hình' : 'Gốc'} • ${c.clips_per_video || 3} clips/video • ${c.add_part_label !== 0 ? 'Hiện Part' : 'Ẩn Part'}">${c.video_duration || 65}s Beta • Speed x${c.speed_factor} • ${c.flip_horizontal ? 'Lật hình' : 'Gốc'} • <strong>${c.clips_per_video || 3} clips/video</strong> • <span style="color:${c.add_part_label !== 0 ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight:600;">${c.add_part_label !== 0 ? 'Hiện Part' : 'Ẩn Part'}</span></p>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:3px;">${subBadge}${narrationBadge}</div>
+                    <span class="pipeline-dir-tag" title="Thư mục lưu video 9:16: ${escapeHtml(rdDir)}"><i class="fa-solid fa-folder-open"></i> ${escapeHtml(rdDir)}</span>
+                </div>
+            </div>
+
+            <div class="flow-step-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+
+            <!-- Node 3: Target Multi-Profiles & Schedule -->
+            <div class="pipeline-node">
+                <div class="node-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
+                <div class="node-text">
+                    <h5 title="${escapeHtml(gpmTitle)}">${escapeHtml(gpmTitle)}</h5>
+                    <p title="${escapeHtml(freqText)} • ${c.daily_limit} video/ngày">${freqText} • ${c.daily_limit} video/ngày</p>
+                    <span class="pipeline-dir-tag" style="color:var(--accent-gold);" title="Khung giờ: ${escapeHtml(c.post_schedule || '11:30, 18:00, 20:30')}${c.random_delay_minutes ? ' (±' + c.random_delay_minutes + 'p)' : ''}"><i class="fa-regular fa-clock"></i> Khung: ${escapeHtml(c.post_schedule || '11:30, 18:00, 20:30')}${c.random_delay_minutes ? ' (&plusmn;' + c.random_delay_minutes + 'p)' : ''}</span>
+                    <span class="pipeline-dir-tag" style="color:#10b981; margin-top:2px;" title="Giãn cách an toàn tối thiểu giữa các lần đăng trên cùng 1 nick"><i class="fa-solid fa-hourglass-half"></i> Giãn cách: ${c.min_post_interval_minutes ? c.min_post_interval_minutes + 'p' : 'Toàn cục'}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="campaign-footer-row">
+            <div class="campaign-footer-meta">
+                <span class="campaign-footer-meta-item">
+                    <i class="fa-regular fa-calendar" style="color:var(--text-muted);"></i> Tạo lúc: ${escapeHtml(c.created_at || '')}
+                </span>
+                <span class="campaign-footer-meta-item" style="color:var(--accent-cyan);">
+                    <i class="fa-solid fa-bolt"></i> Phân phối: ${chCount} kênh &rarr; ${gpmCount} nick (${c.distribution_mode === 'round_robin' ? 'Xoay vòng không trùng clip' : 'Chia đều'})
+                </span>
+            </div>
+            <a href="javascript:void(0)" onclick="openCampaignLogs(${c.id}, '${escapeHtml(c.name)}')" class="campaign-history-link has-tooltip" data-tooltip="Xem nhật ký & tỷ lệ thành công">
+                <i class="fa-solid fa-chart-line"></i> Xem Lịch Sử Hoạt Động &rarr;
+            </a>
+        </div>
+    </div>
+    `;
+}
+
+function filterAndRenderCampaigns() {
     const grid = document.getElementById('campaignsFlowGrid');
     if (!grid) return;
+    const campaigns = cachedCampaigns || [];
+
+    const stepperCamp = document.getElementById('stepperCampaignStats');
+    if (stepperCamp) {
+        const activeCount = campaigns.filter(c => c.is_active === 1).length;
+        stepperCamp.textContent = `${activeCount} chiến dịch đang chạy`;
+    }
+
+    if (!campaigns.length) {
+        grid.innerHTML = `
+            <div class="card-empty-state">
+                <i class="fa-solid fa-robot"></i>
+                <h4>Chưa có chiến dịch tự động nào</h4>
+                <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận video.</p>
+                <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()" style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
+                </button>
+            </div>
+        `;
+        const paginationBar = document.getElementById('campaignsPaginationBar');
+        if (paginationBar) paginationBar.style.display = 'none';
+        return;
+    }
+
+    const keyword = (document.getElementById('searchCampaignKeyword')?.value || '').trim().toLowerCase();
+    const statusFilter = document.getElementById('filterCampaignStatus')?.value || 'ALL';
+
+    const filtered = campaigns.filter(c => {
+        // Trạng thái hoạt động
+        if (statusFilter === 'ACTIVE' && c.is_active !== 1) return false;
+        if (statusFilter === 'PAUSED' && c.is_active !== 0) return false;
+
+        // Từ khóa tìm kiếm
+        if (keyword) {
+            const name = (c.name || '').toLowerCase();
+            const chName = (c.channel_name || '').toLowerCase();
+            const gpmName = (c.gpm_profile_name || '').toLowerCase();
+            const uName = (c.tiktok_username || '').toLowerCase();
+            const preset = (c.preset_name || '').toLowerCase();
+            const match = name.includes(keyword) || chName.includes(keyword) || gpmName.includes(keyword) || uName.includes(keyword) || preset.includes(keyword);
+            if (!match) return false;
+        }
+        return true;
+    });
+
+    const badgeCount = document.getElementById('badgeCampaignCount');
+    if (badgeCount) {
+        badgeCount.textContent = `${filtered.length}/${campaigns.length} Chiến Dịch`;
+    }
+
+    const paginationBar = document.getElementById('campaignsPaginationBar');
+    if (paginationBar) paginationBar.style.display = 'flex';
+
+    if (!filtered.length) {
+        grid.innerHTML = `
+            <div class="card-empty-state" style="padding:32px 20px;">
+                <i class="fa-solid fa-magnifying-glass" style="font-size:26px; opacity:0.4; margin-bottom:8px;"></i>
+                <h4>Không tìm thấy chiến dịch phù hợp</h4>
+                <p style="color:var(--text-muted); font-size:12.5px;">Không có chiến dịch nào khớp với từ khóa "<strong>${escapeHtml(keyword)}</strong>".</p>
+                <button class="btn btn-sm btn-secondary mt-2" onclick="document.getElementById('searchCampaignKeyword').value=''; document.getElementById('filterCampaignStatus').value='ALL'; filterAndRenderCampaigns();">
+                    <i class="fa-solid fa-rotate-left"></i> Đặt lại bộ lọc tìm kiếm
+                </button>
+            </div>
+        `;
+        const navEl = document.getElementById('campaignsPaginationNav');
+        if (navEl) navEl.innerHTML = '';
+        const infoEl = document.getElementById('campaignsPaginationInfo');
+        if (infoEl) infoEl.textContent = '0 chiến dịch';
+        return;
+    }
+
+    const totalPages = Math.ceil(filtered.length / campaignPageSize) || 1;
+    if (campaignCurrentPage > totalPages) campaignCurrentPage = totalPages;
+    if (campaignCurrentPage < 1) campaignCurrentPage = 1;
+
+    const startIdx = (campaignCurrentPage - 1) * campaignPageSize;
+    const endIdx = Math.min(startIdx + campaignPageSize, filtered.length);
+    const pagedList = filtered.slice(startIdx, endIdx);
+
+    grid.innerHTML = pagedList.map(renderCampaignCard).join('');
+
+    // Cập nhật thông tin phân trang
+    const infoEl = document.getElementById('campaignsPaginationInfo');
+    if (infoEl) {
+        infoEl.textContent = `Hiển thị ${startIdx + 1} - ${endIdx} / ${filtered.length} chiến dịch`;
+    }
+
+    // Cập nhật thanh điều hướng phân trang (nằm gọn gàng bên phải)
+    const navEl = document.getElementById('campaignsPaginationNav');
+    if (navEl) {
+        navEl.innerHTML = `
+            <button type="button" class="btn btn-secondary btn-sm" style="height: 28px; padding: 0 8px; font-size: 11px;" 
+                onclick="goToCampaignPage(1)" ${campaignCurrentPage === 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''} title="Trang đầu">
+                <i class="fa-solid fa-angles-left"></i>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" style="height: 28px; padding: 0 8px; font-size: 11px;" 
+                onclick="goToCampaignPage(${campaignCurrentPage - 1})" ${campaignCurrentPage === 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''} title="Trang trước">
+                <i class="fa-solid fa-angle-left"></i>
+            </button>
+            <span style="font-size: 12px; font-weight: 600; padding: 0 10px; color: var(--text-primary); white-space: nowrap;">
+                Trang ${campaignCurrentPage} / ${totalPages}
+            </span>
+            <button type="button" class="btn btn-secondary btn-sm" style="height: 28px; padding: 0 8px; font-size: 11px;" 
+                onclick="goToCampaignPage(${campaignCurrentPage + 1})" ${campaignCurrentPage === totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''} title="Trang sau">
+                <i class="fa-solid fa-angle-right"></i>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" style="height: 28px; padding: 0 8px; font-size: 11px;" 
+                onclick="goToCampaignPage(${totalPages})" ${campaignCurrentPage === totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''} title="Trang cuối">
+                <i class="fa-solid fa-angles-right"></i>
+            </button>
+        `;
+    }
+}
+
+function goToCampaignPage(page) {
+    campaignCurrentPage = page;
+    filterAndRenderCampaigns();
+}
+
+function changeCampaignsPageSize(size) {
+    campaignPageSize = parseInt(size, 10) || 10;
+    campaignCurrentPage = 1;
+    filterAndRenderCampaigns();
+}
+
+async function loadCampaigns() {
     try {
         const res = await fetch('/api/campaigns');
         const campaigns = await res.json();
         cachedCampaigns = campaigns;
-
-        const stepperCamp = document.getElementById('stepperCampaignStats');
-        if (stepperCamp) {
-            const activeCount = campaigns.filter(c => c.is_active === 1).length;
-            stepperCamp.textContent = `${activeCount} chiến dịch đang chạy`;
-        }
-
-        if (!campaigns.length) {
-            grid.innerHTML = `
-                <div class="card-empty-state">
-                    <i class="fa-solid fa-robot"></i>
-                    <h4>Chưa có chiến dịch tự động nào</h4>
-                    <p>Hãy tạo chiến dịch đầu tiên để kết nối Kênh YouTube nguồn với công thức Edit và Nick TikTok nhận video.</p>
-                    <button class="btn btn-primary mt-3" onclick="openNewCampaignModal()" style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-                        <i class="fa-solid fa-plus"></i> <span>Tạo Chiến Dịch Tự Động Đầu Tiên</span>
-                    </button>
-                </div>
-            `;
-            return;
-        }
-
-        grid.innerHTML = campaigns.map(c => {
-            const chCount = c.channel_count || (c.channel_ids_list ? c.channel_ids_list.length : 1);
-            const gpmCount = c.gpm_count || (c.gpm_profile_ids_list ? c.gpm_profile_ids_list.length : 1);
-            const chTitle = chCount > 1 ? `${chCount} Kênh YouTube Nguồn` : (c.channel_name || 'Kênh nguồn');
-            const gpmTitle = gpmCount > 1 ? `${gpmCount} Dàn Account` : (c.gpm_profile_name ? '@' + (c.tiktok_username || c.gpm_profile_name) : 'Nick');
-
-            const distBadge = c.distribution_mode === 'round_robin'
-                ? '<span class="badge badge-cyan" title="Chống trùng: chia vòng tròn clip"><i class="fa-solid fa-arrows-spin"></i> Round-Robin (Không trùng)</span>'
-                : (c.distribution_mode === 'equal_random'
-                    ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
-                    : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>');
-
-            let freqBadge = '';
-            let freqText = 'Mỗi ngày';
-            if (c.post_frequency === 'every_2_days') {
-                freqBadge = '<span class="badge badge-purple" title="Đăng cách 2 ngày 1 lần"><i class="fa-solid fa-calendar-days"></i> Cách 2 ngày</span>';
-                freqText = 'Cách 2 ngày/lần';
-            } else if (c.post_frequency === 'every_3_days') {
-                freqBadge = '<span class="badge badge-purple" title="Đăng cách 3 ngày 1 lần"><i class="fa-solid fa-calendar-days"></i> Cách 3 ngày</span>';
-                freqText = 'Cách 3 ngày/lần';
-            } else if (c.post_frequency === 'specific_days') {
-                const daysMap = { 'mon': 'T2', 'tue': 'T3', 'wed': 'T4', 'thu': 'T5', 'fri': 'T6', 'sat': 'T7', 'sun': 'CN' };
-                const daysStr = (c.post_days_of_week || '').split(',').map(d => daysMap[d.trim()] || d).join(', ');
-                freqBadge = `<span class="badge badge-cyan" title="Các ngày: ${daysStr}"><i class="fa-solid fa-calendar-check"></i> ${daysStr}</span>`;
-                freqText = daysStr;
-            } else if (c.post_frequency === 'custom_interval') {
-                freqBadge = `<span class="badge badge-purple" title="Khoảng cách: ${c.post_interval_days} ngày"><i class="fa-solid fa-hourglass-half"></i> Cách ${c.post_interval_days} ngày</span>`;
-                freqText = `Cách ${c.post_interval_days} ngày`;
-            } else {
-                freqBadge = '<span class="badge badge-blue"><i class="fa-solid fa-calendar-days"></i> Mỗi ngày</span>';
-            }
-
-            const warmupBadge = c.warmup_mode ? '<span class="badge badge-gold" title="Chế độ warm-up nuôi nick mới"><i class="fa-solid fa-fire"></i> Warm-up</span>' : '';
-            const uploadBadge = (c.auto_upload === 0)
-                ? '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);" title="Chỉ tải và render video về máy, không upload lên TikTok"><i class="fa-solid fa-film"></i> Chỉ Render</span>'
-                : '<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25);" title="Tự động upload lên dàn Account"><i class="fa-brands fa-tiktok"></i> Auto Upload</span>';
-
-            const narrationBadge = (c.narration_enabled === 1)
-                ? `<span class="badge" style="background:rgba(192, 132, 252, 0.15); color:#c084fc; border:1px solid rgba(192, 132, 252, 0.3); font-size:10.5px; padding:2px 6px;" title="Lồng tiếng AI & phụ đề đồng bộ: ${escapeHtml(c.narration_language || 'Gốc')}, Giọng: ${c.voice_gender === 'female' ? 'Nữ' : 'Nam'}, Style: ${c.narration_style || 'Giật gân'}"><i class="fa-solid fa-microphone-lines"></i> Lồng tiếng AI (${escapeHtml(c.narration_language || 'Gốc')})</span>`
-                : '';
-            
-            const subBadge = c.subtitle_enabled
-                ? `<span class="badge badge-gold" title="Phong cách: ${escapeHtml(c.subtitle_style || '')}"><i class="fa-solid fa-closed-captioning"></i> Phụ Đề AI Karaoke</span>`
-                : '<span class="badge badge-secondary">Không phụ đề</span>';
-
-            const dlDir = c.download_dir || 'data/downloads';
-            const rdDir = c.render_dir || 'data/rendered';
-
-            const filterTypes = [];
-            if (c.include_shorts !== 0) filterTypes.push('Shorts');
-            if (c.include_longform !== 0) filterTypes.push('Video Dài');
-            const filterBadge = filterTypes.length > 0
-                ? `<span class="badge badge-secondary" style="font-size:10px; margin-top:3px;" title="Bộ lọc định dạng tải"><i class="fa-solid fa-filter"></i> ${filterTypes.join(' + ')}</span>`
-                : '';
-
-            return `
-            <div class="campaign-card ${c.is_active ? '' : 'campaign-paused'}">
-                <div class="campaign-header-row">
-                    <div class="campaign-header-left">
-                        <span class="badge ${c.is_active ? 'badge-success' : 'badge-secondary'}">
-                            <i class="fa-solid fa-circle-dot"></i> ${c.is_active ? 'Đang Chạy Auto' : 'Tạm Dừng'}
-                        </span>
-                        ${uploadBadge}
-                        <h4 class="campaign-card-title has-tooltip" title="${escapeHtml(c.name)}" data-tooltip="${escapeHtml(c.name)}">${escapeHtml(c.name)}</h4>
-                        ${distBadge}
-                        ${freqBadge}
-                        ${warmupBadge}
-                    </div>
-                    <div class="campaign-header-actions">
-                        <button class="btn btn-sm btn-secondary has-tooltip" id="btnDirectRun_${c.id}" onclick="triggerDirectCampaignRun(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', this)" data-tooltip="Quét RSS & chạy thử biên tập AI cho chiến dịch này ngay (Bấm lại để dừng)">
-                            <i class="fa-solid fa-bolt text-gold"></i> Chạy Thử
-                        </button>
-                        <button class="btn btn-sm btn-secondary has-tooltip" onclick="openCampaignLogs(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}')" data-tooltip="Xem dữ liệu & nhật ký hoạt động chiến dịch này">
-                            <i class="fa-solid fa-list-check text-cyan"></i> Nhật Ký
-                        </button>
-                        <button class="btn btn-sm btn-secondary has-tooltip" onclick="openEditCampaignModal(${c.id})" data-tooltip="Chỉnh sửa cấu hình chiến dịch này">
-                            <i class="fa-solid fa-pen-to-square text-cyan"></i> Sửa
-                        </button>
-                        <button class="btn btn-sm ${c.is_active ? 'btn-secondary' : 'btn-success'} has-tooltip" onclick="toggleCampaign(${c.id}, this)" data-tooltip="${c.is_active ? 'Tạm dừng quy trình tự động của chiến dịch này' : 'Bật chạy lại chiến dịch này'}">
-                            <i class="fa-solid ${c.is_active ? 'fa-pause' : 'fa-play'}"></i> ${c.is_active ? 'Tạm Dừng' : 'Kích Hoạt'}
-                        </button>
-                        <button class="btn btn-sm btn-danger has-tooltip tooltip-left" onclick="deleteCampaign(${c.id})" data-tooltip="Xóa vĩnh viễn chiến dịch này">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="campaign-pipeline-flow">
-                    <!-- Node 1: Multi-Channels Source -->
-                    <div class="pipeline-node">
-                        <div class="node-icon bg-blue"><i class="fa-brands fa-youtube" style="color:#ff0000;"></i></div>
-                        <div class="node-text">
-                            <h5 title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</h5>
-                            <p title="${escapeHtml(chCount > 1 ? `Nhóm ${chCount} kênh lấy video tự động` : 'Quét RSS mỗi 15 phút')}">${chCount > 1 ? `Nhóm ${chCount} kênh lấy video tự động` : 'Quét RSS mỗi 15 phút'}</p>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                                <span class="pipeline-dir-tag" title="Thư mục tải MP4 gốc: ${escapeHtml(dlDir)}"><i class="fa-regular fa-folder"></i> ${escapeHtml(dlDir)}</span>
-                                ${filterBadge}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flow-step-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-
-                    <!-- Node 2: Edit Recipe, Folders & Subtitles -->
-                    <div class="pipeline-node">
-                        <div class="node-icon bg-purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                        <div class="node-text">
-                            <h5 title="${escapeHtml(c.aspect_ratio === '9:16_blur' ? '9:16 Nền Mờ' : (c.preset_name || 'Chuẩn Beta 9:16'))}">${escapeHtml(c.aspect_ratio === '9:16_blur' ? '9:16 Nền Mờ' : (c.preset_name || 'Chuẩn Beta 9:16'))}</h5>
-                            <p title="${c.video_duration || 65}s Beta • Speed x${c.speed_factor} • ${c.flip_horizontal ? 'Lật hình' : 'Gốc'} • ${c.clips_per_video || 3} clips/video • ${c.add_part_label !== 0 ? 'Hiện Part' : 'Ẩn Part'}">${c.video_duration || 65}s Beta • Speed x${c.speed_factor} • ${c.flip_horizontal ? 'Lật hình' : 'Gốc'} • <strong>${c.clips_per_video || 3} clips/video</strong> • <span style="color:${c.add_part_label !== 0 ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight:600;">${c.add_part_label !== 0 ? 'Hiện Part' : 'Ẩn Part'}</span></p>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:3px;">${subBadge}${narrationBadge}</div>
-                            <span class="pipeline-dir-tag" title="Thư mục lưu video 9:16: ${escapeHtml(rdDir)}"><i class="fa-solid fa-folder-open"></i> ${escapeHtml(rdDir)}</span>
-                        </div>
-                    </div>
-
-                    <div class="flow-step-arrow"><i class="fa-solid fa-arrow-right"></i></div>
-
-                    <!-- Node 3: Target Multi-Profiles & Schedule -->
-                    <div class="pipeline-node">
-                        <div class="node-icon bg-gold"><i class="fa-brands fa-tiktok"></i></div>
-                        <div class="node-text">
-                            <h5 title="${escapeHtml(gpmTitle)}">${escapeHtml(gpmTitle)}</h5>
-                            <p title="${escapeHtml(freqText)} • ${c.daily_limit} video/ngày">${freqText} • ${c.daily_limit} video/ngày</p>
-                            <span class="pipeline-dir-tag" style="color:var(--accent-gold);" title="Khung giờ: ${escapeHtml(c.post_schedule || '11:30, 18:00, 20:30')}${c.random_delay_minutes ? ' (±' + c.random_delay_minutes + 'p)' : ''}"><i class="fa-regular fa-clock"></i> Khung: ${escapeHtml(c.post_schedule || '11:30, 18:00, 20:30')}${c.random_delay_minutes ? ' (&plusmn;' + c.random_delay_minutes + 'p)' : ''}</span>
-                            <span class="pipeline-dir-tag" style="color:#10b981; margin-top:2px;" title="Giãn cách an toàn tối thiểu giữa các lần đăng trên cùng 1 nick"><i class="fa-solid fa-hourglass-half"></i> Giãn cách: ${c.min_post_interval_minutes ? c.min_post_interval_minutes + 'p' : 'Toàn cục'}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="campaign-footer-row">
-                    <div class="campaign-footer-meta">
-                        <span class="campaign-footer-meta-item">
-                            <i class="fa-regular fa-calendar" style="color:var(--text-muted);"></i> Tạo lúc: ${escapeHtml(c.created_at || '')}
-                        </span>
-                        <span class="campaign-footer-meta-item" style="color:var(--accent-cyan);">
-                            <i class="fa-solid fa-bolt"></i> Phân phối: ${chCount} kênh &rarr; ${gpmCount} nick (${c.distribution_mode === 'round_robin' ? 'Xoay vòng không trùng clip' : 'Chia đều'})
-                        </span>
-                    </div>
-                    <a href="javascript:void(0)" onclick="openCampaignLogs(${c.id}, '${escapeHtml(c.name)}')" class="campaign-history-link has-tooltip" data-tooltip="Xem nhật ký & tỷ lệ thành công">
-                        <i class="fa-solid fa-chart-line"></i> Xem Lịch Sử Hoạt Động &rarr;
-                    </a>
-                </div>
-            </div>
-            `;
-        }).join('');
+        filterAndRenderCampaigns();
     } catch (err) {
         console.error('Lỗi nạp chiến dịch:', err);
     }
@@ -615,33 +725,14 @@ window.switchModalTab = switchModalTab;
 function updateCampaignSourceModeUI(prefix, mode) {
     const p = (prefix === 'new') ? 'campaign' : 'editCampaign';
     const ytSection = document.getElementById(`${p}YoutubeSourceSection`);
-    const folderSection = document.getElementById(`${p}FolderSourceSection`);
-    const badge = document.getElementById(`${p}SourceModeBadge`);
-
-    if (mode === 'youtube') {
-        if (ytSection) ytSection.style.display = 'block';
-        if (folderSection) folderSection.style.display = 'none';
-        if (badge) {
-            badge.className = 'badge badge-primary';
-            badge.innerHTML = '<i class="fa-brands fa-youtube"></i> Chế độ: Chỉ Quét RSS YouTube';
-        }
-    } else if (mode === 'local_folder') {
-        if (ytSection) ytSection.style.display = 'none';
-        if (folderSection) folderSection.style.display = 'block';
-        if (badge) {
-            badge.className = 'badge badge-info';
-            badge.innerHTML = '<i class="fa-solid fa-folder-open"></i> Chế độ: Chỉ Dùng Kho Video Máy';
-        }
-    } else {
-        if (ytSection) ytSection.style.display = 'block';
-        if (folderSection) folderSection.style.display = 'block';
-        if (badge) {
-            badge.className = 'badge badge-success';
-            badge.innerHTML = '<i class="fa-solid fa-layer-group"></i> Chế độ: Tự Động Kết Hợp (Hybrid)';
-        }
-    }
+    if (ytSection) ytSection.style.display = 'block';
 }
 window.updateCampaignSourceModeUI = updateCampaignSourceModeUI;
+
+function updateSourceModeBadge(mode) {
+    // Mode is always YouTube channels
+}
+window.updateSourceModeBadge = updateSourceModeBadge;
 
 function toggleCampaignTtsEngine(prefix, engine) {}
 window.toggleCampaignTtsEngine = toggleCampaignTtsEngine;
@@ -676,16 +767,7 @@ async function openNewCampaignModal() {
     if (!modal) return;
     switchModalTab('new', 'source');
 
-    // Reset Source Mode radio to hybrid
-    const hybridRadio = document.querySelector('input[name="campaignSourceModeRadio"][value="hybrid"]');
-    if (hybridRadio) hybridRadio.checked = true;
-    updateCampaignSourceModeUI('new', 'hybrid');
-
-    // Reset local folder input & stats
-    const localFolderInp = document.getElementById('campaignLocalFolderInput');
-    if (localFolderInp) localFolderInp.value = '';
-    const localStats = document.getElementById('campaignLocalFolderStats');
-    if (localStats) localStats.innerHTML = '';
+    updateCampaignSourceModeUI('new', 'youtube');
 
     // Reset inputs
     const nameInput = document.getElementById('campaignNameInput');
@@ -731,13 +813,17 @@ async function openNewCampaignModal() {
 
     // Reset Narration & TTS
     const newCampNarr = document.getElementById('campaignNarrationSwitch');
-    if (newCampNarr) newCampNarr.checked = true;
-    toggleCampaignNarration('new', true);
-            // Reset subtitle switch & wrapper visibility
+    if (newCampNarr) {
+        newCampNarr.checked = false;
+        toggleCampaignNarration('new', false);
+    }
+    // Reset subtitle switch & wrapper visibility
     const newSubSwitch = document.getElementById('campaignSubtitleSwitch');
-    if (newSubSwitch) newSubSwitch.checked = true;
-    const newSubWrap = document.getElementById('campaignSubtitleSettingsWrap');
-    if (newSubWrap) newSubWrap.style.display = '';
+    if (newSubSwitch) {
+        newSubSwitch.checked = false;
+        const newSubWrap = document.getElementById('campaignSubtitleSettingsWrap');
+        if (newSubWrap) newSubWrap.style.display = 'none';
+    }
 
     const clipsInput = document.getElementById('campaignClipsPerVideoInput');
     if (clipsInput) clipsInput.value = '3';
@@ -763,11 +849,7 @@ async function openNewCampaignModal() {
 
     // Reset Target Platforms & Account Filter Input
     const newTtCheck = document.getElementById('newCampTargetTikTok');
-    const newYtCheck = document.getElementById('newCampTargetYouTube');
-    const newFbCheck = document.getElementById('newCampTargetFacebook');
     if (newTtCheck) newTtCheck.checked = true;
-    if (newYtCheck) newYtCheck.checked = false;
-    if (newFbCheck) newFbCheck.checked = false;
     const newGpmFilterInput = document.getElementById('campaignGpmFilterInput');
     if (newGpmFilterInput) newGpmFilterInput.value = '';
 
@@ -860,12 +942,8 @@ function renderCampaignGpmCheckboxes(profiles) {
         return;
     }
 
-    // Xác định các platform đang được tick ở trên để pre-check tối đa 3 nick phù hợp
-    const activePlatforms = new Set();
-    if (document.getElementById('newCampTargetTikTok')?.checked) activePlatforms.add('tiktok');
-    if (document.getElementById('newCampTargetYouTube')?.checked) activePlatforms.add('youtube');
-    if (document.getElementById('newCampTargetFacebook')?.checked) activePlatforms.add('facebook');
-    if (activePlatforms.size === 0) activePlatforms.add('tiktok');
+    // Pre-check tối đa 3 nick TikTok phù hợp
+    const activePlatforms = new Set(['tiktok']);
 
     let matchingCheckedCount = 0;
     const itemsHtml = [];
@@ -1128,14 +1206,7 @@ function filterCampaignGpmAccounts(mode = 'new') {
     const searchId = isNew ? 'campaignGpmFilterInput' : 'editCampaignGpmFilterInput';
     const prefix = isNew ? 'newCampTarget' : 'editCampTarget';
 
-    const ttChecked = Boolean(document.getElementById(`${prefix}TikTok`)?.checked);
-    const ytChecked = Boolean(document.getElementById(`${prefix}YouTube`)?.checked);
-    const fbChecked = Boolean(document.getElementById(`${prefix}Facebook`)?.checked);
-
-    const activePlatforms = new Set();
-    if (ttChecked) activePlatforms.add('tiktok');
-    if (ytChecked) activePlatforms.add('youtube');
-    if (fbChecked) activePlatforms.add('facebook');
+    const activePlatforms = new Set(['tiktok']);
 
     const searchInput = document.getElementById(searchId);
     const query = (searchInput?.value || '').toLowerCase().trim();
@@ -1277,38 +1348,20 @@ async function handleCreateCampaignSubmit(e) {
     const campNameInput = document.getElementById('campaignNameInput');
     const campName = campNameInput ? campNameInput.value.trim() : '';
 
-    // 1. Source: Select mode & validate
-    const localFolder = (document.getElementById('campaignLocalFolderInput')?.value || '').trim();
+    // 1. Source: YouTube Channels only
     const chBoxes = document.querySelectorAll('.campaign-ch-check:checked');
     const selectedChannelIds = Array.from(chBoxes).map(b => b.value);
-    const sourceModeRadio = document.querySelector('input[name="campaignSourceModeRadio"]:checked');
-    const sourceMode = sourceModeRadio ? sourceModeRadio.value : 'hybrid';
+    const sourceMode = 'youtube';
+    const localFolder = '';
 
-    const hasChannels = selectedChannelIds.length > 0;
-    const hasFolder = localFolder.length > 0;
-
-    if (sourceMode === 'youtube' && !hasChannels) {
-        showToast('⚠️ Chế độ YouTube: Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
-        switchModalTab('new', 'source');
-        return;
-    }
-    if (sourceMode === 'local_folder' && !hasFolder) {
-        showToast('⚠️ Chế độ Kho Video Máy: Vui lòng nhập đường dẫn thư mục video trên máy tính!', 'warning');
-        switchModalTab('new', 'source');
-        return;
-    }
-    if (sourceMode === 'hybrid' && !hasChannels && !hasFolder) {
-        showToast('⚠️ Chế độ Kết Hợp: Vui lòng chọn Kênh YouTube nguồn HOẶC nhập Thư mục video trên máy!', 'warning');
+    if (selectedChannelIds.length === 0) {
+        showToast('⚠️ Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
         switchModalTab('new', 'source');
         return;
     }
 
-    // Target Platforms
-    const targetPlatforms = [];
-    if (document.getElementById('newCampTargetTikTok')?.checked) targetPlatforms.push('tiktok');
-    if (document.getElementById('newCampTargetYouTube')?.checked) targetPlatforms.push('youtube');
-    if (document.getElementById('newCampTargetFacebook')?.checked) targetPlatforms.push('facebook');
-    if (targetPlatforms.length === 0) targetPlatforms.push('tiktok');
+    // Target Platforms: TikTok only
+    const targetPlatforms = ['tiktok'];
 
     const autoUpload = document.getElementById('campaignAutoUploadSwitch')?.checked ? 1 : 0;
 
@@ -1448,6 +1501,7 @@ async function handleCreateCampaignSubmit(e) {
         max_video_duration: maxDurVal ? parseInt(maxDurVal, 10) : null,
         include_shorts: incShorts,
         include_longform: incLong,
+        shorts_keep_original: document.getElementById('campaignShortsKeepOriginal')?.checked ? 1 : 0,
         ai_model: document.getElementById('campaignAiModel')?.value || 'default',
         ai_provider: (document.getElementById('campaignAiModel')?.value || '').startsWith('gemini') ? 'gemini' : ((document.getElementById('campaignAiModel')?.value || '').startsWith('gpt') ? 'openai' : 'deepseek'),
         hook_angle: document.getElementById('campaignHookAngle')?.value || 'auto',
@@ -1578,6 +1632,32 @@ async function deleteCampaign(id) {
 // ==========================================
 let editCampaignOriginalData = null;
 
+function syncCampaignVariantModeUI(type, mode) {
+    const isVariants = (mode === 'variants');
+    const pfx = (type === 'edit') ? 'editCampaign' : 'campaign';
+
+    const hookAngleWrap = document.getElementById(`${pfx}HookAngleWrap`);
+    const noticeWrap = document.getElementById(`${pfx}VariantsNoticeWrap`);
+    const clipsCol = document.getElementById(`${pfx}ClipsColWrap`);
+    const genCheck = document.getElementById(`${pfx}GenerateVariants`);
+    const partSwitch = document.getElementById(`${pfx}AddPartLabelSwitch`);
+
+    if (genCheck) genCheck.checked = isVariants;
+
+    if (isVariants) {
+        if (hookAngleWrap) hookAngleWrap.style.display = 'none';
+        if (noticeWrap) noticeWrap.style.display = 'block';
+        if (clipsCol) clipsCol.style.display = 'none';
+        if (partSwitch) partSwitch.checked = false;
+    } else {
+        if (hookAngleWrap) hookAngleWrap.style.display = 'block';
+        if (noticeWrap) noticeWrap.style.display = 'none';
+        if (clipsCol) clipsCol.style.display = 'block';
+        if (partSwitch) partSwitch.checked = true;
+    }
+}
+window.syncCampaignVariantModeUI = syncCampaignVariantModeUI;
+
 async function openEditCampaignModal(id) {
     if (window.LicenseManager && !window.LicenseManager.requireLicense('Chỉnh Sửa Chiến Dịch')) {
         return;
@@ -1603,22 +1683,9 @@ async function openEditCampaignModal(id) {
         document.getElementById('editCampaignNameInput').value = c.name || '';
 
         // Restore Source Mode & Local Folder
-        const sm = c.source_mode || 'hybrid';
-        const smRadio = document.querySelector(`input[name="editCampaignSourceModeRadio"][value="${sm}"]`);
-        if (smRadio) smRadio.checked = true;
-        updateCampaignSourceModeUI('edit', sm);
-
-        const localInp = document.getElementById('editCampaignLocalFolderInput');
-        if (localInp) localInp.value = c.local_folder_path || '';
-        const localStats = document.getElementById('editCampaignLocalFolderStats');
-        if (localStats) localStats.innerHTML = '';
-        const plats = (c.target_platforms || 'tiktok').split(',');
+        updateCampaignSourceModeUI('edit', 'youtube');
         const tCheck = document.getElementById('editCampTargetTikTok');
-        const yCheck = document.getElementById('editCampTargetYouTube');
-        const fCheck = document.getElementById('editCampTargetFacebook');
-        if (tCheck) tCheck.checked = plats.includes('tiktok');
-        if (yCheck) yCheck.checked = plats.includes('youtube');
-        if (fCheck) fCheck.checked = plats.includes('facebook');
+        if (tCheck) tCheck.checked = true;
         const editAutoUploadSwitch = document.getElementById('editCampaignAutoUploadSwitch');
         if (editAutoUploadSwitch) {
             editAutoUploadSwitch.checked = (c.auto_upload !== 0);
@@ -1788,6 +1855,9 @@ async function openEditCampaignModal(id) {
 
         const speedSwitch = document.getElementById('editCampaignSpeedSwitch');
         if (speedSwitch) speedSwitch.checked = (c.speed_factor && c.speed_factor > 1.0);
+
+        const editShortsKeep = document.getElementById('editCampaignShortsKeepOriginal');
+        if (editShortsKeep) editShortsKeep.checked = (c.shorts_keep_original !== 0);
 
         // Multi-Account & Schedule
         const distMode = document.getElementById('editCampaignDistributionMode');
@@ -2093,25 +2163,11 @@ async function handleEditCampaignSubmit(e) {
 
     const chBoxes = document.querySelectorAll('.edit-campaign-ch-check:checked');
     const selectedChannelIds = Array.from(chBoxes).map(b => b.value);
-    const editLocalFolder = (document.getElementById('editCampaignLocalFolderInput')?.value || '').trim();
-    const editSourceModeRadio = document.querySelector('input[name="editCampaignSourceModeRadio"]:checked');
-    const editSourceMode = editSourceModeRadio ? editSourceModeRadio.value : 'hybrid';
+    const editLocalFolder = '';
+    const editSourceMode = 'youtube';
 
-    const editHasChannels = selectedChannelIds.length > 0;
-    const editHasFolder = editLocalFolder.length > 0;
-
-    if (editSourceMode === 'youtube' && !editHasChannels) {
-        showToast('⚠️ Chế độ YouTube: Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
-        switchModalTab('edit', 'source');
-        return;
-    }
-    if (editSourceMode === 'local_folder' && !editHasFolder) {
-        showToast('⚠️ Chế độ Kho Video Máy: Vui lòng nhập đường dẫn thư mục video trên máy tính!', 'warning');
-        switchModalTab('edit', 'source');
-        return;
-    }
-    if (editSourceMode === 'hybrid' && !editHasChannels && !editHasFolder) {
-        showToast('⚠️ Chế độ Kết Hợp: Vui lòng chọn ít nhất 1 Kênh YouTube hoặc nhập Thư mục video trên máy!', 'warning');
+    if (selectedChannelIds.length === 0) {
+        showToast('⚠️ Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
         switchModalTab('edit', 'source');
         return;
     }
@@ -2252,6 +2308,7 @@ async function handleEditCampaignSubmit(e) {
         max_video_duration: maxDurVal ? parseInt(maxDurVal, 10) : null,
         include_shorts: editIncShorts,
         include_longform: editIncLong,
+        shorts_keep_original: document.getElementById('editCampaignShortsKeepOriginal')?.checked ? 1 : 0,
         ai_model: document.getElementById('editCampaignAiModel')?.value || 'default',
         ai_provider: (document.getElementById('editCampaignAiModel')?.value || '').startsWith('gemini') ? 'gemini' : ((document.getElementById('editCampaignAiModel')?.value || '').startsWith('gpt') ? 'openai' : 'deepseek'),
         hook_angle: document.getElementById('editCampaignHookAngle')?.value || 'auto',
@@ -2287,16 +2344,12 @@ async function handleEditCampaignSubmit(e) {
         ken_burns_enabled: document.getElementById('editCampaignKenBurnsSwitch')?.checked ? 1 : 0,
         endcard_enabled: document.getElementById('editCampaignEndcardSwitch')?.checked ? 1 : 0,
         auto_upload: autoUpload,
-        source_mode: editSourceMode,
-        local_folder_path: editLocalFolder,
+        source_mode: 'youtube',
+        local_folder_path: '',
         tts_engine: 'edge-tts',
-        youtube_profile_ids: gpmBoxes.filter(b => b.getAttribute('data-platform') === 'youtube' && b.getAttribute('data-channel-id')).map(b => b.getAttribute('data-channel-id')).join(','),
-        facebook_profile_ids: gpmBoxes.filter(b => b.getAttribute('data-platform') === 'facebook' && b.getAttribute('data-channel-id')).map(b => b.getAttribute('data-channel-id')).join(','),
-        target_platforms: [
-            document.getElementById('editCampTargetTikTok')?.checked ? 'tiktok' : null,
-            document.getElementById('editCampTargetYouTube')?.checked ? 'youtube' : null,
-            document.getElementById('editCampTargetFacebook')?.checked ? 'facebook' : null
-        ].filter(Boolean).join(',') || 'tiktok'
+        youtube_profile_ids: '',
+        facebook_profile_ids: '',
+        target_platforms: 'tiktok'
     };
 
     try {
@@ -2689,6 +2742,9 @@ window.filterCampaignGpmList = filterCampaignGpmList;
 window.filterEditCampaignChannelList = filterEditCampaignChannelList;
 window.filterEditCampaignGpmList = filterEditCampaignGpmList;
 window.loadCampaigns = loadCampaigns;
+window.filterAndRenderCampaigns = filterAndRenderCampaigns;
+window.goToCampaignPage = goToCampaignPage;
+window.changeCampaignsPageSize = changeCampaignsPageSize;
 window.loadPipelineStatus = loadPipelineStatus;
 window.onCampaignFrequencyChange = onCampaignFrequencyChange;
 window.onEditCampaignFrequencyChange = onEditCampaignFrequencyChange;

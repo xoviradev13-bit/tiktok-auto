@@ -963,151 +963,176 @@ function copyChannelUrl(url) {
     });
 }
 
-async function openChannelSettingsModal(channelId) {
-    closeAllActionMenus();
-    const channel = cachedSavedChannels.find(c => c.channel_id === channelId);
-    if (!channel) {
-        showToast('Không tìm thấy thông tin kênh!', true);
-        return;
-    }
-    activeModalChannel = channel;
-
-    document.getElementById('settingChannelId').value = channel.channel_id;
-    document.getElementById('modalChannelTitleHeader').textContent = channel.display_name || channel.title;
-    document.getElementById('modalChannelIdSub').textContent = `ID: ${channel.channel_id} • URL: ${channel.url || 'N/A'}`;
-    document.getElementById('settingDisplayName').value = channel.display_name || channel.title || '';
-    document.getElementById('settingCustomProxy').value = channel.custom_proxy || '';
-
-    let defaultDl = 'data/downloads';
-    let defaultRd = 'data/rendered';
-    try {
-        const defRes = await fetch('/api/settings/defaults');
-        const defData = await defRes.json();
-        if (defData.download_dir) defaultDl = defData.download_dir;
-        if (defData.render_dir) defaultRd = defData.render_dir;
-    } catch (_) { }
-
-    const chDlInput = document.getElementById('settingDownloadDir');
-    const chRdInput = document.getElementById('settingRenderDir');
-    if (chDlInput) {
-        chDlInput.value = (channel.download_dir && isAbsolutePath(channel.download_dir)) ? channel.download_dir : defaultDl;
-    }
-    if (chRdInput) {
-        chRdInput.value = (channel.render_dir && isAbsolutePath(channel.render_dir)) ? channel.render_dir : defaultRd;
-    }
-    document.getElementById('settingIsActive').checked = channel.is_active === 1;
-    document.getElementById('settingAutoDownload').checked = channel.auto_download === 1;
-    document.getElementById('settingAutoRender').checked = channel.auto_render === 1;
-
-    // Load cài đặt tải định dạng & thời lượng riêng cho kênh
-    const chIncShorts = document.getElementById('settingChannelIncludeShorts');
-    if (chIncShorts) chIncShorts.checked = (channel.include_shorts !== 0);
-    const chIncLong = document.getElementById('settingChannelIncludeLongform');
-    if (chIncLong) chIncLong.checked = (channel.include_longform !== 0);
-    const chMinDur = document.getElementById('settingChannelMinDuration');
-    applyMinDurationState(chIncShorts, chIncLong, chMinDur, channel.min_video_duration ?? null);
-    const chMaxDur = document.getElementById('settingChannelMaxDuration');
-    if (chMaxDur) chMaxDur.value = (channel.max_video_duration != null) ? channel.max_video_duration : '';
-    // Load cài đặt Phụ đề AI riêng cho kênh
-    const isSubEnabled = (channel.subtitle_enabled !== 0);
-    const chSubSwitch = document.getElementById('settingChannelSubtitleSwitch');
-    if (chSubSwitch) chSubSwitch.checked = isSubEnabled;
-    const chSubWrap = document.getElementById('settingChannelSubtitleSettingsWrap');
-    if (chSubWrap) chSubWrap.style.display = isSubEnabled ? '' : 'none';
-    const chSubStyle = document.getElementById('settingChannelSubtitleStyle');
-    if (chSubStyle) chSubStyle.value = channel.subtitle_style || 'inherit';
-    const chSubPos = document.getElementById('settingChannelSubtitlePosition');
-    if (chSubPos) chSubPos.value = channel.subtitle_position || 'inherit';
-    const chNoSubShorts = document.getElementById('settingChannelDisableSubtitleForShorts');
-    if (chNoSubShorts) chNoSubShorts.checked = (channel.disable_subtitle_for_shorts !== 0);
-
-    // Load cài đặt Lồng tiếng AI (Zero-Unoriginal Audio) riêng cho kênh
-    const chNarrSwitch = document.getElementById('settingChannelNarrationSwitch');
-    const chNarrWrap = document.getElementById('settingChannelNarrationWrap');
-    const chNarrLang = document.getElementById('settingChannelNarrationLanguage');
-    const chNarrGender = document.getElementById('settingChannelVoiceGender');
-    const chNarrStyle = document.getElementById('settingChannelNarrationStyle');
-    if (chNarrSwitch) {
-        chNarrSwitch.checked = (channel.narration_enabled !== 0);
-        if (chNarrWrap) chNarrWrap.style.display = chNarrSwitch.checked ? 'block' : 'none';
-    }
-    if (chNarrLang) chNarrLang.value = channel.narration_language || 'inherit';
-    updateVoiceDropdownOptions('settingChannelVoiceGender', channel.narration_language || 'inherit', channel.voice_gender || 'inherit', true);
-    if (chNarrStyle) chNarrStyle.value = channel.narration_style || 'inherit';
-    const chNoNarrShorts = document.getElementById('settingChannelDisableNarrationForShorts');
-    if (chNoNarrShorts) chNoNarrShorts.checked = (channel.disable_narration_for_shorts !== 0);
-    const chKeepAudio = document.getElementById('settingChannelKeepOriginalScriptForShorts');
-    if (chKeepAudio) chKeepAudio.checked = (channel.keep_original_script_for_shorts !== 0);
-
-    
-    const chMpImgSwitch = document.getElementById('settingChannelUseAiImages');
-    const chMpImgWrap = document.getElementById('settingChannelImageStyleWrap');
-    const chMpImgStyle = document.getElementById('settingChannelImageStyle');
-    if (chMpImgSwitch) {
-        chMpImgSwitch.checked = (channel.use_ai_images === 1);
-            }
-    if (chMpImgStyle) chMpImgStyle.value = channel.image_style || 'inherit';
-    const chVisualSource = document.getElementById('settingChannelVisualSource');
-    if (chVisualSource) chVisualSource.value = channel.visual_source || 'inherit';
-    const chAiModel = document.getElementById('settingChannelAiImageModel');
-    if (chAiModel) chAiModel.value = channel.ai_image_model || 'inherit';
-    const chAiVideoModel = document.getElementById('settingChannelAiVideoModel');
-    if (chAiVideoModel) chAiVideoModel.value = channel.ai_video_model || 'inherit';
-    const chStockProvider = document.getElementById('settingChannelStockProvider');
-    if (chStockProvider) chStockProvider.value = channel.stock_provider || 'inherit';
-
-
-    const chKbSwitch = document.getElementById('settingChannelKenBurnsSwitch');
-    if (chKbSwitch) chKbSwitch.checked = (channel.ken_burns_enabled !== 0);
-    const chEcSwitch = document.getElementById('settingChannelEndcardSwitch');
-    if (chEcSwitch) chEcSwitch.checked = (channel.endcard_enabled !== 0);
-
-    // Load Chế độ Xuất Biến Thể & Hook Tâm Lý riêng cho kênh
-    const chVariantMode = document.getElementById('settingChannelVariantMode');
-    const chHookAngle = document.getElementById('settingChannelHookAngle');
-    let currentVarMode = 'inherit';
-    if (channel.generate_variants === 1) {
-        currentVarMode = 'variants';
-    } else if (channel.generate_variants === 0) {
-        currentVarMode = 'single';
+function syncChannelVariantModeUI(mode) {
+    const hookAngleWrap = document.getElementById('settingChannelHookAngleWrap');
+    const noticeWrap = document.getElementById('settingChannelVariantsNoticeWrap');
+    if (mode === 'variants') {
+        if (hookAngleWrap) hookAngleWrap.style.display = 'none';
+        if (noticeWrap) noticeWrap.style.display = 'block';
     } else {
-        currentVarMode = 'inherit';
+        if (hookAngleWrap) hookAngleWrap.style.display = 'block';
+        if (noticeWrap) noticeWrap.style.display = 'none';
     }
-    if (chVariantMode) chVariantMode.value = currentVarMode;
-    if (chHookAngle) chHookAngle.value = channel.hook_angle || 'inherit';
-    syncChannelVariantModeUI(currentVarMode);
+}
+window.syncChannelVariantModeUI = syncChannelVariantModeUI;
 
-        
-    // Load cài đặt giới hạn tải khi quét thủ công (Manual Scan Limit)
-    // Mặc định bằng scan_all_monitored_channels cap (max_videos_per_scan từ scheduler settings)
-    let defaultMaxManual = 5;
+async function openChannelSettingsModal(channelId) {
     try {
-        const schedRes = await fetch('/api/scheduler/settings');
-        const schedData = await schedRes.json();
-        if (schedData && schedData.max_videos_per_scan) {
-            defaultMaxManual = schedData.max_videos_per_scan;
+        closeAllActionMenus();
+        const channel = cachedSavedChannels.find(c => c.channel_id === channelId);
+        if (!channel) {
+            showToast('Không tìm thấy thông tin kênh!', true);
+            return;
         }
-    } catch (_) { }
+        activeModalChannel = channel;
 
-    const chMaxManualInput = document.getElementById('settingMaxManualVideos');
-    const chMaxManualBadge = document.getElementById('settingMaxManualVideosBadge');
-    const effectiveManualVal = (channel.max_manual_videos !== null && channel.max_manual_videos !== undefined && channel.max_manual_videos !== '')
-        ? channel.max_manual_videos
-        : defaultMaxManual;
-    if (chMaxManualInput) {
-        chMaxManualInput.value = effectiveManualVal;
-        chMaxManualInput.placeholder = defaultMaxManual;
-    }
-    if (chMaxManualBadge) {
-        chMaxManualBadge.textContent = `${effectiveManualVal} video/lần`;
-    }
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = (val !== null && val !== undefined) ? val : '';
+        };
+        const setText = (id, txt) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = txt || '';
+        };
+        const setChecked = (id, chk) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = Boolean(chk);
+        };
 
-    document.getElementById('channelSettingsModal').classList.add('active');
+        setVal('settingChannelId', channel.channel_id);
+        setText('modalChannelTitleHeader', channel.display_name || channel.title);
+        setText('modalChannelIdSub', `ID: ${channel.channel_id} • URL: ${channel.url || 'N/A'}`);
+        setVal('settingDisplayName', channel.display_name || channel.title || '');
+        setVal('settingCustomProxy', channel.custom_proxy || '');
+
+        let defaultDl = 'data/downloads';
+        let defaultRd = 'data/rendered';
+        try {
+            const defRes = await fetch('/api/settings/defaults');
+            const defData = await defRes.json();
+            if (defData.download_dir) defaultDl = defData.download_dir;
+            if (defData.render_dir) defaultRd = defData.render_dir;
+        } catch (_) { }
+
+        const chDlInput = document.getElementById('settingDownloadDir');
+        const chRdInput = document.getElementById('settingRenderDir');
+        if (chDlInput) {
+            chDlInput.value = (channel.download_dir && typeof isAbsolutePath === 'function' && isAbsolutePath(channel.download_dir)) ? channel.download_dir : defaultDl;
+        }
+        if (chRdInput) {
+            chRdInput.value = (channel.render_dir && typeof isAbsolutePath === 'function' && isAbsolutePath(channel.render_dir)) ? channel.render_dir : defaultRd;
+        }
+        setChecked('settingIsActive', channel.is_active === 1);
+        setChecked('settingAutoDownload', channel.auto_download === 1);
+        setChecked('settingAutoRender', channel.auto_render === 1);
+
+        // Load cài đặt tải định dạng & thời lượng riêng cho kênh
+        const chIncShorts = document.getElementById('settingChannelIncludeShorts');
+        if (chIncShorts) chIncShorts.checked = (channel.include_shorts !== 0);
+        const chIncLong = document.getElementById('settingChannelIncludeLongform');
+        if (chIncLong) chIncLong.checked = (channel.include_longform !== 0);
+        const chMinDur = document.getElementById('settingChannelMinDuration');
+        if (typeof applyMinDurationState === 'function') {
+            applyMinDurationState(chIncShorts, chIncLong, chMinDur, channel.min_video_duration ?? null);
+        } else if (chMinDur) {
+            const onlyLongform = (chIncLong ? chIncLong.checked : true) && !(chIncShorts ? chIncShorts.checked : true);
+            chMinDur.disabled = !onlyLongform;
+            chMinDur.value = onlyLongform ? ((channel.min_video_duration != null && channel.min_video_duration >= 180) ? channel.min_video_duration : 180) : 0;
+        }
+        setVal('settingChannelMaxDuration', (channel.max_video_duration != null) ? channel.max_video_duration : '');
+
+        // Load cài đặt Phụ đề AI riêng cho kênh
+        const isSubEnabled = (channel.subtitle_enabled !== 0);
+        const chSubSwitch = document.getElementById('settingChannelSubtitleSwitch');
+        if (chSubSwitch) chSubSwitch.checked = isSubEnabled;
+        const chSubWrap = document.getElementById('settingChannelSubtitleSettingsWrap');
+        if (chSubWrap) chSubWrap.style.display = isSubEnabled ? '' : 'none';
+        setVal('settingChannelSubtitleStyle', channel.subtitle_style || 'inherit');
+        setVal('settingChannelSubtitlePosition', channel.subtitle_position || 'inherit');
+        setChecked('settingChannelDisableSubtitleForShorts', channel.disable_subtitle_for_shorts !== 0);
+
+        // Load cài đặt Lồng tiếng AI (Zero-Unoriginal Audio) riêng cho kênh
+        const chNarrSwitch = document.getElementById('settingChannelNarrationSwitch');
+        const chNarrWrap = document.getElementById('settingChannelNarrationWrap');
+        if (chNarrSwitch) {
+            chNarrSwitch.checked = (channel.narration_enabled !== 0);
+            if (chNarrWrap) chNarrWrap.style.display = chNarrSwitch.checked ? 'block' : 'none';
+        }
+        setVal('settingChannelNarrationLanguage', channel.narration_language || 'inherit');
+        if (typeof updateVoiceDropdownOptions === 'function') {
+            updateVoiceDropdownOptions('settingChannelVoiceGender', channel.narration_language || 'inherit', channel.voice_gender || 'inherit', true);
+        }
+        setVal('settingChannelNarrationStyle', channel.narration_style || 'inherit');
+        setChecked('settingChannelDisableNarrationForShorts', channel.disable_narration_for_shorts !== 0);
+        setChecked('settingChannelKeepOriginalScriptForShorts', channel.keep_original_script_for_shorts !== 0);
+
+        const chMpImgSwitch = document.getElementById('settingChannelUseAiImages');
+        if (chMpImgSwitch) {
+            chMpImgSwitch.checked = (channel.use_ai_images === 1);
+        }
+        setVal('settingChannelImageStyle', channel.image_style || 'inherit');
+        setVal('settingChannelVisualSource', channel.visual_source || 'inherit');
+        setVal('settingChannelAiImageModel', channel.ai_image_model || 'inherit');
+        setVal('settingChannelAiVideoModel', channel.ai_video_model || 'inherit');
+        setVal('settingChannelStockProvider', channel.stock_provider || 'inherit');
+
+        setChecked('settingChannelKenBurnsSwitch', channel.ken_burns_enabled !== 0);
+        setChecked('settingChannelEndcardSwitch', channel.endcard_enabled !== 0);
+
+        // Load Chế độ Xuất Biến Thể & Hook Tâm Lý riêng cho kênh
+        let currentVarMode = 'inherit';
+        if (channel.generate_variants === 1) {
+            currentVarMode = 'variants';
+        } else if (channel.generate_variants === 0) {
+            currentVarMode = 'single';
+        } else {
+            currentVarMode = 'inherit';
+        }
+        setVal('settingChannelVariantMode', currentVarMode);
+        setVal('settingChannelHookAngle', channel.hook_angle || 'inherit');
+        syncChannelVariantModeUI(currentVarMode);
+
+        // Load cài đặt giới hạn tải khi quét thủ công (Manual Scan Limit)
+        let defaultMaxManual = 5;
+        try {
+            const schedRes = await fetch('/api/scheduler/settings');
+            const schedData = await schedRes.json();
+            if (schedData && schedData.max_videos_per_scan) {
+                defaultMaxManual = schedData.max_videos_per_scan;
+            }
+        } catch (_) { }
+
+        const chMaxManualInput = document.getElementById('settingMaxManualVideos');
+        const chMaxManualBadge = document.getElementById('settingMaxManualVideosBadge');
+        const effectiveManualVal = (channel.max_manual_videos !== null && channel.max_manual_videos !== undefined && channel.max_manual_videos !== '')
+            ? channel.max_manual_videos
+            : defaultMaxManual;
+        if (chMaxManualInput) {
+            chMaxManualInput.value = effectiveManualVal;
+            chMaxManualInput.placeholder = defaultMaxManual;
+        }
+        if (chMaxManualBadge) {
+            chMaxManualBadge.textContent = `${effectiveManualVal} video/lần`;
+        }
+
+        const modal = document.getElementById('channelSettingsModal');
+        if (modal) {
+            modal.classList.add('active');
+        } else {
+            console.error('Modal element #channelSettingsModal not found in DOM!');
+            showToast('Không tìm thấy giao diện cài đặt kênh trong DOM!', true);
+        }
+    } catch (err) {
+        console.error('Error opening channel settings modal:', err);
+        showToast('Không thể mở cài đặt kênh: ' + (err.message || err), true);
+    }
 }
 
 function closeChannelSettingsModal() {
-    if (_singleChannelAbortController) {
-        stopSingleChannelScan(document.getElementById('btnModalScanNow'));
+    if (typeof _singleChannelAbortController !== 'undefined' && _singleChannelAbortController) {
+        if (typeof stopSingleChannelScan === 'function') {
+            stopSingleChannelScan(document.getElementById('btnModalScanNow'));
+        }
     }
     const modal = document.getElementById('channelSettingsModal');
     if (modal) modal.classList.remove('active');

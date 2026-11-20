@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Body
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
+from backend.database import get_connection, log_campaign_event, log_event
 from backend.modules.browser_adapters import browser_manager
 from backend.modules.multi_downloader import multi_downloader
 from backend.modules.multi_uploader import multi_uploader

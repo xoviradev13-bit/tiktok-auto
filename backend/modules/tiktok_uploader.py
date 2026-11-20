@@ -249,6 +249,43 @@ class TikTokUploader:
                         time.sleep(1.5)
                 context = browser.contexts[0] if browser.contexts else browser.new_context()
 
+                # Đảm bảo cửa sổ trình duyệt nằm ở toạ độ ngầm ngoài màn hình (Invisible Mode)
+                try:
+                    from backend.database import get_connection
+                    _conn_inv = get_connection()
+                    _cur_inv = _conn_inv.cursor()
+                    _cur_inv.execute("SELECT value FROM settings WHERE key = 'INVISIBLE_BROWSER_AUTOMATION'")
+                    _row_inv = _cur_inv.fetchone()
+                    _conn_inv.close()
+                    _is_invisible = _row_inv["value"].lower() in ("true", "1", "yes") if _row_inv and _row_inv["value"] else True
+                    if _is_invisible:
+                        _pages = context.pages or [context.new_page()]
+                        if _pages:
+                            _cdp = context.new_cdp_session(_pages[0])
+                            _win = _cdp.send("Browser.getWindowForTarget")
+                            if _win and "windowId" in _win:
+                                _cdp.send("Browser.setWindowBounds", {
+                                    "windowId": _win["windowId"],
+                                    "bounds": {"left": -3200, "top": -3200, "width": 1280, "height": 800, "windowState": "normal"}
+                                })
+                except Exception as _cdp_e:
+                    logger.debug(f"CDP setWindowBounds non-critical: {_cdp_e}")
+
+                # Tự động đồng bộ Proton VPN Extension theo quốc gia đã gán cho profile
+                try:
+                    from backend.database import get_connection
+                    conn_c = get_connection()
+                    cur_c = conn_c.cursor()
+                    cur_c.execute("SELECT country FROM gpm_profiles WHERE gpm_id = ?", (gpm_profile_id,))
+                    row_c = cur_c.fetchone()
+                    conn_c.close()
+                    if row_c and row_c["country"] and row_c["country"] != "NONE":
+                        from backend.modules.proton_vpn_controller import proton_vpn_controller
+                        log_event("INFO", f"Đang tự động kết nối Proton VPN sang {row_c['country']} cho profile {gpm_profile_id}...")
+                        proton_vpn_controller.switch_country_in_extension(context, row_c["country"])
+                except Exception as vpn_e:
+                    logger.warning(f"Không thể tự động đổi Proton VPN trước upload: {vpn_e}")
+
                 # Tự động tìm tab đã mở sẵn TikTok Studio nếu profile đã mở sẵn từ trước
                 page = None
                 for pg in context.pages:

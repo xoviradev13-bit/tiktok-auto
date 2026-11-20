@@ -99,7 +99,7 @@ class YouTubeRSSMonitor:
                     "key": api_key
                 }
                 api_url = f"https://www.googleapis.com/youtube/v3/playlistItems?{urllib.parse.urlencode(params)}"
-                req = urllib.request.Request(api_url, headers={"User-Agent": "ShortsStack/1.0"})
+                req = urllib.request.Request(api_url, headers={"User-Agent": "ClipFlow/1.0"})
                 with urllib.request.urlopen(req, timeout=8) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     for it in data.get("items", []):
@@ -231,169 +231,253 @@ class YouTubeRSSMonitor:
             if channel_id in ch_ids or force_campaign_id == camp.get("id"):
                 matched_campaigns.append(camp)
 
-        if matched_campaigns:
-            from backend.modules.ai_video_engine import ai_video_engine
-            from backend.modules.distributor import distributor
+        # Phân loại YouTube Shorts (<= 180s) và Long-form (> 180s)
+        from backend.modules.ai_video_engine import ai_video_engine
+        from backend.modules.distributor import distributor
+        import re
 
-            for camp in matched_campaigns:
-                cid = camp["id"]
-                # Kiểm tra ngay nếu Scheduler hoặc Chiến dịch đã bị người dùng tạm dừng
-                try:
-                    from backend.scheduler import scheduler
-                    if not scheduler.is_running:
-                        log_event("INFO", f"[RSS WORKER] Bỏ qua biên tập AI video {video_id} do Scheduler đã tạm dừng.")
-                        break
-                    conn_chk = get_connection()
-                    cursor_chk = conn_chk.cursor()
-                    cursor_chk.execute("SELECT is_active FROM campaigns WHERE id = ?", (cid,))
-                    c_row = cursor_chk.fetchone()
-                    conn_chk.close()
-                    if not c_row or c_row["is_active"] != 1:
-                        log_campaign_event(cid, "INFO", "pipeline", f"Bỏ qua render video {video_id} do chiến dịch '{camp.get('name')}' đã tạm dừng.")
-                        continue
-                except Exception:
-                    pass
+        actual_dur = ai_video_engine._get_exact_media_duration(file_path)
+        effective_duration = actual_dur if actual_dur > 0 else (duration or 0)
+        is_short = (0 < effective_duration <= 180.0)
 
+        if not matched_campaigns:
+            # Video không thuộc chiến dịch nào:
+            if is_short:
+                log_event("INFO", f"Video Shorts '{video_title}' ({effective_duration:.1f}s) đã sẵn sàng đăng ở file gốc (không thuộc chiến dịch nào).")
+                clean_ch = re.sub(r'[^a-zA-Z0-9_]', '', channel_name or '')
+                default_tags = f"#{clean_ch} #shorts #viral" if clean_ch else "#shorts #viral"
+                if video_db_id:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            UPDATE videos
+                            SET status = 'rendered', rendered_path = ?, ai_title = ?, ai_tags = ?, duration = ?
+                            WHERE id = ?
+                        """, (file_path, video_title, default_tags, effective_duration, video_db_id))
+                        conn.commit()
+                        conn.close()
+                    except Exception as db_err:
+                        log_event("WARNING", f"Lỗi cập nhật DB cho video Shorts {video_id}: {db_err}")
+                return
+            else:
+                if not channel_obj or channel_obj.get("auto_render", 1):
+                    try:
+                        sub_settings = self.get_effective_subtitle_settings(channel_obj, None)
+                        render_settings = self.get_effective_render_settings(channel_obj, None)
+                        narr_settings = self.get_effective_narration_settings(channel_obj, None)
+                        ai_video_engine.auto_slice_and_render_parts(
+                            input_file=file_path,
+                            video_id=video_id,
+                            total_duration=int(duration or 65),
+                            channel_name=channel_name,
+                            video_title=video_title,
+                            output_dir=render_settings["render_dir"],
+                            enable_subtitles=sub_settings["enable_subtitles"],
+                            subtitle_style=sub_settings["subtitle_style"],
+                            subtitle_position=sub_settings["subtitle_position"],
+                            bgm_folder=render_settings["bgm_folder"],
+                            bgm_volume=render_settings["bgm_volume"],
+                            disable_subtitle_for_shorts=sub_settings["disable_subtitle_for_shorts"],
+                            enable_narration=narr_settings["narration_enabled"],
+                            narration_language=narr_settings["narration_language"],
+                            voice_gender=narr_settings["voice_gender"],
+                            narration_style=narr_settings["narration_style"],
+                            disable_narration_for_shorts=narr_settings["disable_narration_for_shorts"],
+                            keep_original_script_for_shorts=narr_settings["keep_original_script_for_shorts"],
+                            enable_endcard=render_settings["endcard_enabled"],
+                            enable_ken_burns=render_settings["ken_burns_enabled"],
+                            aspect_ratio=render_settings["aspect_ratio"],
+                            split_source_type=render_settings["split_source_type"],
+                            split_folder=render_settings["split_folder"],
+                            split_keywords=render_settings["split_keywords"],
+                            split_provider=render_settings["split_provider"]
+                        )
+                    except Exception as e:
+                        log_event("ERROR", f"Lỗi auto-render mặc định cho video {video_id}: {str(e)}")
+                return
+
+        # =========================================================================
+        # XỬ LÝ THEO TỪNG CHIẾN DỊCH (CAMPAIGN PIPELINE):
+        # 1. Nếu là Shorts và Chiến Dịch bật 'shorts_keep_original' (Mặc định):
+        #    -> Giữ nguyên file gốc, bỏ qua AI & FFmpeg, lên lịch đăng ngay.
+        # 2. Nếu là Shorts nhưng Chiến Dịch TẮT 'shorts_keep_original':
+        #    -> Tiến hành biên tập video Shorts theo đúng công thức chiến dịch (Lật hình, 9:16, Subtitle...).
+        # 3. Nếu là Long-form (>180s):
+        #    -> Áp dụng Smart AI: Transcribe Whisper -> LLM trích xuất đoạn hay -> Cắt Part.
+        # =========================================================================
+        for camp in matched_campaigns:
+            cid = camp["id"]
+            # Kiểm tra ngay nếu Scheduler hoặc Chiến dịch đã bị người dùng tạm dừng
+            try:
+                from backend.scheduler import scheduler
+                if not scheduler.is_running:
+                    log_event("INFO", f"[RSS WORKER] Bỏ qua xử lý video {video_id} do Scheduler đã tạm dừng.")
+                    break
+                conn_chk = get_connection()
+                cursor_chk = conn_chk.cursor()
+                cursor_chk.execute("SELECT is_active FROM campaigns WHERE id = ?", (cid,))
+                c_row = cursor_chk.fetchone()
+                conn_chk.close()
+                if not c_row or c_row["is_active"] != 1:
+                    log_campaign_event(cid, "INFO", "pipeline", f"Bỏ qua render video {video_id} do chiến dịch '{camp.get('name')}' đã tạm dừng.")
+                    continue
+            except Exception:
+                pass
+
+            keep_orig_shorts = bool(camp.get("shorts_keep_original", 1))
+
+            # -----------------------------------------------------------------
+            # NHÁNH 1: Shorts VÀ Chiến dịch chọn GIỮ NGUYÊN GỐC (Bypass AI & Edit)
+            # -----------------------------------------------------------------
+            if is_short and keep_orig_shorts:
+                clean_ch = re.sub(r'[^a-zA-Z0-9_]', '', channel_name or '')
+                default_tags = f"#{clean_ch} #shorts #viral" if clean_ch else "#shorts #viral"
+
+                if video_db_id:
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            UPDATE videos
+                            SET status = 'rendered', rendered_path = ?, ai_title = ?, ai_tags = ?, duration = ?
+                            WHERE id = ?
+                        """, (file_path, video_title, default_tags, effective_duration, video_db_id))
+                        conn.commit()
+                        conn.close()
+                    except Exception as db_err:
+                        log_event("WARNING", f"Lỗi cập nhật DB cho video Shorts {video_id}: {db_err}")
+
+                if camp.get("auto_upload") == 0:
+                    log_campaign_event(cid, "INFO", "distribute", f"Video Shorts '{video_title}' đã sẵn sàng tại {file_path}. Bỏ qua đăng lên TikTok do chiến dịch chọn 'Chỉ render'.")
+                    continue
+
+                sched_res = distributor.schedule_campaign_upload(
+                    video_id=video_db_id,
+                    campaign=camp,
+                    title=video_title,
+                    tags=default_tags,
+                    video_path=file_path,
+                    part_number=1,
+                    force_profile_id=None,
+                    variant_tag=""
+                )
+                log_campaign_event(cid, "SUCCESS", "pipeline", f"⚡ [YOUTUBE SHORTS] Video '{video_title}' ({effective_duration:.1f}s) đã được đưa thẳng vào hàng đợi đăng TikTok (giữ nguyên gốc toàn bộ, không dùng AI).")
+                continue
+
+            # -----------------------------------------------------------------
+            # NHÁNH 2: Biên tập Video bằng AI Engine:
+            # - Shorts nếu tắt giữ nguyên gốc -> force_edit=True (Render trọn vẹn theo công thức, không chia part)
+            # - Long-form (>180s) -> force_edit=False (Transcribe Whisper + Trích xuất viral part)
+            # -----------------------------------------------------------------
+            if is_short:
+                log_campaign_event(cid, "INFO", "pipeline", f"🎨 [YOUTUBE SHORTS] Áp dụng công thức biên tập chiến dịch '{camp['name']}' cho video Shorts {video_id} ({video_title}) - Lật hình, 9:16, Subtitle, Speed...")
+            else:
                 log_campaign_event(cid, "INFO", "pipeline", f"Áp dụng công thức biên tập chiến dịch '{camp['name']}' cho video {video_id} ({video_title})")
-                
-                # Lấy toàn bộ cài đặt render hiệu lực: Kênh > Chiến dịch > Toàn cục
-                sub_settings = self.get_effective_subtitle_settings(channel_obj, camp)
-                render_settings = self.get_effective_render_settings(channel_obj, camp)
-                narr_settings = self.get_effective_narration_settings(channel_obj, camp)
-                hook_settings = self.get_effective_hook_settings(channel_obj, camp)
+            
+            # Lấy toàn bộ cài đặt render hiệu lực: Kênh > Chiến dịch > Toàn cục
+            sub_settings = self.get_effective_subtitle_settings(channel_obj, camp)
+            render_settings = self.get_effective_render_settings(channel_obj, camp)
+            narr_settings = self.get_effective_narration_settings(channel_obj, camp)
+            hook_settings = self.get_effective_hook_settings(channel_obj, camp)
 
-                try:
-                    res = ai_video_engine.process_smart_ai_video(
-                        input_file=file_path,
-                        video_id=video_id,
-                        video_title=video_title,
-                        channel_name=channel_name,
-                        output_dir=render_settings["render_dir"],
-                        custom_provider=camp.get("ai_provider"),
-                        custom_model=camp.get("ai_model"),
-                        enable_subtitles=sub_settings["enable_subtitles"],
-                        target_duration=int(camp.get("video_duration") or 65),
-                        flip_horizontal=bool(camp.get("flip_horizontal", 1)),
-                        speed_factor=float(camp.get("speed_factor") or 1.03),
-                        add_part_label=bool(camp.get("add_part_label", 1)),
-                        generate_hook=True,
-                        clips_count=int(camp.get("clips_per_video") or 1),
-                        subtitle_style=sub_settings["subtitle_style"],
-                        subtitle_position=sub_settings["subtitle_position"],
-                        bgm_folder=render_settings["bgm_folder"],
-                        bgm_volume=render_settings["bgm_volume"],
-                        disable_subtitle_for_shorts=sub_settings["disable_subtitle_for_shorts"],
-                        generate_variants=hook_settings["generate_variants"],
-                        hook_angle=hook_settings["hook_angle"],
-                        enable_narration=narr_settings["narration_enabled"],
-                        narration_language=narr_settings["narration_language"],
-                        voice_gender=narr_settings["voice_gender"],
-                        narration_style=narr_settings["narration_style"],
-                        disable_narration_for_shorts=narr_settings.get("disable_narration_for_shorts", True),
-                        keep_original_script_for_shorts=narr_settings.get("keep_original_script_for_shorts", True),
-                        enable_endcard=render_settings.get("endcard_enabled", True),
-                        enable_ken_burns=render_settings.get("ken_burns_enabled", True),
-                        use_ai_images=narr_settings.get("use_ai_images", False),
-                        image_style=narr_settings.get("image_style", "cinematic"),
-                        visual_source=narr_settings.get("visual_source", "ai"),
-                        aspect_ratio=render_settings.get("aspect_ratio", "9:16_blur"),
-                        split_source_type=render_settings.get("split_source_type", "local"),
-                        split_folder=render_settings.get("split_folder", "data/gameplay"),
-                        split_keywords=render_settings.get("split_keywords", "minecraft parkour, satisfying asmr, subway surfers"),
-                        split_provider=render_settings.get("split_provider", "all"),
-                        ai_image_model=narr_settings.get("ai_image_model", "flux"),
-                        ai_video_model=narr_settings.get("ai_video_model", "fal_ltx"),
-                        stock_provider=narr_settings.get("stock_provider", "all"),
-                        tts_engine=narr_settings.get("tts_engine", "edge-tts"),
-                        elevenlabs_voice_id=narr_settings.get("elevenlabs_voice_id"),
-                        elevenlabs_model=narr_settings.get("elevenlabs_model", "eleven_multilingual_v2")
-                    )
-                    if res.get("status") == "success" and video_db_id:
-                        raw_rendered_files = res.get("rendered_files") or ([res.get("rendered_file")] if res.get("rendered_file") else [])
-                        # Chốt chặn kiểm tra file render thực tế tồn tại và dung lượng > 1KB
-                        rendered_files = [f for f in raw_rendered_files if f and os.path.exists(f) and os.path.getsize(f) > 1024]
-                        if not rendered_files:
-                            log_campaign_event(cid, "ERROR", "render", f"Hủy lên lịch upload: Toàn bộ file render bị lỗi hoặc rỗng (<1KB) cho video {video_id}.")
-                            continue
+            try:
+                res = ai_video_engine.process_smart_ai_video(
+                    input_file=file_path,
+                    video_id=video_id,
+                    video_title=video_title,
+                    channel_name=channel_name,
+                    output_dir=render_settings["render_dir"],
+                    custom_provider=camp.get("ai_provider"),
+                    custom_model=camp.get("ai_model"),
+                    enable_subtitles=sub_settings["enable_subtitles"],
+                    target_duration=int(camp.get("video_duration") or 65),
+                    flip_horizontal=bool(camp.get("flip_horizontal", 1)),
+                    speed_factor=float(camp.get("speed_factor") or 1.03),
+                    add_part_label=bool(camp.get("add_part_label", 1)),
+                    generate_hook=True,
+                    clips_count=int(camp.get("clips_per_video") or 1),
+                    subtitle_style=sub_settings["subtitle_style"],
+                    subtitle_position=sub_settings["subtitle_position"],
+                    bgm_folder=render_settings["bgm_folder"],
+                    bgm_volume=render_settings["bgm_volume"],
+                    disable_subtitle_for_shorts=sub_settings["disable_subtitle_for_shorts"],
+                    generate_variants=hook_settings["generate_variants"],
+                    hook_angle=hook_settings["hook_angle"],
+                    enable_narration=narr_settings["narration_enabled"],
+                    narration_language=narr_settings["narration_language"],
+                    voice_gender=narr_settings["voice_gender"],
+                    narration_style=narr_settings["narration_style"],
+                    disable_narration_for_shorts=narr_settings.get("disable_narration_for_shorts", True),
+                    keep_original_script_for_shorts=narr_settings.get("keep_original_script_for_shorts", True),
+                    enable_endcard=render_settings.get("endcard_enabled", True),
+                    enable_ken_burns=render_settings.get("ken_burns_enabled", True),
+                    use_ai_images=narr_settings.get("use_ai_images", False),
+                    image_style=narr_settings.get("image_style", "cinematic"),
+                    visual_source=narr_settings.get("visual_source", "ai"),
+                    aspect_ratio=render_settings.get("aspect_ratio", "9:16_blur"),
+                    split_source_type=render_settings.get("split_source_type", "local"),
+                    split_folder=render_settings.get("split_folder", "data/gameplay"),
+                    split_keywords=render_settings.get("split_keywords", "minecraft parkour, satisfying asmr, subway surfers"),
+                    split_provider=render_settings.get("split_provider", "all"),
+                    ai_image_model=narr_settings.get("ai_image_model", "flux"),
+                    ai_video_model=narr_settings.get("ai_video_model", "fal_ltx"),
+                    stock_provider=narr_settings.get("stock_provider", "all"),
+                    tts_engine=narr_settings.get("tts_engine", "edge-tts"),
+                    elevenlabs_voice_id=narr_settings.get("elevenlabs_voice_id"),
+                    elevenlabs_model=narr_settings.get("elevenlabs_model", "eleven_multilingual_v2"),
+                    force_edit=(is_short and not keep_orig_shorts)
+                )
+                if res.get("status") == "success" and video_db_id:
+                    raw_rendered_files = res.get("rendered_files") or ([res.get("rendered_file")] if res.get("rendered_file") else [])
+                    # Chốt chặn kiểm tra file render thực tế tồn tại và dung lượng > 1KB
+                    rendered_files = [f for f in raw_rendered_files if f and os.path.exists(f) and os.path.getsize(f) > 1024]
+                    if not rendered_files:
+                        log_campaign_event(cid, "ERROR", "render", f"Hủy lên lịch upload: Toàn bộ file render bị lỗi hoặc rỗng (<1KB) cho video {video_id}.")
+                        continue
 
-                        log_campaign_event(cid, "SUCCESS", "render", f"Render Smart AI thành công video {video_id} ({len(rendered_files)} clip) -> {rendered_files[0] if rendered_files else ''}")
-                        
-                        if camp.get("auto_upload") == 0:
-                            log_campaign_event(cid, "INFO", "distribute", f"Video {video_id} ({len(rendered_files)} clip) đã render hoàn tất và lưu tại {rendered_files[0]}. Bỏ qua tải lên TikTok do chiến dịch chọn 'Chỉ render'.")
-                            continue
+                    log_campaign_event(cid, "SUCCESS", "render", f"Render Smart AI thành công video {video_id} ({len(rendered_files)} clip) -> {rendered_files[0] if rendered_files else ''}")
+                    
+                    if camp.get("auto_upload") == 0:
+                        log_campaign_event(cid, "INFO", "distribute", f"Video {video_id} ({len(rendered_files)} clip) đã render hoàn tất và lưu tại {rendered_files[0]}. Bỏ qua tải lên TikTok do chiến dịch chọn 'Chỉ render'.")
+                        continue
 
-                        is_variant_mode = bool(hook_settings.get("generate_variants"))
-                        assigned_profile_id = None
-                        used_profile_ids = []
+                    is_variant_mode = bool(hook_settings.get("generate_variants"))
+                    assigned_profile_id = None
+                    used_profile_ids = []
 
-                        for idx, r_file in enumerate(rendered_files, 1):
-                            part_title = res.get("ai_title") or video_title
-                            is_var_file = any(v in r_file for v in ("_VarA", "_VarB", "_VarC"))
-                            var_tag = "VarA" if "_VarA" in r_file else ("VarB" if "_VarB" in r_file else ("VarC" if "_VarC" in r_file else ""))
+                    for idx, r_file in enumerate(rendered_files, 1):
+                        part_title = res.get("ai_title") or video_title
+                        is_var_file = any(v in r_file for v in ("_VarA", "_VarB", "_VarC"))
+                        var_tag = "VarA" if "_VarA" in r_file else ("VarB" if "_VarB" in r_file else ("VarC" if "_VarC" in r_file else ""))
 
-                            if is_var_file or is_variant_mode:
-                                # BIẾN THỂ A/B/C: Rải đều sang 3 TÀI KHOẢN TIKTOK KHÁC NHAU (Round-Robin/Random)
-                                force_p_id = None
-                                current_part = 1
-                            else:
-                                # CHUỖI CẮT PART (Part 1, Part 2, Part 3...): Khóa cùng 1 tài khoản để giữ mạch câu chuyện
-                                if len(rendered_files) > 1 and f"Part {idx}" not in part_title:
-                                    part_title = f"{part_title} - Part {idx}"
-                                force_p_id = assigned_profile_id
-                                current_part = idx
+                        if is_var_file or is_variant_mode:
+                            # BIẾN THỂ A/B/C: Rải đều sang 3 TÀI KHOẢN TIKTOK KHÁC NHAU (Round-Robin/Random)
+                            force_p_id = None
+                            current_part = 1
+                        else:
+                            # CHUỖI CẮT PART (Part 1, Part 2, Part 3...): Khóa cùng 1 tài khoản để giữ mạch câu chuyện
+                            if len(rendered_files) > 1 and f"Part {idx}" not in part_title:
+                                part_title = f"{part_title} - Part {idx}"
+                            force_p_id = assigned_profile_id
+                            current_part = idx
 
-                            sched_res = distributor.schedule_campaign_upload(
-                                video_id=video_db_id,
-                                campaign=camp,
-                                title=part_title,
-                                tags=f"{res.get('ai_hashtags', '')}\n\n{res.get('ai_description', '')}",
-                                video_path=r_file,
-                                part_number=current_part,
-                                force_profile_id=force_p_id,
-                                variant_tag=var_tag
-                            )
-                            if not is_var_file and not is_variant_mode and sched_res and not assigned_profile_id:
-                                assigned_profile_id = sched_res.get("profile_id")
-                            if sched_res and sched_res.get("profile_id"):
-                                used_profile_ids.append(sched_res.get("profile_id"))
-                except Exception as e:
-                    log_campaign_event(cid, "ERROR", "render", f"Lỗi render AI theo chiến dịch: {str(e)}")
-        else:
-            if not channel_obj or channel_obj.get("auto_render", 1):
-                try:
-                    from backend.modules.ai_video_engine import ai_video_engine
-                    sub_settings = self.get_effective_subtitle_settings(channel_obj, None)
-                    render_settings = self.get_effective_render_settings(channel_obj, None)
-                    narr_settings = self.get_effective_narration_settings(channel_obj, None)
-                    ai_video_engine.auto_slice_and_render_parts(
-                        input_file=file_path,
-                        video_id=video_id,
-                        total_duration=int(duration or 65),
-                        channel_name=channel_name,
-                        video_title=video_title,
-                        output_dir=render_settings["render_dir"],
-                        enable_subtitles=sub_settings["enable_subtitles"],
-                        subtitle_style=sub_settings["subtitle_style"],
-                        subtitle_position=sub_settings["subtitle_position"],
-                        bgm_folder=render_settings["bgm_folder"],
-                        bgm_volume=render_settings["bgm_volume"],
-                        disable_subtitle_for_shorts=sub_settings["disable_subtitle_for_shorts"],
-                        enable_narration=narr_settings["narration_enabled"],
-                        narration_language=narr_settings["narration_language"],
-                        voice_gender=narr_settings["voice_gender"],
-                        narration_style=narr_settings["narration_style"],
-                        disable_narration_for_shorts=narr_settings.get("disable_narration_for_shorts", True),
-                        keep_original_script_for_shorts=narr_settings.get("keep_original_script_for_shorts", True),
-                        enable_endcard=render_settings.get("endcard_enabled", True),
-                        enable_ken_burns=render_settings.get("ken_burns_enabled", True),
-                        aspect_ratio=render_settings.get("aspect_ratio", "9:16_blur"),
-                        split_source_type=render_settings.get("split_source_type", "local"),
-                        split_folder=render_settings.get("split_folder", "data/gameplay"),
-                        split_keywords=render_settings.get("split_keywords", "minecraft parkour, satisfying asmr, subway surfers"),
-                        split_provider=render_settings.get("split_provider", "all")
-                    )
-                except Exception as re_err:
-                    log_event("WARNING", f"Lỗi auto-render video {video_id}: {str(re_err)}")
+                        sched_res = distributor.schedule_campaign_upload(
+                            video_id=video_db_id,
+                            campaign=camp,
+                            title=part_title,
+                            tags=f"{res.get('ai_hashtags', '')}\n\n{res.get('ai_description', '')}",
+                            video_path=r_file,
+                            part_number=current_part,
+                            force_profile_id=force_p_id,
+                            variant_tag=var_tag
+                        )
+                        if not is_var_file and not is_variant_mode and sched_res and not assigned_profile_id:
+                            assigned_profile_id = sched_res.get("profile_id")
+                        if sched_res and sched_res.get("profile_id"):
+                            used_profile_ids.append(sched_res.get("profile_id"))
+            except Exception as e:
+                log_campaign_event(cid, "ERROR", "render", f"Lỗi render AI theo chiến dịch: {str(e)}")
 
     def get_effective_narration_settings(self, channel_obj: Optional[dict], camp: Optional[dict] = None) -> dict:
         """

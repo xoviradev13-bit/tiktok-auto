@@ -50,7 +50,7 @@ def sanitize_filename(text: Optional[str], max_length: int = 30) -> str:
 
 class AIVideoEngine:
     """
-    Enterprise SaaS AI Video Engine for ShortsStack:
+    Enterprise SaaS AI Video Engine for ClipFlow:
     - Multi-provider Cloud LLM: DeepSeek, Gemini, OpenAI
     - Local Speech-to-Text: faster-whisper (CTranslate2)
     - Dynamic Subtitles: ASS Karaoke word-level popups
@@ -491,9 +491,6 @@ class AIVideoEngine:
         # Cờ encoder tối ưu (NVENC hoặc CPU libx264)
         encoder_flags = get_optimal_video_encoder_flags()
 
-        fade_start = max(0.0, float(duration) - 2.0)
-        bgm_boost_vol = min(1.0, target_bgm_vol * 1.6)
-
         sub_vid_args = ["-stream_loop", "-1", "-i", sub_video_file] if has_sub_video else []
 
         if has_narration:
@@ -502,7 +499,7 @@ class AIVideoEngine:
                 f"{filter_complex};"
                 f"[1:a]apad=whole_dur={duration}[a_voice]"
             )
-            cmd = [
+            base_cmd = [
                 self.ffmpeg_bin,
                 "-y",
                 "-ss", str(start_time),
@@ -510,8 +507,8 @@ class AIVideoEngine:
                 "-i", input_file,
                 "-i", temp_voice_file
             ]
-            cmd.extend(sub_vid_args)
-            cmd.extend([
+            base_cmd.extend(sub_vid_args)
+            base_cmd.extend([
                 "-filter_complex", full_filter_complex,
                 "-map", f"[{out_map}]",
                 "-map", "[a_voice]"
@@ -519,23 +516,22 @@ class AIVideoEngine:
         else:
             # GIỮ NGUYÊN ÂM THANH GỐC CỦA VIDEO
             full_filter_complex = filter_complex
-            cmd = [
+            base_cmd = [
                 self.ffmpeg_bin,
                 "-y",
                 "-ss", str(start_time),
                 "-t", str(duration),
                 "-i", input_file
             ]
-            cmd.extend(sub_vid_args)
-            cmd.extend([
+            base_cmd.extend(sub_vid_args)
+            base_cmd.extend([
                 "-filter_complex", filter_complex,
                 "-map", f"[{out_map}]",
                 "-map", "0:a",
                 "-af", audio_filter
             ])
 
-        cmd.extend(encoder_flags)
-        cmd.extend([
+        common_tail = [
             "-c:a", "aac",
             "-b:a", "128k",
             "-ar", "44100",
@@ -544,7 +540,8 @@ class AIVideoEngine:
             "-map_metadata", "-1",       # Xóa toàn bộ metadata gốc chống đối soát bản quyền
             "-movflags", "+faststart",   # Web-optimized MP4
             output_file
-        ])
+        ]
+        cmd = list(base_cmd) + list(encoder_flags) + common_tail
 
         try:
             # Giải phóng bộ nhớ Python trước khi chạy FFmpeg (tránh OOM trên máy 8GB RAM)
@@ -573,37 +570,7 @@ class AIVideoEngine:
             if process.returncode != 0 and "nvenc" in " ".join(encoder_flags).lower():
                 logger.warning("NVENC GPU Render thất bại. Đang tự động chuyển sang CPU libx264 fallback...")
                 cpu_flags = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p"]
-                if has_bgm:
-                    fallback_cmd = [
-                        self.ffmpeg_bin, "-y",
-                        "-ss", str(start_time),
-                        "-t", str(duration),
-                        "-i", input_file,
-                        "-ss", str(bgm_start_offset),
-                        "-stream_loop", "-1",
-                        "-i", selected_bgm,
-                        "-filter_complex", full_filter_complex,
-                        "-map", f"[{out_map}]",
-                        "-map", "[a_out]"
-                    ]
-                else:
-                    fallback_cmd = [
-                        self.ffmpeg_bin, "-y",
-                        "-ss", str(start_time),
-                        "-t", str(duration),
-                        "-i", input_file,
-                        "-filter_complex", filter_complex,
-                        "-map", f"[{out_map}]",
-                        "-map", "0:a",
-                        "-af", audio_filter
-                    ]
-                fallback_cmd.extend(cpu_flags)
-                fallback_cmd.extend([
-                    "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
-                    "-t", str(duration),
-                    "-map_metadata", "-1", "-movflags", "+faststart",
-                    output_file
-                ])
+                fallback_cmd = list(base_cmd) + cpu_flags + common_tail
                 process = subprocess.run(fallback_cmd, capture_output=True, timeout=900, creationflags=cflags)
                 stderr_text = process.stderr.decode("utf-8", errors="replace") if process.stderr else ""
 
@@ -718,7 +685,8 @@ class AIVideoEngine:
         split_source_type: str = "local",
         split_folder: str = "data/gameplay",
         split_keywords: str = "minecraft parkour, satisfying asmr, subway surfers",
-        split_provider: str = "all"
+        split_provider: str = "all",
+        force_edit: bool = False
     ) -> List[str]:
         """
         Tự động cắt video dài thành nhiều Part bằng cách dùng Silence Detector để ngắt tại khoảng lặng câu
@@ -731,54 +699,46 @@ class AIVideoEngine:
             total_duration = int(actual_dur)
         is_short_form = (total_duration <= 180.0)
 
-        # Video ngắn / Shorts: Tự động giữ nguyên chiều gốc (không lật ngang) để tránh ngược chữ/tiêu đề
-        effective_flip = False if is_short_form else flip_horizontal
-        effective_speed = 1.0 if is_short_form else speed_factor
-        if is_short_form and flip_horizontal:
-            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Tự động giữ nguyên chiều gốc (tắt lật hình) để bảo vệ tiêu đề/chữ trong video.")
-        if is_short_form and abs(speed_factor - 1.0) > 0.001:
-            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Tự động giữ nguyên tốc độ gốc 1.0x để đảm bảo âm thanh và phụ đề khớp 100%.")
-
-        effective_enable_subtitles = enable_subtitles
-        if is_short_form and disable_subtitle_for_shorts:
-            effective_enable_subtitles = False
-
-        effective_enable_narration = enable_narration
-        effective_narration_style = narration_style
         if is_short_form:
-            if disable_narration_for_shorts and enable_narration:
-                effective_enable_narration = False
-                log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Đã bật 'Giữ âm thanh gốc cho Shorts' -> Giữ nguyên âm thanh & phụ đề gốc (Bỏ qua giọng đọc AI).")
-            elif keep_original_script_for_shorts and enable_narration:
-                effective_narration_style = "goc_nguyen_van"
-                log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) và đã bật 'Giữ nguyên văn kịch bản gốc' -> Ép buộc style 'goc_nguyen_van' để khớp phụ đề Shorts.")
+            if not force_edit:
+                log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Giữ nguyên video gốc toàn bộ, không cần AI cắt ghép hay biên tập.")
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE videos
+                        SET status = 'rendered', rendered_path = ?
+                        WHERE yt_video_id = ?
+                    """, (input_file, video_id))
+                    conn.commit()
+                    conn.close()
+                except Exception as e:
+                    log_event("WARNING", f"Lỗi cập nhật DB cho Short-form: {e}")
+                return [input_file]
 
-        if is_short_form or total_duration <= part_duration + 10 or max_clips <= 1:
-            # Video ngắn / Shorts hoặc chỉ yêu cầu 1 clip -> Xử lý 1 part duy nhất
-            # Đối với Shorts: không đóng dấu chữ PART và giữ trọn vẹn độ dài video
-            effective_part_label = False if is_short_form else add_part_label
-            eff_dur = total_duration if is_short_form else float(max(61, total_duration if total_duration <= part_duration + 10 else part_duration))
+            # Người dùng chủ động yêu cầu biên tập trong Studio: áp dụng đầy đủ công thức biên tập lên video Short
+            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Biên tập theo công thức Studio (render trọn vẹn clip, không chia Part).")
             f = self.process_transformative_video(
                 input_file=input_file,
                 video_id=video_id,
                 part_number=1,
                 start_time=0.0,
-                duration=eff_dur,
+                duration=float(total_duration),
                 channel_name=channel_name,
                 video_title=video_title,
                 output_dir=output_dir,
-                enable_subtitles=effective_enable_subtitles,
-                flip_horizontal=effective_flip,
+                enable_subtitles=enable_subtitles,
+                flip_horizontal=flip_horizontal,
                 speed_factor=speed_factor,
-                add_part_label=effective_part_label,
+                add_part_label=False,
                 subtitle_style=subtitle_style,
                 subtitle_position=subtitle_position,
                 bgm_folder=bgm_folder,
                 bgm_volume=bgm_volume,
-                enable_narration=effective_enable_narration,
+                enable_narration=enable_narration,
                 narration_language=narration_language,
                 voice_gender=voice_gender,
-                narration_style=effective_narration_style,
+                narration_style=narration_style,
                 custom_provider=custom_provider,
                 custom_model=custom_model,
                 total_parts=1,
@@ -790,8 +750,7 @@ class AIVideoEngine:
                 split_keywords=split_keywords,
                 split_provider=split_provider
             )
-            if f:
-                rendered_files.append(f)
+            return [f] if f else []
         else:
             # Video dài (Long-form > 3 phút) -> Dò khoảng lặng và cắt theo từng Part (tối đa max_clips)
             # Safe boundary: Loại bỏ 15s cuối của video gốc để tránh lọt YouTube End Screens / Subscribe overlay cards
@@ -829,7 +788,7 @@ class AIVideoEngine:
                     video_title=video_title,
                     output_dir=output_dir,
                     enable_subtitles=enable_subtitles,
-                    flip_horizontal=effective_flip,
+                    flip_horizontal=flip_horizontal,
                     speed_factor=speed_factor,
                     add_part_label=add_part_label,
                     subtitle_style=subtitle_style,
@@ -1064,6 +1023,7 @@ class AIVideoEngine:
         elevenlabs_voice_id: Optional[str] = None,
         elevenlabs_model: Optional[str] = "eleven_multilingual_v2",
         voice_id: Optional[str] = None,
+        force_edit: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -1081,11 +1041,100 @@ class AIVideoEngine:
         hashtags = ""
         primary_hook = video_title
 
-        # Bước 1: Transcribe âm thanh local
+        # Lấy tổng thời lượng video chính xác bằng ffprobe trước khi chạy bất kỳ bước AI nào
+        actual_dur = self._get_exact_media_duration(input_file)
+        if actual_dur > 0 and actual_dur <= 180.0:
+            if not force_edit:
+                import re
+                log_event("INFO", f"Video {video_id} là YouTube Shorts ({actual_dur:.1f}s <= 180s) -> Đăng toàn bộ video gốc, không cần chỉnh sửa và hoàn toàn KHÔNG dùng AI.")
+                clean_ch = re.sub(r'[^a-zA-Z0-9_]', '', channel_name or '')
+                default_tags = f"#{clean_ch} #shorts #viral" if clean_ch else "#shorts #viral"
+
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE videos
+                        SET ai_hook = '', ai_title = ?, ai_tags = ?, status = 'rendered', rendered_path = ?
+                        WHERE yt_video_id = ?
+                    """, (video_title, default_tags, input_file, video_id))
+                    conn.commit()
+                    conn.close()
+                except Exception as e:
+                    log_event("WARNING", f"Lỗi cập nhật DB cho Short-form: {e}")
+
+                return {
+                    "status": "success",
+                    "rendered_file": input_file,
+                    "rendered_files": [input_file],
+                    "curation": {},
+                    "ai_hook": "",
+                    "ai_title": video_title,
+                    "ai_description": video_title,
+                    "ai_hashtags": default_tags,
+                    "is_short": True
+                }
+
+            # Người dùng chủ động Render trong Studio Biên Tập: áp dụng đầy đủ Công thức biên tập (Recipe) lên video Short
+            log_event("INFO", f"Video {video_id} là Short-form ({actual_dur:.1f}s <= 180s) -> Tiến hành biên tập theo công thức Studio (render trọn vẹn clip, không chia Part).")
+            curation = llm_curator.generate_hook_and_copy(video_title, video_id=video_id)
+            viral_title = curation.get("viral_title") or video_title
+            primary_hook = curation.get("hook") or viral_title
+            hook_3s = primary_hook if generate_hook else ""
+            description = curation.get("description", "")
+            hashtags = curation.get("tags", "")
+
+            sub_enabled = False if disable_subtitle_for_shorts else (enable_subtitles if enable_subtitles is not None else ENABLE_DYNAMIC_SUBTITLES)
+            eff_narration = False if disable_narration_for_shorts else enable_narration
+
+            rendered_file = self.process_transformative_video(
+                input_file=input_file,
+                video_id=video_id,
+                part_number=1,
+                start_time=0.0,
+                duration=float(actual_dur),
+                channel_name=channel_name,
+                video_title=viral_title,
+                output_dir=output_dir,
+                enable_subtitles=sub_enabled,
+                hook_text=hook_3s if generate_hook else None,
+                flip_horizontal=flip_horizontal,
+                speed_factor=speed_factor,
+                add_part_label=False,
+                subtitle_style=subtitle_style,
+                subtitle_position=subtitle_position,
+                bgm_folder=bgm_folder,
+                bgm_volume=bgm_volume,
+                enable_narration=eff_narration,
+                narration_language=narration_language,
+                voice_gender=voice_gender,
+                narration_style="goc_nguyen_van" if keep_original_script_for_shorts else narration_style,
+                custom_provider=custom_provider,
+                custom_model=custom_model,
+                total_parts=1,
+                enable_endcard=enable_endcard,
+                enable_ken_burns=enable_ken_burns,
+                aspect_ratio=aspect_ratio,
+                split_source_type=split_source_type,
+                split_folder=split_folder,
+                split_keywords=split_keywords,
+                split_provider=split_provider
+            )
+            return {
+                "status": "success" if rendered_file else "failed",
+                "rendered_file": rendered_file,
+                "rendered_files": [rendered_file] if rendered_file else [],
+                "curation": curation,
+                "ai_hook": hook_3s,
+                "ai_title": viral_title,
+                "ai_description": description,
+                "ai_hashtags": hashtags,
+                "is_short": True
+            }
+
+        # Bước 1: Transcribe âm thanh local (CHỈ DÀNH CHO LONG-FORM > 180s)
         transcript_segments = whisper_transcriber.transcribe(input_file, model_size=WHISPER_MODEL_SIZE)
 
-        # Lấy tổng thời lượng video chính xác bằng ffprobe
-        actual_dur = self._get_exact_media_duration(input_file)
         if actual_dur > 0:
             total_duration = int(actual_dur)
         elif transcript_segments and transcript_segments[-1].get("end", 0.0) > 0:
@@ -1093,84 +1142,70 @@ class AIVideoEngine:
         else:
             total_duration = 60.0
 
-        # Kiểm tra Short-form (YouTube Shorts <= 3 phút) vs Long-form
+        # Kiểm tra Short-form nếu ffprobe trước đó chưa đo được
         is_short_form = (total_duration <= 180.0)
-
-        # Video ngắn / Shorts: Tự động giữ nguyên chiều gốc (không lật ngang) và tốc độ 1.0x để bảo vệ phụ đề và tránh lệch tiếng
-        effective_flip = False if is_short_form else flip_horizontal
-        effective_speed = 1.0 if is_short_form else speed_factor
-        if is_short_form and flip_horizontal:
-            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Tự động giữ nguyên chiều gốc (tắt lật hình) để bảo vệ tiêu đề/chữ trong video.")
-        if is_short_form and abs(speed_factor - 1.0) > 0.001:
-            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Tự động giữ nguyên tốc độ gốc 1.0x để đảm bảo âm thanh và phụ đề khớp 100%.")
-
         if is_short_form:
-            # SHORT-FORM / YouTube Shorts (<= 180s):
-            # Xuất 1 clip trọn vẹn duy nhất từ 0.0 đến hết, KHÔNG gắn nhãn PART X
-            start_time = 0.0
-            duration = total_duration
-            effective_clips_count = 1
+            import re
+            log_event("INFO", f"Video {video_id} là YouTube Shorts ({total_duration:.1f}s <= 180s) -> Đăng toàn bộ video gốc, không dùng AI.")
+            clean_ch = re.sub(r'[^a-zA-Z0-9_]', '', channel_name or '')
+            default_tags = f"#{clean_ch} #shorts #viral" if clean_ch else "#shorts #viral"
+            return {
+                "status": "success",
+                "rendered_file": input_file,
+                "rendered_files": [input_file],
+                "curation": {},
+                "ai_hook": "",
+                "ai_title": video_title,
+                "ai_description": video_title,
+                "ai_hashtags": default_tags,
+                "is_short": True
+            }
+
+        # LONG-FORM (> 3 phút):
+        # Giữ nguyên hiệu ứng biến đổi cho video dài
+        effective_flip = flip_horizontal
+        effective_speed = speed_factor
+
+        # Cho phép cắt nhiều Part, dùng LLM chọn phân đoạn kịch tính nhất
+        effective_clips_count = clips_count
+        if generate_variants or effective_clips_count <= 1:
             effective_add_part_label = False
-            curation = llm_curator.generate_hook_and_copy(video_title, video_id=video_id)
-            viral_title = curation.get("viral_title") or video_title
-            primary_hook = curation.get("hook") or viral_title
-            hook_3s = primary_hook if generate_hook else ""
-            description = curation.get("description", "")
-            hashtags = curation.get("tags", "")
-            log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Xuất 1 clip trọn vẹn, không chèn chữ Part.")
         else:
-            # LONG-FORM (> 3 phút):
-            # Cho phép cắt nhiều Part, dùng LLM chọn phân đoạn kịch tính nhất
-            effective_clips_count = clips_count
-            if is_short_form or generate_variants or effective_clips_count <= 1:
-                effective_add_part_label = False
-            else:
-                effective_add_part_label = add_part_label
-            curation = llm_curator.curate_viral_segment(
-                transcript_segments=transcript_segments,
-                total_duration=total_duration,
-                target_duration=target_duration,
-                video_title=video_title,
-                video_id=video_id,
-                custom_provider=custom_provider,
-                custom_model=custom_model,
-                hook_angle=hook_angle
-            )
-            start_time = curation["start_time"]
-            duration = curation["duration"]
-            hook_3s = curation["hook_3s"] if generate_hook else ""
-            viral_title = curation["viral_title"]
-            description = curation["description"]
-            hashtags = curation["hashtags"]
-            primary_hook = hook_3s.strip() if (hook_3s and hook_3s.strip()) else viral_title.strip()
-            # Áp dụng góc Hook tâm lý ưu tiên (Preferred Hook Angle / Winning Variant Focus)
-            if hook_angle == "curiosity" and curation.get("hook_curiosity"):
-                primary_hook = curation["hook_curiosity"].strip()
-                log_event("INFO", f"Áp dụng góc Hook Tò Mò (Curiosity Angle - VarA): {primary_hook}")
-            elif hook_angle == "controversy" and curation.get("hook_controversy"):
-                primary_hook = curation["hook_controversy"].strip()
-                log_event("INFO", f"Áp dụng góc Hook Tranh Luận (Controversy Angle - VarB): {primary_hook}")
-            elif hook_angle == "climax" and curation.get("hook_climax"):
-                primary_hook = curation["hook_climax"].strip()
-                log_event("INFO", f"Áp dụng góc Hook Cao Trào (Climax Angle - VarC): {primary_hook}")
+            effective_add_part_label = add_part_label
+        curation = llm_curator.curate_viral_segment(
+            transcript_segments=transcript_segments,
+            total_duration=total_duration,
+            target_duration=target_duration,
+            video_title=video_title,
+            video_id=video_id,
+            custom_provider=custom_provider,
+            custom_model=custom_model,
+            hook_angle=hook_angle
+        )
+        start_time = curation["start_time"]
+        duration = curation["duration"]
+        hook_3s = curation["hook_3s"] if generate_hook else ""
+        viral_title = curation["viral_title"]
+        description = curation["description"]
+        hashtags = curation["hashtags"]
+        primary_hook = hook_3s.strip() if (hook_3s and hook_3s.strip()) else viral_title.strip()
+        # Áp dụng góc Hook tâm lý ưu tiên (Preferred Hook Angle / Winning Variant Focus)
+        if hook_angle == "curiosity" and curation.get("hook_curiosity"):
+            primary_hook = curation["hook_curiosity"].strip()
+            log_event("INFO", f"Áp dụng góc Hook Tò Mò (Curiosity Angle - VarA): {primary_hook}")
+        elif hook_angle == "controversy" and curation.get("hook_controversy"):
+            primary_hook = curation["hook_controversy"].strip()
+            log_event("INFO", f"Áp dụng góc Hook Tranh Luận (Controversy Angle - VarB): {primary_hook}")
+        elif hook_angle == "climax" and curation.get("hook_climax"):
+            primary_hook = curation["hook_climax"].strip()
+            log_event("INFO", f"Áp dụng góc Hook Cao Trào (Climax Angle - VarC): {primary_hook}")
 
         effective_enable_narration = enable_narration
         effective_narration_style = narration_style
-        if is_short_form:
-            if disable_narration_for_shorts and enable_narration:
-                effective_enable_narration = False
-                log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) -> Đã bật 'Giữ âm thanh gốc cho Shorts' -> Giữ nguyên âm thanh & phụ đề gốc (Bỏ qua giọng đọc AI).")
-            elif keep_original_script_for_shorts and enable_narration:
-                effective_narration_style = "goc_nguyen_van"
-                log_event("INFO", f"Video {video_id} là Short-form ({total_duration:.1f}s <= 180s) và đã bật 'Giữ nguyên văn kịch bản gốc' -> Ép buộc style 'goc_nguyen_van' để khớp phụ đề Shorts.")
-
-        # Bước 3 & 4: Render video Part 1 với phụ đề Karaoke và Anti-detection
-        sub_enabled = enable_subtitles if enable_subtitles is not None else ENABLE_DYNAMIC_SUBTITLES
-        if is_short_form and disable_subtitle_for_shorts:
-            sub_enabled = False
         part1_hook = primary_hook if generate_hook else None
+        sub_enabled = enable_subtitles if enable_subtitles is not None else ENABLE_DYNAMIC_SUBTITLES
 
-        if generate_variants and not is_short_form:
+        if generate_variants:
             log_event("INFO", f"Đang phân tích và xuất 3 biến thể nội dung độc lập sâu (Variants A/B/C - Gap 1) cho video {video_id}...")
             distinct_moments = []
             try:
@@ -1237,7 +1272,7 @@ class AIVideoEngine:
                 narration_style=effective_narration_style,
                 custom_provider=custom_provider,
                 custom_model=custom_model,
-                total_parts=1 if is_short_form else effective_clips_count,
+                total_parts=effective_clips_count,
                 enable_endcard=enable_endcard,
                 enable_ken_burns=enable_ken_burns,
                 aspect_ratio=aspect_ratio,
@@ -1249,7 +1284,7 @@ class AIVideoEngine:
             rendered_files = [rendered_file] if rendered_file else []
 
         # Nếu yêu cầu cắt nhiều clip từ video này (CHỈ KHI LÀ LONG-FORM VÀ clips_count > 1)
-        if not is_short_form and not generate_variants and effective_clips_count > 1 and total_duration > (duration + 20):
+        if not generate_variants and effective_clips_count > 1 and total_duration > (duration + 20):
             # Safe boundary: Loại bỏ 15s cuối của video gốc để tránh lọt YouTube End Screens / Subscribe overlay cards
             safe_max_end = max(61.0, total_duration - 15.0)
             curr_start = start_time + duration

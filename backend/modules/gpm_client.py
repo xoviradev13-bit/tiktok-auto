@@ -1,3 +1,4 @@
+import os
 import time
 import requests
 from typing import List, Dict, Optional, Any
@@ -22,13 +23,11 @@ class GPMClient:
             except Exception:
                 self.cached_working_base = None
 
-        # Dò qua các cổng ứng viên và versions với socket check siêu tốc
         import socket
         for port in GPM_PORT_CANDIDATES:
-            # Kiểm tra nhanh cổng có đang mở không trước khi gửi HTTP request
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(0.06)
+                    s.settimeout(0.35)
                     if s.connect_ex(("127.0.0.1", port)) != 0:
                         continue
             except Exception:
@@ -37,7 +36,7 @@ class GPMClient:
             for ver in ["v1", "v3"]:
                 base = f"http://127.0.0.1:{port}/api/{ver}"
                 try:
-                    r = requests.get(f"{base}/profiles?page=1&per_page=1", timeout=1.0)
+                    r = requests.get(f"{base}/profiles?page=1&per_page=1", timeout=1.5)
                     if r.status_code == 200:
                         data = r.json()
                         if isinstance(data, dict) and data.get("success"):
@@ -45,6 +44,15 @@ class GPMClient:
                             return base
                 except Exception:
                     continue
+
+        # Thử trực tiếp cổng 9495 (cổng mặc định GPMLoginGlobal)
+        try:
+            r = requests.get("http://127.0.0.1:9495/api/v1/profiles?page=1&per_page=1", timeout=1.5)
+            if r.status_code == 200:
+                self.cached_working_base = "http://127.0.0.1:9495/api/v1"
+                return self.cached_working_base
+        except Exception:
+            pass
 
         return None
 
@@ -123,7 +131,7 @@ class GPMClient:
         return False
 
     def get_profiles(self) -> List[Dict[str, Any]]:
-        """Lấy toàn bộ danh sách profile từ GPMLogin (chuẩn pagination như agent.js)"""
+        """Lấy toàn bộ danh sách profile từ GPMLogin (hỗ trợ phân trang đầy đủ cho 1.000+ accounts)"""
         base = self.discover_api_base()
         if not base:
             self.ensure_gpm_running()
@@ -131,41 +139,77 @@ class GPMClient:
         if not base:
             return []
 
-        try:
-            r = requests.get(f"{base}/profiles?page=1&per_page=100", timeout=5)
-            if r.status_code == 200:
+        all_profiles = []
+        page = 1
+        while page <= 50:
+            try:
+                r = requests.get(f"{base}/profiles?page={page}&per_page=100", timeout=8)
+                if r.status_code != 200:
+                    break
                 json_data = r.json()
                 data_field = json_data.get("data", {})
                 rows = []
+                last_page = 1
                 if isinstance(data_field, dict):
                     rows = data_field.get("data", [])
+                    last_page = data_field.get("last_page", 1)
                 elif isinstance(data_field, list):
                     rows = data_field
 
-                formatted = []
+                if not rows:
+                    break
+
                 for p in rows:
                     p_id = p.get("id") or p.get("profile_id")
                     if not p_id:
                         continue
-                    formatted.append({
+                    all_profiles.append({
                         "id": str(p_id),
                         "name": p.get("name", f"Profile {p_id}"),
                         "raw_proxy": p.get("raw_proxy", "") or p.get("proxy", ""),
                         "group_id": p.get("group_id", ""),
                         "created_at": p.get("created_at", "")
                     })
-                return formatted
-        except Exception as e:
-            log_event("WARNING", f"Lỗi lấy danh sách GPM profiles: {str(e)}")
-        return []
 
-    def start_profile(self, profile_id: str, target_url: str = "", low_ram_mode: bool = False, mute_audio: bool = False) -> Optional[str]:
+                if page >= last_page:
+                    break
+                page += 1
+            except Exception as e:
+                log_event("WARNING", f"Lỗi lấy danh sách GPM profiles (trang {page}): {str(e)}")
+                break
+
+        return all_profiles
+
+    def start_profile(
+        self,
+        profile_id: str,
+        target_url: str = "",
+        low_ram_mode: bool = False,
+        mute_audio: bool = False,
+        invisible: Optional[bool] = None,
+    ) -> Optional[str]:
         """
         Khởi chạy profile trên GPMLogin
         Trả về remote_debugging_address (VD: 127.0.0.1:12345)
         - Tự động mở phần mềm GPMLogin nếu đang tắt.
         - low_ram_mode=True: Tiết kiệm tối đa RAM (tắt GPU, tắt load ảnh, ẩn cửa sổ offscreen)
+        - invisible=True: Ẩn hoàn toàn cửa sổ ra ngoài màn hình (-3200, -3200) để không che khuất hay làm phiền người dùng
         """
+        if invisible is None:
+            try:
+                from backend.database import get_connection
+                conn_s = get_connection()
+                cur_s = conn_s.cursor()
+                cur_s.execute("SELECT value FROM settings WHERE key = 'INVISIBLE_BROWSER_AUTOMATION'")
+                row_s = cur_s.fetchone()
+                conn_s.close()
+                if row_s and row_s["value"]:
+                    invisible = row_s["value"].lower() in ("true", "1", "yes")
+                else:
+                    invisible = os.getenv("INVISIBLE_BROWSER_AUTOMATION", "true").lower() in ("true", "1", "yes")
+            except Exception:
+                invisible = True
+
         base = self.discover_api_base()
         if not base:
             log_event("INFO", f"GPMLogin API chưa kết nối. Đang kích hoạt tự động mở GPMLogin để mở profile {profile_id}...")
@@ -175,19 +219,53 @@ class GPMClient:
             log_event("WARNING", f"Không thể kết nối GPMLogin API sau khi thử tự mở. Vui lòng kiểm tra phần mềm GPMLogin.")
             return None
 
+        # Đảm bảo profile được gán đúng Proxy từ ClipFlow DB trước khi mở
+        try:
+            from backend.database import get_connection
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT raw_proxy, country FROM gpm_profiles WHERE gpm_id = ?", (profile_id,))
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                target_proxy = row["raw_proxy"] or ""
+                country = (row["country"] or "").upper()
+                if not target_proxy and country and country != "NONE":
+                    from backend.modules.wireproxy_manager import wireproxy_manager
+                    target_proxy = wireproxy_manager.get_proxy_for_country(country) or ""
+                if target_proxy:
+                    self.update_profile_proxy(profile_id, target_proxy)
+        except Exception:
+            pass
+
         def _do_start(api_base: str) -> Optional[str]:
             url = f"{api_base}/profiles/start/{profile_id}?skip_proxy_check=true"
             args_list = []
             if low_ram_mode:
                 args_list.extend([
-                    "--window-position=-2400,-2400",
+                    "--window-position=-3200,-3200",
                     "--window-size=240,240",
                     "--blink-settings=imagesEnabled=false",
                     "--disable-gpu",
                     "--disable-software-rasterizer",
                     "--mute-audio",
-                    "--no-first-run"
+                    "--no-first-run",
+                    "--disable-notifications",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
                 ])
+                url += "&win_pos=-3200,-3200&win_size=240,240"
+            elif invisible:
+                args_list.extend([
+                    "--window-position=-3200,-3200",
+                    "--window-size=1280,800",
+                    "--mute-audio",
+                    "--no-first-run",
+                    "--disable-notifications",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",
+                ])
+                url += "&win_pos=-3200,-3200&win_size=1280,800"
             elif mute_audio:
                 args_list.append("--mute-audio")
             if target_url:
@@ -271,6 +349,54 @@ class GPMClient:
                         return True
             except Exception:
                 continue
+        return False
+
+    def update_profile_proxy(self, profile_id: str, raw_proxy: str) -> bool:
+        """
+        Cập nhật cấu hình Proxy cho Profile GPMLogin (SOCKS5 / HTTP).
+        Hỗ trợ GPMLogin v1, v2, v3 qua API /profiles/update/{id}.
+        Nếu raw_proxy = "" thì sẽ gỡ bỏ proxy (chạy Direct IP).
+        """
+        base = self.discover_api_base()
+        if not base:
+            base = "http://127.0.0.1:9495/api/v1"
+
+        endpoints = [
+            f"{base}/profiles/update/{profile_id}",
+            f"{base}/profiles/{profile_id}",
+        ]
+        payload = {
+            "raw_proxy": raw_proxy or "",
+            "proxy": raw_proxy or ""
+        }
+
+        # 1. Thử qua POST JSON
+        for ep in endpoints:
+            try:
+                resp = requests.post(ep, json=payload, timeout=6)
+                if resp.status_code == 200:
+                    json_data = resp.json()
+                    if isinstance(json_data, dict) and (json_data.get("success") is True or json_data.get("status") == "success"):
+                        log_event("INFO", f"Đã cập nhật proxy '{raw_proxy or 'Direct'}' cho GPM profile {profile_id} (API POST)")
+                        return True
+            except Exception:
+                pass
+
+        # 2. Thử qua GET Query Parameters (một số bản GPMLogin v3 chấp nhận GET)
+        import urllib.parse
+        encoded_proxy = urllib.parse.quote(raw_proxy or "")
+        try:
+            get_url = f"{base}/profiles/update/{profile_id}?raw_proxy={encoded_proxy}"
+            resp = requests.get(get_url, timeout=6)
+            if resp.status_code == 200:
+                json_data = resp.json()
+                if isinstance(json_data, dict) and json_data.get("success") is True:
+                    log_event("INFO", f"Đã cập nhật proxy '{raw_proxy or 'Direct'}' cho GPM profile {profile_id} (API GET)")
+                    return True
+        except Exception:
+            pass
+
+        log_event("WARNING", f"Không thể cập nhật proxy cho GPM profile {profile_id} qua API GPM.")
         return False
 
     def _extract_debug_address(self, data: Dict[str, Any]) -> Optional[str]:

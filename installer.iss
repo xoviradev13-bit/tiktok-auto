@@ -1,12 +1,12 @@
-; Inno Setup Script for ShortsStack & AI Video Engine
+; Inno Setup Script for ClipFlow & AI Video Engine
 ; Modern, clean, and antivirus-safe installer specification
 
-#define MyAppName "ShortsStack & AI Video Engine"
+#define MyAppName "ClipFlow & AI Video Engine"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "ShortsStack Systems"
-#define MyAppExeName "ShortsStack.exe"
+#define MyAppPublisher "ClipFlow Systems"
+#define MyAppExeName "ClipFlow.exe"
 #define MyAppAssocName MyAppName + " File"
-#define MyAppAssocExt ".shortsstack"
+#define MyAppAssocExt ".clipflow"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
@@ -16,11 +16,11 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} v{#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\ShortsStack
+DefaultDirName={autopf}\ClipFlow
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=dist_installer
-OutputBaseFilename=ShortsStack_Setup_v1.0.0
+OutputBaseFilename=ClipFlow_Setup_v1.0.0
 SetupIconFile=logo\app-logo.ico
 Compression=lzma2/normal
 SolidCompression=yes
@@ -45,17 +45,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\ShortsStack\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\ClipFlow\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "logo\*"; DestDir: "{app}\logo"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 
 [Dirs]
 ; Tạo thư mục dữ liệu trong %APPDATA% (không bị xóa khi gỡ cài đặt)
-Name: "{userappdata}\ShortsStack"
-Name: "{userappdata}\ShortsStack\downloads"
-Name: "{userappdata}\ShortsStack\rendered"
-Name: "{userappdata}\ShortsStack\logs"
-Name: "{userappdata}\ShortsStack\music"
+Name: "{userappdata}\ClipFlow"
+Name: "{userappdata}\ClipFlow\downloads"
+Name: "{userappdata}\ClipFlow\rendered"
+Name: "{userappdata}\ClipFlow\logs"
+Name: "{userappdata}\ClipFlow\music"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\logo\app-logo.ico"

@@ -1,9 +1,9 @@
 @echo off
-title ShortsStack & AI Video Engine
+title ClipFlow & AI Video Engine
 color 0b
 
 echo ========================================================
-echo   SHORTSSTACK - AI VIDEO ENGINE & AUTO UPLOADER
+echo   CLIPFLOW - AI VIDEO ENGINE & AUTO UPLOADER
 echo ========================================================
 echo.
 

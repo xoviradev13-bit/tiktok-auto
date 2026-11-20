@@ -15,13 +15,13 @@ VSVersionInfo(
       [
       StringTable(
         '040904B0',
-        [StringStruct('CompanyName', 'ShortsStack Systems'),
-        StringStruct('FileDescription', 'ShortsStack & AI Video Engine'),
+        [StringStruct('CompanyName', 'ClipFlow Systems'),
+        StringStruct('FileDescription', 'ClipFlow & AI Video Engine'),
         StringStruct('FileVersion', '1.0.0.0'),
-        StringStruct('InternalName', 'ShortsStack'),
-        StringStruct('LegalCopyright', 'Copyright (C) 2026 ShortsStack Systems. All rights reserved.'),
-        StringStruct('OriginalFilename', 'ShortsStack.exe'),
-        StringStruct('ProductName', 'ShortsStack & AI Video Engine'),
+        StringStruct('InternalName', 'ClipFlow'),
+        StringStruct('LegalCopyright', 'Copyright (C) 2026 ClipFlow Systems. All rights reserved.'),
+        StringStruct('OriginalFilename', 'ClipFlow.exe'),
+        StringStruct('ProductName', 'ClipFlow & AI Video Engine'),
         StringStruct('ProductVersion', '1.0.0.0')])
       ]), 
     VarFileInfo([VarStruct('Translation', [1033, 1200])])

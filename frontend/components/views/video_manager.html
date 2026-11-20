@@ -4,136 +4,13 @@
         <div>
             <h2
                 style="font-size: 20px; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 10px; color: var(--text-primary);">
-                <i class="fa-solid fa-film" style="color: var(--accent-pink);"></i> Quản Lý Video & Tải Đa
-                Nền Tảng
+                <i class="fa-solid fa-film" style="color: var(--accent-pink);"></i> Quản Lý Video
             </h2>
             <p class="panel-sub"
                 style="color: var(--text-muted); font-size: 12.5px; margin-top: 6px; margin-bottom: 0;">
-                Tải video sạch không watermark từ 7 nền tảng, nạp kho video cục bộ từ máy tính, cấu hình
-                giọng đọc ElevenLabs AI và quản lý thư viện video sẵn sàng đăng.
+                Quản lý kho video đã tải từ các kênh YouTube nguồn và thư viện video sẵn sàng xử lý &amp; đăng bài.
             </p>
         </div>
-    </div>
-
-    <!-- Top Grid: 2 Glass Cards (Local Ingestion & Multi-Platform Downloader) -->
-    <!-- Card: Tải Video 7 Nền Tảng Sạch (No Watermark) -->
-    <div class="glass-panel" style="padding: 22px; margin-bottom: 24px;">
-        <div class="panel-header" style="margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div
-                    style="width: 38px; height: 38px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); display: flex; align-items: center; justify-content: center;">
-                    <i class="fa-solid fa-cloud-arrow-down" style="color: #f59e0b; font-size: 16px;"></i>
-                </div>
-                <div>
-                    <h4 style="margin: 0; font-size: 15px; font-weight: 700;">Tải Video 7 Nền
-                        Tảng Sạch</h4>
-                    <span style="font-size: 11.5px; color: var(--text-muted);">Bóc tách CDN không dính logo
-                        watermark</span>
-                </div>
-            </div>
-            <span class="badge"
-                style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 10.5px; padding: 3px 8px; border-radius: 6px; font-weight: 600;">
-                Auto No-Logo
-            </span>
-        </div>
-
-        <!-- Platform Badges -->
-        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">Douyin
-                (TikTok TQ)</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">RedNote
-                / Xiaohongshu
-                (RED)</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">YouTube</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">Facebook</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">Instagram</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">Bilibili</span>
-            <span
-                style="font-size: 10.5px; padding: 3px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); color: var(--text-primary);">Weibo</span>
-        </div>
-
-        <!-- Direct Download Folder Setting Bar -->
-        <div
-            style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 14px;">
-            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
-                <i class="fa-solid fa-folder-open" style="color: #fbbf24; font-size: 13px; flex-shrink: 0;"></i>
-                <span
-                    style="font-size: 11.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; flex-shrink: 0;">Thư
-                    mục tải về:</span>
-                <input type="text" id="inputDirectDownloadDir" class="input-field"
-                    style="height: 28px; font-size: 11.5px; padding: 0 8px; flex: 1; min-width: 160px; border-radius: 6px; font-family: monospace;"
-                    placeholder="data/downloads/Direct Links (Mặc định)"
-                    title="Đường dẫn thư mục lưu trữ video Direct Links"
-                    onchange="saveDirectDownloadDirFromInput(this.value)">
-            </div>
-            <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="browseDirectDownloadFolder()"
-                    style="height: 28px; font-size: 11px; padding: 0 10px; font-weight: 600; white-space: nowrap;"
-                    title="Chọn thư mục trên máy tính">
-                    <i class="fa-solid fa-folder-tree" style="margin-right: 4px;"></i> Chọn Thư Mục...
-                </button>
-                <button type="button" class="btn btn-outline btn-sm" onclick="resetDirectDownloadDirToDefault()"
-                    style="height: 28px; font-size: 11px; padding: 0 8px; color: var(--text-muted); white-space: nowrap;"
-                    title="Đặt lại về thư mục mặc định data/downloads/Direct Links">
-                    <i class="fa-solid fa-rotate-left"></i> Mặc định
-                </button>
-            </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 12px;">
-            <label
-                style="font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block;">
-                Dán đường dẫn video (URL):
-            </label>
-            <div style="display: flex; gap: 8px;">
-                <input type="text" id="inputMultiDownloadUrl" class="input-field"
-                    style="flex: 1; height: 38px; padding: 0 12px; font-size: 12.5px; border-radius: 8px;"
-                    placeholder="https://v.douyin.com/... hoặc https://rednote.com/... hoặc YouTube/FB/IG/Bilibili...">
-                <button class="btn btn-secondary btn-sm" type="button" id="btnTriggerMultiDownload"
-                    onclick="triggerMultiDownload()"
-                    style="height: 38px; padding: 0 16px; font-size: 12px; font-weight: 700; color: #fbbf24; border-color: rgba(245, 158, 11, 0.4); white-space: nowrap;">
-                    <i class="fa-solid fa-download"></i> Tải Ngay
-                </button>
-            </div>
-        </div>
-
-        <!-- Live Download Progress Box -->
-        <div id="directDlProgressBox"
-            style="display: none; margin-top: 10px; padding: 12px 16px; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
-                    <i id="directDlProgressIcon" class="fa-solid fa-cloud-arrow-down fa-bounce"
-                        style="color: #00f2fe; font-size: 15px; flex-shrink: 0;"></i>
-                    <span id="directDlStatusText"
-                        style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        Đang chuẩn bị tải...
-                    </span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: 10px;">
-                    <span id="directDlSpeedEta"
-                        style="font-size: 11px; color: var(--text-muted); font-family: monospace;"></span>
-                    <span id="directDlPercentText"
-                        style="font-size: 13px; font-weight: 700; color: #00f2fe; font-family: monospace;">0%</span>
-                </div>
-            </div>
-            <div
-                style="width: 100%; height: 7px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
-                <div id="directDlProgressBar"
-                    style="width: 0%; height: 100%; background: linear-gradient(90deg, #00f2fe 0%, #38bdf8 50%, #4facfe 100%); transition: width 0.3s ease; border-radius: 4px;">
-                </div>
-            </div>
-        </div>
-
-        <div id="multiDownloadStatusAlert"
-            style="display: none; margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); font-size: 11.5px; color: var(--text-muted); line-height: 1.5;">
-        </div>
-
     </div>
 
     <!-- Bottom Panel: Video Library Table -->
@@ -168,21 +45,6 @@
                         placeholder="Lọc nhanh tiêu đề, ID, nguồn..." oninput="filterVideoLibrary()">
                 </div>
 
-                <select id="videoLibPlatformFilter" class="input-field"
-                    style="height: 38px; font-size: 13px; padding: 0 14px; border-radius: 8px; min-width: 170px; width: auto; flex-shrink: 0;"
-                    onchange="filterVideoLibrary()">
-                    <option value="">🌐 Tất cả nền tảng</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="douyin">Douyin (TikTok TQ)</option>
-                    <option value="rednote">RedNote / Xiaohongshu</option>
-                    <option value="facebook">Facebook Reels</option>
-                    <option value="instagram">Instagram Reels</option>
-                    <option value="bilibili">Bilibili</option>
-                    <option value="weibo">Weibo</option>
-                    <option value="tiktok">TikTok Global</option>
-                    <option value="direct">Direct Links</option>
-                </select>
-
                 <select id="videoLibStatusFilter" class="input-field"
                     style="height: 38px; font-size: 13px; padding: 0 14px; border-radius: 8px; min-width: 180px; width: auto; flex-shrink: 0;"
                     onchange="filterVideoLibrary()">
@@ -203,7 +65,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-top: 10px; margin-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06);">
                 <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted);">
                     <i class="fa-solid fa-list-check" style="color: #38bdf8;"></i>
-                    <span>Kho video sẵn sàng để biên tập 9:16 hoặc đăng tải đa nền tảng</span>
+                    <span>Kho video sẵn sàng để biên tập 9:16 và đăng lên TikTok</span>
                 </div>
                 <span class="badge badge-info" id="videoLibCountBadge"
                     style="font-size: 12.5px; font-weight: 700; padding: 5px 14px; border-radius: 6px;">
@@ -218,7 +80,6 @@
                     <tr>
                         <th style="width: 280px; max-width: 280px; min-width: 220px;">Tiêu Đề Video</th>
                         <th style="width: 140px;">Mã Video ID</th>
-                        <th style="width: 125px;">Nền Tảng</th>
                         <th style="width: 140px;">Kênh / Nguồn</th>
                         <th style="width: 95px;">Dung Lượng</th>
                         <th style="width: 135px;">Thời Gian Tải</th>
@@ -230,7 +91,7 @@
                 </thead>
                 <tbody id="videoLibraryTableBody">
                     <tr>
-                        <td colspan="10"
+                        <td colspan="9"
                             style="text-align: center; padding: 30px; color: var(--text-muted);">
                             <i class="fa-solid fa-spinner fa-spin" style="margin-right: 6px;"></i> Đang tải
                             danh sách video...

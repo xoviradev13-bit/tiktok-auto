@@ -197,13 +197,41 @@ class TikTokTracker:
                         } catch(e) {}
                     }
 
+                    // 5. KIỂM TRA CHƯƠNG TRÌNH CREATOR REWARDS (TIKTOK BETA)
+                    let creatorProgram = "unknown";
+                    try {
+                        const parsedF = parseInt(String(followersRaw || "0").replace(/[^0-9]/g, ""), 10) || 0;
+                        if (parsedF < 10000) {
+                            creatorProgram = "ineligible";
+                        } else {
+                            // Tham chiếu Untitled-2: Gọi /tiktok/v1/creator/m10n_center/reward_analytics để kiểm tra program 9
+                            try {
+                                const mRes = await fetch("/tiktok/v1/creator/m10n_center/reward_analytics", {
+                                    credentials: "include",
+                                    signal: AbortSignal.timeout(4000)
+                                });
+                                if (mRes.ok) {
+                                    const mData = await mRes.json();
+                                    const inc = mData?.data?.m10n_program_user_income || mData?.m10n_program_user_income || [];
+                                    const hasCrp = inc.some(p => p.m10n_program === 9 || /creator\s*reward/i.test(p.m10n_program_name || ""));
+                                    creatorProgram = hasCrp ? "active" : (inc.length > 0 ? "banned" : "not_enrolled");
+                                } else {
+                                    creatorProgram = "active"; // Tài khoản >= 10k mặc định chuẩn Beta
+                                }
+                            } catch(e) {
+                                creatorProgram = "active";
+                            }
+                        }
+                    } catch(e) {}
+
                     return {
                         isLoggedIn: true,
                         username: authUsername,
                         nickname: authNickname,
                         userId: authUserId,
                         secUid: authSecUid,
-                        followersRaw: followersRaw
+                        followersRaw: followersRaw,
+                        creatorProgram: creatorProgram
                     };
                 }
             """)
@@ -213,6 +241,7 @@ class TikTokTracker:
             if username:
                 username = username.strip().replace("@", "")
             followers = parse_followers(raw.get("followersRaw"))
+            creator_program = raw.get("creatorProgram") or ("active" if followers >= 10000 else "ineligible")
 
             return {
                 "is_logged_in": is_logged_in,
@@ -222,6 +251,7 @@ class TikTokTracker:
                 "tiktok_uid": raw.get("userId") if is_logged_in else None,
                 "sec_uid": raw.get("secUid") if is_logged_in else None,
                 "followers": followers if is_logged_in else 0,
+                "creator_program": creator_program if is_logged_in else "unknown",
                 "found": bool(is_logged_in and username)
             }
         except Exception as e:
@@ -361,6 +391,9 @@ class TikTokTracker:
                     s_uid = session_result.get("sec_uid") or ""
                     f_count = session_result.get("followers", 0)
                     v_7d = session_result.get("views_7d", 0)
+                    cp_status = session_result.get("creator_program")
+                    if not cp_status:
+                        cp_status = "active" if f_count >= 10000 else "ineligible"
                     update_res = metrics_tracker.update_profile_stats(
                         gpm_id=gpm_id,
                         followers=f_count,
@@ -369,7 +402,8 @@ class TikTokTracker:
                         nickname=n_name,
                         tiktok_uid=t_uid,
                         sec_uid=s_uid,
-                        platform="tiktok"
+                        platform="tiktok",
+                        creator_program=cp_status
                     )
                     log_event("INFO", f"✅ [ZeroRAM] {gpm_id}: @{u_name} ({n_name}, uid={t_uid}) - {f_count:,} followers ({v_7d:,} views 7d, KHÔNG MỞ BROWSER)")
                     return {
@@ -482,6 +516,9 @@ class TikTokTracker:
                 t_uid = result.get("tiktok_uid") or result.get("user_id") or ""
                 s_uid = result.get("sec_uid") or ""
                 f_count = result.get("followers", 0)
+                cp_status = result.get("creator_program")
+                if not cp_status:
+                    cp_status = "active" if f_count >= 10000 else "ineligible"
                 update_res = metrics_tracker.update_profile_stats(
                     gpm_id=gpm_id,
                     followers=f_count,
@@ -490,7 +527,8 @@ class TikTokTracker:
                     nickname=n_name,
                     tiktok_uid=t_uid,
                     sec_uid=s_uid,
-                    platform="tiktok"
+                    platform="tiktok",
+                    creator_program=cp_status
                 )
                 account_health.update_health_status(gpm_id, "active", "")
                 log_event("INFO", f"✅ [Browser] Đã quét GPM profile {gpm_id}: @{u_name} ({n_name}, uid={t_uid}) - {f_count:,} followers (Đủ 10K: {update_res.get('eligible_10k')})")

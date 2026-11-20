@@ -16,7 +16,8 @@ class MetricsTracker:
         platform: str = "tiktok",
         min_followers_threshold: Optional[int] = None,
         min_views_threshold: int = 100000,
-        require_views: bool = False
+        require_views: bool = False,
+        creator_program: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Cập nhật số follower, view, username, nickname, tiktok_uid & sec_uid cho profile. 
@@ -82,6 +83,17 @@ class MetricsTracker:
         if new_eligible == 1:
             new_notify_status = 'reached'
 
+        # Xác định creator_program status nếu chưa truyền vào
+        if creator_program is None:
+            if followers < 10000:
+                calc_creator_prog = 'ineligible'
+            else:
+                # Nếu cũ đã có giá trị hợp lệ thì giữ nguyên, ngược lại mặc định active
+                cur_cp = row["creator_program"] if row and "creator_program" in row.keys() and row["creator_program"] else ""
+                calc_creator_prog = cur_cp if cur_cp and cur_cp != 'ineligible' else 'active'
+        else:
+            calc_creator_prog = creator_program.strip().lower()
+
         cursor.execute('''
         UPDATE gpm_profiles SET
             followers_count = ?,
@@ -91,10 +103,11 @@ class MetricsTracker:
             tiktok_uid = COALESCE(NULLIF(?, ''), tiktok_uid),
             sec_uid = COALESCE(NULLIF(?, ''), sec_uid),
             eligible_10k = ?,
+            creator_program = ?,
             notify_status = ?,
             last_checked = ?
         WHERE gpm_id = ?
-        ''', (followers, total_views, clean_user, clean_nick, clean_uid, clean_sec, new_eligible, new_notify_status, now_str, gpm_id))
+        ''', (followers, total_views, clean_user, clean_nick, clean_uid, clean_sec, new_eligible, calc_creator_prog, new_notify_status, now_str, gpm_id))
         conn.commit()
         conn.close()
 

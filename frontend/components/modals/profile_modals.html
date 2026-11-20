@@ -87,43 +87,7 @@
                         <option value="12">Mỗi 12 tiếng một lần</option>
                         <option value="24">Mỗi 24 tiếng (1 ngày 1 lần)</option>
                     </select>
-                </div>
-
-                <!-- Cấu hình ngưỡng báo cáo Telegram -->
-                <div class="form-group"
-                    style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 14px;">
-                    <label
-                        style="font-weight: 600; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                        <span><i class="fa-solid fa-sliders text-accent"></i> Ngưỡng Gắn Huy Hiệu Đạt Chỉ Tiêu:</span>
-                        <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">Đạt mốc sẽ gắn
-                            huy hiệu</span>
-                    </label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                        <div>
-                            <div style="font-size: 11px; color: #ff4d79; margin-bottom: 3px; font-weight: 600;"><i
-                                    class="fa-brands fa-tiktok"></i> TikTok:</div>
-                            <input type="number" id="schedThresholdTiktok" class="input-field" min="1" step="100"
-                                placeholder="10000" value="10000"
-                                style="height: 36px; font-size: 12px; font-weight: 600;">
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; color: #f87171; margin-bottom: 3px; font-weight: 600;"><i
-                                    class="fa-brands fa-youtube"></i> YouTube:</div>
-                            <input type="number" id="schedThresholdYoutube" class="input-field" min="1" step="100"
-                                placeholder="1000" value="1000"
-                                style="height: 36px; font-size: 12px; font-weight: 600;">
-                        </div>
-                        <div>
-                            <div style="font-size: 11px; color: #60a5fa; margin-bottom: 3px; font-weight: 600;"><i
-                                    class="fa-brands fa-facebook"></i> Facebook:</div>
-                            <input type="number" id="schedThresholdFacebook" class="input-field" min="1" step="100"
-                                placeholder="1000" value="1000"
-                                style="height: 36px; font-size: 12px; font-weight: 600;">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Banner thông tin bảo vệ -->
+                </div><!-- Banner thông tin bảo vệ -->
                 <div
                     style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.25); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
                     <div
@@ -154,112 +118,7 @@
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- MODAL: CÀI ĐẶT NGƯỠNG GỬI THÔNG BÁO TĂNG TRƯỞNG -->
-    <div id="thresholdSettingsModal" class="modal">
-        <div class="modal-content" style="max-width: 540px;">
-            <div class="modal-header">
-                <div style="max-width: 440px;">
-                    <h3 style="display:flex; align-items:center; gap:8px;">
-                        <i class="fa-solid fa-sliders text-accent"></i> <span>Cài Đặt Ngưỡng Thông Báo Tăng
-                            Trưởng</span>
-                    </h3>
-                    <p class="modal-sub"
-                        style="max-width: 430px; font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-top: 3px;">
-                        Thiết lập chỉ tiêu Follower / Subscriber theo từng nền tảng để gắn huy hiệu Đạt Chỉ Tiêu cho tài khoản
-                    </p>
-                </div>
-                <button type="button" class="close-btn has-tooltip tooltip-left" onclick="closeThresholdSettingsModal()"
-                    data-tooltip="Đóng cửa sổ">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <!-- TikTok -->
-                <div
-                    style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 18px; color: #ff0050;"><i class="fa-brands fa-tiktok"></i></span>
-                            <div>
-                                <strong style="color: #fff; font-size: 13.5px;">TikTok Creator Rewards / Beta</strong>
-                                <div style="font-size: 11px; color: var(--text-muted);">Số follower cần đạt để mở kiếm
-                                    tiền Beta</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="number" id="modalThTiktok" class="input-field" min="1" step="100"
-                            placeholder="10000" style="font-weight: 700; font-size: 14px;">
-                        <span style="color: var(--text-muted); font-size: 12px; white-space: nowrap;">followers</span>
-                    </div>
-                </div>
-
-                <!-- YouTube -->
-                <div
-                    style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 18px; color: #ff0000;"><i class="fa-brands fa-youtube"></i></span>
-                            <div>
-                                <strong style="color: #fff; font-size: 13.5px;">YouTube Shorts / Partner (YPP)</strong>
-                                <div style="font-size: 11px; color: var(--text-muted);">Số subscriber của kênh để gửi
-                                    thông báo mốc</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="number" id="modalThYoutube" class="input-field" min="1" step="100"
-                            placeholder="1000" style="font-weight: 700; font-size: 14px;">
-                        <span style="color: var(--text-muted); font-size: 12px; white-space: nowrap;">subscribers</span>
-                    </div>
-                </div>
-
-                <!-- Facebook -->
-                <div
-                    style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px;">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 18px; color: #1877f2;"><i class="fa-brands fa-facebook"></i></span>
-                            <div>
-                                <strong style="color: #fff; font-size: 13.5px;">Facebook Reels / Fanpage
-                                    Monetize</strong>
-                                <div style="font-size: 11px; color: var(--text-muted);">Số người theo dõi Fanpage / Nick
-                                    cá nhân</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="number" id="modalThFacebook" class="input-field" min="1" step="100"
-                            placeholder="1000" style="font-weight: 700; font-size: 14px;">
-                        <span style="color: var(--text-muted); font-size: 12px; white-space: nowrap;">followers</span>
-                    </div>
-                </div>
-
-                <!-- Hint -->
-                <div
-                    style="background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; padding: 10px 14px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5;">
-                    <i class="fa-solid fa-circle-info text-accent"></i> <strong data-i18n="hint_note_prefix">Lưu
-                        ý:</strong> <span data-i18n="threshold_modal_note">Khi bấm lưu, hệ thống tự động tính lại nhãn
-                        Đạt Chỉ Tiêu cho toàn bộ danh sách profile trong các lần quét.</span>
-                </div>
-            </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                <button type="button" class="btn btn-secondary" onclick="closeThresholdSettingsModal()"
-                    data-i18n="threshold_modal_close">Đóng</button>
-                <button type="button" class="btn btn-primary" onclick="saveThresholdFromDedicatedModal(this)"
-                    style="font-weight: 700;">
-                    <i class="fa-solid fa-check"></i> <span data-i18n="threshold_modal_save">Lưu Cài Đặt Ngưỡng</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
+    </div><!-- MODAL: GÁN / SỬA USERNAME & CHỈ SỐ PROFILE / ACCOUNT METRICS -->
     <div id="editProfileUsernameModal" class="modal">
         <div class="modal-content" style="max-width: 480px;">
             <div class="modal-header">
@@ -295,13 +154,37 @@
                     </div>
                     <div class="form-group">
                         <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary);"><i
-                                class="fa-solid fa-share-nodes"></i> Nền Tảng:</label>
+                                class="fa-brands fa-tiktok text-pink"></i> Nền Tảng:</label>
                         <select id="editProfilePlatform" class="input-field" style="height:38px;" onchange="onEditProfilePlatformChange(this.value)">
-                            <option value="tiktok">TikTok</option>
-                            <option value="youtube">YouTube</option>
-                            <option value="facebook">Facebook</option>
+                            <option value="tiktok" selected>TikTok</option>
                         </select>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quốc Gia VPN (WireGuard SOCKS5 / Extension):
+                    </label>
+                    <select id="editProfileCountry" class="input-field" style="height:38px; border:1px solid rgba(56, 189, 248, 0.4); font-weight:600;">
+                        <option value="NONE" selected>🌐 Không Dùng Proxy (Direct IP - Tắt Proxy GPMLogin)</option>
+                        <option value="US">🇺🇸 Hoa Kỳ (United States)</option>
+                        <option value="GB">🇬🇧 Vương Quốc Anh (United Kingdom)</option>
+                        <option value="DE">🇩🇪 Đức (Germany)</option>
+                        <option value="FR">🇫🇷 Pháp (France)</option>
+                        <option value="JP">🇯🇵 Nhật Bản (Japan)</option>
+                        <option value="KR">🇰🇷 Hàn Quốc (South Korea)</option>
+                        <option value="CA">🇨🇦 Canada</option>
+                        <option value="AU">🇦🇺 Úc (Australia)</option>
+                        <option value="SG">🇸🇬 Singapore</option>
+                        <option value="NL">🇳🇱 Hà Lan (Netherlands)</option>
+                        <option value="MX">🇲🇽 Mexico</option>
+                        <option value="ID">🇮🇩 Indonesia (Indo)</option>
+                        <option value="MY">🇲🇾 Malaysia (Malay)</option>
+                        <option value="PH">🇵🇭 Philippines (Philippin)</option>
+                        <option value="VN">🇻🇳 Việt Nam (Vietnam)</option>
+                    </select>
+                    <small class="form-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 3px; display: block;">
+                        Tự động gán cổng Proxy WireGuard SOCKS5 (0.05s) trực tiếp vào GPMLogin qua API, không mở trình duyệt.
+                    </small>
                 </div>
                 <div class="form-group">
                     <label id="lblEditProfileUsername" style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
@@ -337,6 +220,74 @@
                     style="min-width: 140px;">
                     <i class="fa-solid fa-floppy-disk"></i> Lưu Thay Đổi
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: QUẢN LÝ WIREGUARD VPN SOCKS5 CHO 1.000 PROFILE GPM -->
+    <div id="wireguardStatusModal" class="modal">
+        <div class="modal-content" style="max-width: 980px; width: 94%;">
+            <div class="modal-header">
+                <div>
+                    <h3 style="display:flex; align-items:center; gap:8px;">
+                        <i class="fa-solid fa-shield-halved text-cyan"></i> Quản Lý WireGuard VPN SOCKS5
+                    </h3>
+                    <p class="modal-sub">Cổng Proxy cục bộ tốc độ cao hỗ trợ 1.000 Profile GPMLogin dùng đồng thời</p>
+                </div>
+                <button type="button" class="close-btn has-tooltip" onclick="closeWireguardStatusModal()" data-tooltip="Đóng">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
+                <!-- Hộp thông báo tổng quan & hướng dẫn -->
+                <div style="background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 14px 18px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                        <strong style="color: var(--accent-cyan); font-size: 13.5px;">
+                            <i class="fa-solid fa-circle-check"></i> Trạng thái: <span id="wireguardActiveSummary">Đang tải...</span>
+                        </strong>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn btn-sm btn-secondary" onclick="openWireguardFolderOnWindows()" title="Mở thư mục data/vpn_configs trên máy tính" style="padding: 6px 14px;">
+                                <i class="fa-regular fa-folder-open text-warning"></i> Mở Thư Mục Config
+                            </button>
+                            <button class="btn btn-sm btn-primary" onclick="rescanWireguardConfigs()" title="Quét lại file .conf và khởi động các cổng mới" style="padding: 6px 14px;">
+                                <i class="fa-solid fa-arrows-rotate"></i> Quét Lại
+                            </button>
+                        </div>
+                    </div>
+                    <div style="font-size: 12.5px; color: var(--text-muted); line-height: 1.6;">
+                        Chỉ cần tải file <code>.conf</code> WireGuard từ Proton VPN thả vào thư mục <code>data/vpn_configs/</code>. ClipFlow tự động mở cổng SOCKS5 cục bộ (10801, 10802,...). Khi chọn quốc gia cho profile, proxy được gán trong 0.1s không cần mở extension hay đăng nhập lại!
+                    </div>
+                </div>
+
+                <!-- Bảng danh sách Proxy Quốc Gia đang hoạt động -->
+                <div>
+                    <h4 style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-network-wired text-cyan"></i> Danh Sách Cổng Proxy Quốc Gia & Địa Điểm:
+                    </h4>
+                    <div style="max-height: 380px; overflow-y: auto; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; color: var(--text-secondary); white-space: nowrap;">
+                                    <th style="padding: 12px 16px; min-width: 220px;">Quốc Gia & Địa Điểm</th>
+                                    <th style="padding: 12px 16px; min-width: 180px;">Cổng SOCKS5 Cục Bộ</th>
+                                    <th style="padding: 12px 16px; min-width: 220px;">File Cấu Hình Nguồn</th>
+                                    <th style="padding: 12px 16px; min-width: 120px; text-align: center;">Trạng Thái</th>
+                                    <th style="padding: 12px 16px; text-align: center; min-width: 110px;">Thao Tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wireguardProxyTableBody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                                        <i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách cổng proxy...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex; justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeWireguardStatusModal()" style="min-width: 100px;">Đóng</button>
             </div>
         </div>
     </div>

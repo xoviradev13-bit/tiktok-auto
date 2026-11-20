@@ -73,7 +73,7 @@ class StockFootageManager:
             url = f"https://api.pexels.com/videos/search?query={encoded_q}&orientation=portrait&per_page={per_page}"
             headers = {
                 "Authorization": pexels_key,
-                "User-Agent": "ShortsStack/2.0 StockFetcher"
+                "User-Agent": "ClipFlow/2.0 StockFetcher"
             }
             res = requests.get(url, headers=headers, timeout=15)
             if res.status_code == 200:
@@ -122,7 +122,7 @@ class StockFootageManager:
             url = f"https://api.pexels.com/v1/search?query={encoded_q}&orientation=portrait&per_page={per_page}"
             headers = {
                 "Authorization": pexels_key,
-                "User-Agent": "ShortsStack/2.0 StockFetcher"
+                "User-Agent": "ClipFlow/2.0 StockFetcher"
             }
             res = requests.get(url, headers=headers, timeout=15)
             if res.status_code == 200:
