@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from typing import Dict, Any, Optional
 from backend.modules.gpm_client import gpm_client
 from backend.modules.account_health import account_health
@@ -166,24 +167,32 @@ class TikTokUploader:
     def __init__(self):
         self.active_profile_id: Optional[str] = None
         self.active_adapter = None
+        self.active_profiles: Dict[str, Any] = {}
+        self._profiles_lock = threading.Lock()
         self._cancel_requested: bool = False
 
     def cancel_upload(self, profile_id: Optional[str] = None) -> bool:
         """Hủy khẩn cấp tiến trình đăng video đang chạy và đóng profile trình duyệt"""
         self._cancel_requested = True
-        pid = profile_id or self.active_profile_id
-        adapter = self.active_adapter
-        if adapter and pid:
+        with self._profiles_lock:
+            if profile_id:
+                targets = [(profile_id, self.active_profiles.get(profile_id) or self.active_adapter)]
+            else:
+                targets = list(self.active_profiles.items())
+                if not targets and self.active_profile_id:
+                    targets = [(self.active_profile_id, self.active_adapter)]
+        for pid, adapter in targets:
+            if adapter and pid:
+                try:
+                    adapter.stop_profile(pid)
+                except Exception:
+                    pass
             try:
-                adapter.stop_profile(pid)
+                from backend.modules.tiktok_tracker import set_profile_busy
+                if pid:
+                    set_profile_busy(pid, False)
             except Exception:
                 pass
-        try:
-            from backend.modules.tiktok_tracker import set_profile_busy
-            if pid:
-                set_profile_busy(pid, False)
-        except Exception:
-            pass
         return True
 
     def upload_via_gpm(
@@ -236,6 +245,9 @@ class TikTokUploader:
 
         adapter = browser_manager.get_adapter(b_type) or browser_manager.get_adapter("gpm")
         self.active_adapter = adapter
+        with self._profiles_lock:
+            self.active_profiles[gpm_profile_id] = adapter
+            self.active_profile_id = gpm_profile_id
 
         # Tự động kiểm tra và bật trình duyệt nếu ứng dụng đang tắt
         if hasattr(adapter, "ensure_running"):
@@ -705,12 +717,17 @@ class TikTokUploader:
             log_event("ERROR", f"Lỗi Playwright upload profile {gpm_profile_id}: {str(e)}")
             result = {"success": False, "message": str(e)}
         finally:
-            self.active_profile_id = None
-            self.active_adapter = None
-            self._cancel_requested = False
+            with self._profiles_lock:
+                self.active_profiles.pop(gpm_profile_id, None)
+                if self.active_profile_id == gpm_profile_id:
+                    self.active_profile_id = next(iter(self.active_profiles.keys()), None)
+                if not self.active_profiles:
+                    self.active_adapter = None
+                    self._cancel_requested = False
             try:
                 from backend.modules.tiktok_tracker import set_profile_busy
-                set_profile_busy(gpm_profile_id, False)
+                if not ('multi_uploader' in str(type(self))):
+                    set_profile_busy(gpm_profile_id, False)
             except Exception:
                 pass
             # Chỉ tắt browser nếu caller yêu cầu đóng (mặc định giữ lại để không ngắt phiên làm việc của user)

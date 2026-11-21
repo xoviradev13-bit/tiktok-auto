@@ -550,6 +550,7 @@ class BackgroundScheduler:
 
         tasks_to_dispatch = []
         dispatched_profiles = set()
+        dispatched_linked_ids = set()
 
         for cand_row in candidates:
             cand = dict(cand_row)
@@ -607,6 +608,8 @@ class BackgroundScheduler:
                 pass
 
             linked_ids = get_linked_profile_ids(cursor, cand_profile_id)
+            if any(lid in dispatched_linked_ids for lid in linked_ids):
+                continue
             ph_linked = ",".join("?" for _ in linked_ids)
 
             # A. Chống đăng trùng tuyệt đối (Duplicate Clip Guard across Browsers):
@@ -672,6 +675,7 @@ class BackgroundScheduler:
             # Profile này an toàn và đủ điều kiện để đăng
             tasks_to_dispatch.append(cand)
             dispatched_profiles.add(gpm_id)
+            dispatched_linked_ids.update(linked_ids)
             if len(tasks_to_dispatch) >= available_slots:
                 break
 
