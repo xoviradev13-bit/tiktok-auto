@@ -399,25 +399,56 @@ class GPMClient:
             return None
 
     def stop_profile(self, profile_id: str) -> bool:
-        """Đóng profile trên GPMLogin (hỗ trợ cả /close và /stop)"""
+        """
+        Đóng profile trên GPMLogin một cách chuẩn xác:
+        1. Gọi endpoint chính xác của GPMLogin (/profiles/stop/{id}).
+        2. Bỏ qua response fallback giả (404 trả về {"data": "GPMLogin Global API"}).
+        3. Kiểm tra và dọn dẹp các tiến trình Chrome còn sót lại nếu có.
+        """
         base = self.discover_api_base()
-        if not base:
-            return False
+        stopped = False
+        if base:
+            # Thứ tự ưu tiên: endpoint chính xác /profiles/stop/{id} trước
+            endpoints = [
+                f"{base}/profiles/stop/{profile_id}",
+                f"{base}/profile/stop?profile_id={profile_id}",
+                f"{base}/profiles/close/{profile_id}"
+            ]
+            for url in endpoints:
+                try:
+                    resp = requests.get(url, timeout=8)
+                    if resp.status_code == 200:
+                        json_data = resp.json()
+                        # Bỏ qua nếu là fallback route mặc định của GPM khi không tìm thấy route
+                        if json_data.get("data") == "GPMLogin Global API":
+                            continue
+                        if json_data.get("success") is True or json_data.get("message") == "OK":
+                            stopped = True
+                            log_event("INFO", f"🔒 Đã đóng thành công GPM profile {profile_id} qua API.")
+                            break
+                except Exception:
+                    continue
 
-        endpoints = [
-            f"{base}/profiles/close/{profile_id}",
-            f"{base}/profiles/stop/{profile_id}"
-        ]
-        for url in endpoints:
-            try:
-                resp = requests.get(url, timeout=8)
-                if resp.status_code == 200:
-                    json_data = resp.json()
-                    if json_data.get("success") is True:
-                        return True
-            except Exception:
-                continue
-        return False
+        # Đảm bảo đóng dứt điểm: kiểm tra Chrome process của profile này
+        self.kill_profile_processes(profile_id)
+        return True
+
+    def kill_profile_processes(self, profile_id: str) -> bool:
+        """Đảm bảo tắt các tiến trình Chrome của profile nếu bị kẹt ngầm"""
+        import subprocess
+        try:
+            search_terms = [t for t in [profile_id, profile_id[:8]] if t]
+            out = subprocess.check_output('tasklist /V /FO CSV', shell=True).decode('utf-8', errors='ignore')
+            for line in out.splitlines():
+                if 'chrome.exe' in line.lower() and any(term.lower() in line.lower() for term in search_terms):
+                    parts = line.split('","')
+                    if len(parts) > 1:
+                        pid = parts[1].replace('"', '').strip()
+                        if pid.isdigit():
+                            subprocess.run(f"taskkill /F /T /PID {pid}", shell=True, capture_output=True)
+            return True
+        except Exception:
+            return False
 
     def update_profile_proxy(self, profile_id: str, raw_proxy: str) -> bool:
         """

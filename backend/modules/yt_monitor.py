@@ -501,7 +501,7 @@ class YouTubeRSSMonitor:
         # A. Trạng thái Bật/Tắt:
         if ch_enabled_val == 1:
             eff_enabled = True
-        elif ch_enabled_val == -1:
+        elif ch_enabled_val in (-1, 0):
             eff_enabled = False
         else:
             eff_enabled = camp_enabled
@@ -821,8 +821,10 @@ class YouTubeRSSMonitor:
 
         # --- Áp dụng thứ tự ưu tiên: Channel > Campaign > Global ---
 
-        # 1) enable_subtitles
-        if ch_enable_subs == -1:
+        # 1) enable_subtitles: Ưu tiên Kênh (Channel: 1 bật / 0 hoặc -1 tắt) > Chiến dịch (Campaign) > Toàn cục (Global)
+        if ch_enable_subs == 1:
+            eff_enable = True
+        elif ch_enable_subs in (-1, 0):
             eff_enable = False
         elif camp_enable_subs is not None:
             eff_enable = bool(camp_enable_subs)
@@ -831,11 +833,13 @@ class YouTubeRSSMonitor:
         else:
             eff_enable = global_enable_subs
 
-        # 2) disable_subtitle_for_shorts
-        if channel_obj and channel_obj.get("disable_subtitle_for_shorts") is not None and channel_obj.get("disable_subtitle_for_shorts") != 0:
-            eff_disable_shorts = True
-        elif camp and camp.get("disable_subtitle_for_shorts"):
-            eff_disable_shorts = True
+        # 2) disable_subtitle_for_shorts (Kênh > Chiến dịch > Toàn cục)
+        ch_sub_shorts = channel_obj.get("disable_subtitle_for_shorts") if channel_obj else None
+        camp_sub_shorts = camp.get("disable_subtitle_for_shorts") if camp else None
+        if ch_sub_shorts is not None and ch_sub_shorts not in (-1, "inherit", ""):
+            eff_disable_shorts = bool(int(ch_sub_shorts))
+        elif camp_sub_shorts is not None:
+            eff_disable_shorts = bool(int(camp_sub_shorts))
         else:
             eff_disable_shorts = global_disable_shorts
 

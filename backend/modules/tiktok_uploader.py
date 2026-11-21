@@ -712,6 +712,13 @@ class TikTokUploader:
                 else:
                     result = {"success": True, "message": "Video đã được chuẩn bị thành công (dry-run, chưa nhấn Đăng)"}
 
+                if close_browser_on_finish and browser:
+                    try:
+                        log_event("INFO", f"🔒 [AUTO-CLOSE] Đang đóng trình duyệt profile {gpm_profile_id} sau khi đăng hoàn tất...")
+                        browser.close()
+                    except Exception as b_close_err:
+                        logger.warning(f"Lỗi khi đóng browser qua Playwright: {b_close_err}")
+
         except Exception as e:
             logger.exception(f"Lỗi Playwright upload profile {gpm_profile_id}: {e}")
             log_event("ERROR", f"Lỗi Playwright upload profile {gpm_profile_id}: {str(e)}")
@@ -732,7 +739,10 @@ class TikTokUploader:
                 pass
             # Chỉ tắt browser nếu caller yêu cầu đóng (mặc định giữ lại để không ngắt phiên làm việc của user)
             if close_browser_on_finish and 'adapter' in locals() and adapter:
-                adapter.stop_profile(gpm_profile_id)
+                try:
+                    adapter.stop_profile(gpm_profile_id)
+                except Exception as stop_err:
+                    logger.warning(f"Lỗi khi đóng profile qua adapter: {stop_err}")
 
         return result
 

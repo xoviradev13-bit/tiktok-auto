@@ -754,6 +754,27 @@ class TikTokTracker:
                     futures = [executor.submit(_scan_profile_worker, p) for p in profiles]
                     concurrent.futures.wait(futures)
 
+            # Tự động lập lịch quét bù cho các profile bị tạm bỏ qua do bận đăng video
+            busy_items = [p for p in profiles if any(r.get("gpm_id") == p.get("gpm_id") and r.get("status") == "skipped_busy" for r in results)]
+            if busy_items and not _cancel_scan_flag:
+                log_event("INFO", f"⏳ Phát hiện {len(busy_items)} profile đang bận đăng bài. Hệ thống sẽ tự động quét bù ngay sau khi đăng bài hoàn tất...")
+                def _retry_busy_profiles():
+                    time.sleep(30)
+                    for bp in busy_items:
+                        g_id = bp.get("gpm_id")
+                        if not g_id:
+                            continue
+                        for _ in range(12):  # Chờ tối đa 6 phút cho tiến trình đăng xong
+                            if not is_profile_busy(g_id):
+                                log_event("INFO", f"🔄 Profile {bp.get('name') or g_id} đã rảnh sau khi đăng bài. Bắt đầu quét bù chỉ số...")
+                                try:
+                                    self.scan_single_gpm_profile(g_id, auto_close=True)
+                                except Exception as err:
+                                    logger.warning(f"Lỗi khi quét bù profile {g_id}: {err}")
+                                break
+                            time.sleep(30)
+                threading.Thread(target=_retry_busy_profiles, daemon=True).start()
+
             summary_msg = f"Hoàn tất quét {len(results)}/{total_cnt} profiles: {success_count} thành công"
             log_event("INFO", f"🏁 [TIKTOK TRACKER] {summary_msg}")
             _scan_progress = {

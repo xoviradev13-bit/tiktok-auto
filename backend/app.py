@@ -227,6 +227,7 @@ class UploadVideoRequest(BaseModel):
     video_path: str
     title: str
     tags: str = "#viral #fyp #xuhuong"
+    close_browser_on_finish: Optional[bool] = False
 
 class UpdateProfileStatsRequest(BaseModel):
     gpm_id: str
@@ -2823,9 +2824,20 @@ def sync_local_videos_with_db():
                     any_parts = True
 
         if not has_raw and not has_ren and not any_parts:
-            # File đã bị xóa hoàn toàn khỏi thư mục đĩa -> Xóa bản ghi
-            cursor.execute("DELETE FROM videos WHERE id = ?", (r["id"],))
-            cursor.execute("DELETE FROM upload_tasks WHERE video_id = ?", (r["id"],))
+            # File đã bị xóa hoàn toàn khỏi thư mục đĩa (do chính sách dọn dẹp hoặc xóa thủ công)
+            cursor.execute("SELECT COUNT(*) FROM upload_tasks WHERE video_id = ?", (r["id"],))
+            has_tasks = cursor.fetchone()[0] > 0
+            is_uploaded = (r.get("status") or "").lower() in ("uploaded", "published")
+
+            if is_uploaded or has_tasks:
+                # Video đã được đăng lên TikTok hoặc có lịch sử tác vụ upload:
+                # BẢO TỒN NGUYÊN VẸN bản ghi trong videos & upload_tasks để hiển thị lịch sử và chống trùng lặp vĩnh viễn!
+                if r.get("download_path") or r.get("rendered_path"):
+                    cursor.execute("UPDATE videos SET download_path = NULL, rendered_path = NULL WHERE id = ?", (r["id"],))
+            else:
+                # Chỉ xóa bản ghi video nháp chưa bao giờ upload nếu file trên đĩa bị xóa thủ công
+                cursor.execute("DELETE FROM videos WHERE id = ?", (r["id"],))
+                cursor.execute("DELETE FROM upload_tasks WHERE video_id = ?", (r["id"],))
         else:
             if not has_raw and r.get("download_path"):
                 cursor.execute("UPDATE videos SET download_path = NULL WHERE id = ?", (r["id"],))
@@ -3444,7 +3456,8 @@ def upload_tiktok(req: UploadVideoRequest):
         video_path=req.video_path,
         title=req.title,
         tags=req.tags,
-        auto_post=True
+        auto_post=True,
+        close_browser_on_finish=bool(req.close_browser_on_finish)
     )
     return result
 

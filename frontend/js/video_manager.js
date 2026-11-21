@@ -664,7 +664,9 @@ function filterVideoLibrary(resetPage = false) {
 
         const existsBadge = v.file_exists
             ? '<span style="color:#22c55e; font-size:11.5px; font-weight:600; white-space:nowrap;"><i class="fa-solid fa-check"></i> Có file</span>'
-            : '<span style="color:#ef4444; font-size:11.5px; font-weight:600; white-space:nowrap;"><i class="fa-solid fa-xmark"></i> Mất file</span>';
+            : (v.status === 'uploaded' || v.status === 'published')
+                ? '<span style="color:#38bdf8; font-size:11.5px; font-weight:600; white-space:nowrap;" title="File MP4 vật lý đã được tự động dọn dẹp sau khi đăng để giải phóng ổ cứng (Bản ghi & lịch sử được bảo tồn vĩnh viễn)"><i class="fa-solid fa-broom"></i> Đã dọn file</span>'
+                : '<span style="color:#ef4444; font-size:11.5px; font-weight:600; white-space:nowrap;"><i class="fa-solid fa-xmark"></i> Mất file</span>';
 
         const sourceText = v.source_name || v.channel_title || v.channel_display_name || v.channel_id || 'Direct Links';
         const isDirect = (v.source_type === 'direct') || sourceText.toLowerCase().includes('direct');

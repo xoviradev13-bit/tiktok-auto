@@ -402,10 +402,12 @@ def get_videos_library(limit: int = 150):
         for r in rows:
             v_dict = dict(r)
             p = v_dict.get("download_path")
-            v_dict["file_exists"] = bool(p and os.path.exists(p))
-            if v_dict["file_exists"]:
+            rp = v_dict.get("rendered_path")
+            active_p = p if (p and os.path.exists(p)) else (rp if (rp and os.path.exists(rp)) else None)
+            v_dict["file_exists"] = bool(active_p)
+            if active_p:
                 try:
-                    v_dict["size_mb"] = round(os.path.getsize(p) / (1024 * 1024), 2)
+                    v_dict["size_mb"] = round(os.path.getsize(active_p) / (1024 * 1024), 2)
                 except Exception:
                     v_dict["size_mb"] = 0
             else:
