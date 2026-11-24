@@ -49,14 +49,26 @@ RENDERED_DIR = DATA_DIR / "rendered"
 LOGS_DIR = DATA_DIR / "logs"
 MUSIC_DIR = DATA_DIR / "music"
 VPN_CONFIGS_DIR = DATA_DIR / "vpn_configs"
-WIREPROXY_EXE = BASE_DIR / "tools" / "wireproxy" / "wireproxy.exe"
+
+def _find_wireproxy() -> Path:
+    candidates = [
+        BASE_DIR / "tools" / "wireproxy" / "wireproxy.exe",
+        BUNDLE_DIR / "tools" / "wireproxy" / "wireproxy.exe",
+        DATA_DIR / "tools" / "wireproxy" / "wireproxy.exe",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return BASE_DIR / "tools" / "wireproxy" / "wireproxy.exe"
+
+WIREPROXY_EXE = _find_wireproxy()
 LOG_FILE_PATH = LOGS_DIR / "app.log"
 DB_PATH = DATA_DIR / "clipflow.db"
 
-# Tự động di chuyển dữ liệu từ shortsstack.db nếu chưa có clipflow.db
-if not DB_PATH.exists():
+# Tự động di chuyển dữ liệu từ shortsstack.db nếu user nâng cấp từ bản cũ trên cùng máy
+if not DB_PATH.exists() or (DB_PATH.exists() and DB_PATH.stat().st_size == 0):
     _legacy_db = DATA_DIR / "shortsstack.db"
-    if _legacy_db.exists():
+    if _legacy_db.exists() and _legacy_db.stat().st_size > 0:
         try:
             import shutil
             shutil.copy2(str(_legacy_db), str(DB_PATH))
@@ -100,7 +112,19 @@ def _load_env_file(env_path: Path):
     except Exception:
         pass
 
-_load_env_file(BASE_DIR / ".env")
+ENV_FILE = DATA_DIR / ".env" if getattr(sys, "frozen", False) else BASE_DIR / ".env"
+
+def _load_all_env_configs():
+    env_candidates = [
+        BASE_DIR / ".env",
+        BUNDLE_DIR / ".env",
+        DATA_DIR / ".env",
+    ]
+    for p in env_candidates:
+        if p and p.exists():
+            _load_env_file(p)
+
+_load_all_env_configs()
 
 # Cấu hình GPMLogin
 GPM_API_BASE_URL = os.getenv("GPM_API_BASE_URL", "http://127.0.0.1:9495/api/v1")
@@ -168,33 +192,40 @@ APP_VERSION = get_version_from_manifest()
 
 def save_env_config(updates: Dict[str, str]) -> bool:
     """Cập nhật các biến cấu hình vào file .env và cập nhật môi trường runtime"""
-    env_path = BASE_DIR / ".env"
-    lines = []
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    
-    updated_keys = set()
-    new_lines = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            k, _ = stripped.split("=", 1)
-            k = k.strip()
-            if k in updates:
-                new_lines.append(f"{k}={updates[k]}\n")
-                updated_keys.add(k)
-                os.environ[k] = str(updates[k])
-                continue
-        new_lines.append(line)
-        
-    for k, v in updates.items():
-        if k not in updated_keys:
-            new_lines.append(f"{k}={v}\n")
-            os.environ[k] = str(v)
+    target_paths = [ENV_FILE]
+    if getattr(sys, "frozen", False) and (BASE_DIR / ".env").exists() and (BASE_DIR / ".env") != ENV_FILE:
+        target_paths.append(BASE_DIR / ".env")
+
+    for env_path in target_paths:
+        try:
+            lines = []
+            if env_path.exists():
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
             
-    with open(env_path, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    k, _ = stripped.split("=", 1)
+                    k = k.strip()
+                    if k in updates:
+                        new_lines.append(f"{k}={updates[k]}\n")
+                        updated_keys.add(k)
+                        os.environ[k] = str(updates[k])
+                        continue
+                new_lines.append(line)
+                
+            for k, v in updates.items():
+                if k not in updated_keys:
+                    new_lines.append(f"{k}={v}\n")
+                    os.environ[k] = str(v)
+                    
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+        except Exception:
+            pass
         
     # Đồng bộ lại các biến toàn cục
     global YOUTUBE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GPM_API_BASE_URL

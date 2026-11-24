@@ -61,12 +61,19 @@
                             </div>
                         </div>
                         <div class="multi-select-container">
-                            <div class="multi-select-search-wrap">
+                            <div class="multi-select-search-wrap" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="campaignChannelFilterInput" class="multi-select-search-input"
-                                    style="border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
+                                    style="flex:1; border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
                                     placeholder="Lọc nhanh tên kênh YouTube..."
                                     oninput="filterCampaignChannelList(this.value)">
+                                <select id="campaignChannelGroupFilter" class="custom-select" style="max-width:160px; height:32px; font-size:12px; padding:0 8px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" onchange="filterCampaignChannelList()">
+                                    <option value="all">Tất cả nhóm</option>
+                                    <option value="ungrouped">Chưa phân nhóm</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-secondary has-tooltip" id="btnSortCampaignChannels" onclick="toggleSortCampaignChannels()" data-tooltip="Sắp xếp Tăng / Giảm dần" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;">
+                                    <i class="fa-solid fa-arrow-down-short-wide" id="sortCampaignChannelsIcon"></i> <span id="sortCampaignChannelsText">Tăng dần</span>
+                                </button>
                             </div>
                             <div id="campaignChannelsList" class="multi-select-box">
                                 <div class="text-muted text-center py-2">Đang tải danh sách kênh đã lưu...</div>
@@ -112,7 +119,7 @@
                                     </label>
                                     <label
                                         style="display:flex; align-items:center; justify-content:center; gap:8px; height:42px; box-sizing:border-box; background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:8px; font-size:12px; font-weight:500; cursor:pointer; padding:0 12px; margin:0; transition:all 0.2s ease;">
-                                        <input type="checkbox" id="campaignIncludeLongform" checked
+                                        <input type="checkbox" id="campaignIncludeLongform"
                                             style="accent-color:#f59e0b; width:15px; height:15px; cursor:pointer; margin:0;">
                                         <span>Video Dài (&gt;3p)</span>
                                     </label>
@@ -415,7 +422,7 @@
                 </div><!-- ================= TAB 5: ĐĂNG BÀI & LỊCH TRÌNH ================= -->
                 <div id="newCampPane-publishing" class="modal-tab-pane">
                     <!-- Công Tắc Tự Động Đăng (auto_upload) -->
-                    <div class="form-group full-width"
+                    <div class="form-group full-width" id="campaignAutoUploadSection"
                         style="background:rgba(255,255,255,0.02); padding:12px 16px; border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.08);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <label
@@ -453,12 +460,18 @@
                             </div>
                         </div>
                         <div class="multi-select-container">
-                            <div class="multi-select-search-wrap">
+                            <div class="multi-select-search-wrap" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="campaignGpmFilterInput" class="multi-select-search-input"
-                                    style="border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
+                                    style="flex:1; border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
                                     placeholder="Lọc nhanh tên profile hoặc username..."
                                     oninput="filterCampaignGpmList(this.value)">
+                                <select id="campaignGpmGroupFilter" class="custom-select" style="max-width:160px; height:32px; font-size:12px; padding:0 8px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" onchange="filterCampaignGpmList()">
+                                    <option value="all">Tất cả nhóm</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-secondary has-tooltip" id="btnSortCampaignGpm" onclick="toggleSortCampaignGpm()" data-tooltip="Sắp xếp Tăng / Giảm dần" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;">
+                                    <i class="fa-solid fa-arrow-down-short-wide" id="sortCampaignGpmIcon"></i> <span id="sortCampaignGpmText">Tăng dần</span>
+                                </button>
                             </div>
                             <div id="campaignGpmList" class="multi-select-box">
                                 <div class="text-muted text-center py-2">Đang tải danh sách profile ...
@@ -619,6 +632,41 @@
                                 Ngày 1-3: 1 clip/ngày &rarr; Ngày 4-7: 2 clip/ngày &rarr; Sau đó tự động tăng lên
                                 mức tối đa để nuôi nick an toàn.
                             </small>
+                        </div>
+                    </div>
+
+                    <!-- Pure Warm-up Only Mode (Standalone Box) -->
+                    <div class="campaign-warmup-only-card form-group full-width mt-3">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label class="campaign-warmup-only-title"
+                                style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+                                <input type="checkbox" id="campaignWarmupOnlySwitch"
+                                    onchange="toggleCampaignWarmupOnly('new', this.checked)"
+                                    style="width:17px; height:17px; accent-color:#eab308; cursor:pointer;">
+                                <span><i class="fa-solid fa-fire text-warning"></i> Chế độ Chỉ Lướt Nuôi Nick (Warm-up Only)</span>
+                            </label>
+                            <span class="campaign-warmup-only-badge badge">Chế Độ Riêng Biệt</span>
+                        </div>
+                        <small class="form-hint"
+                            style="font-size:11.5px; margin:5px 0 0 25px; display:block; line-height:1.45;">
+                            Chiến dịch nuôi nick độc lập: <strong>KHÔNG tải video YouTube, KHÔNG edit/render, KHÔNG đăng bài</strong>. Hệ thống chỉ tự động mở GPM Profile để lướt TikTok theo lịch.
+                        </small>
+                        <div id="campaignWarmupOnlyOptions" class="campaign-warmup-only-options" style="display:none; margin-top:12px; margin-left:25px; padding-top:10px; border-top:1px dashed rgba(234,179,8,0.25);">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                                <span style="font-size:11.5px; font-weight:600;"><i class="fa-solid fa-clock text-warning"></i> Thời lượng lướt mỗi phiên:</span>
+                                <select id="campaignWarmupDurationSelect" class="custom-select" style="font-size:11.5px; padding:3px 8px; width:auto; border-radius:6px;">
+                                    <option value="5">5 phút / phiên</option>
+                                    <option value="10" selected>10 phút / phiên (Khuyên dùng)</option>
+                                    <option value="15">15 phút / phiên</option>
+                                    <option value="20">20 phút / phiên</option>
+                                    <option value="30">30 phút / phiên</option>
+                                </select>
+                            </div>
+                            <div class="campaign-warmup-only-info">
+                                <span class="campaign-warmup-only-text">
+                                    <i class="fa-solid fa-circle-info"></i> <strong>Cơ chế:</strong> Đến các khung giờ cài đặt ở trên, hệ thống sẽ mở các profile được chọn để lướt feed TikTok For You, xem clip ngẫu nhiên & thả tim nhằm tạo Trust Score & Cookie mà không đăng video nào.
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -786,12 +834,19 @@
                             </div>
                         </div>
                         <div class="multi-select-container">
-                            <div class="multi-select-search-wrap">
+                            <div class="multi-select-search-wrap" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="editCampaignChannelFilterInput" class="multi-select-search-input"
-                                    style="border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
+                                    style="flex:1; border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
                                     placeholder="Lọc nhanh tên kênh YouTube..."
                                     oninput="filterEditCampaignChannelList(this.value)">
+                                <select id="editCampaignChannelGroupFilter" class="custom-select" style="max-width:160px; height:32px; font-size:12px; padding:0 8px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" onchange="filterEditCampaignChannelList()">
+                                    <option value="all">Tất cả nhóm</option>
+                                    <option value="ungrouped">Chưa phân nhóm</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-secondary has-tooltip" id="btnEditSortCampaignChannels" onclick="toggleEditSortCampaignChannels()" data-tooltip="Sắp xếp Tăng / Giảm dần" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;">
+                                    <i class="fa-solid fa-arrow-down-short-wide" id="editSortCampaignChannelsIcon"></i> <span id="editSortCampaignChannelsText">Tăng dần</span>
+                                </button>
                             </div>
                             <div id="editCampaignChannelsList" class="multi-select-box">
                                 <div class="text-muted text-center py-2">Đang tải danh sách kênh đã lưu...</div>
@@ -837,7 +892,7 @@
                                     </label>
                                     <label
                                         style="display:flex; align-items:center; justify-content:center; gap:8px; height:42px; box-sizing:border-box; background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:8px; font-size:12px; font-weight:500; cursor:pointer; padding:0 12px; margin:0; transition:all 0.2s ease;">
-                                        <input type="checkbox" id="editCampaignIncludeLongform" checked
+                                        <input type="checkbox" id="editCampaignIncludeLongform"
                                             style="accent-color:#f59e0b; width:15px; height:15px; cursor:pointer; margin:0;">
                                         <span>Video Dài (&gt;3p)</span>
                                     </label>
@@ -1145,7 +1200,7 @@
                 </div><!-- ================= TAB 5: ĐĂNG BÀI & LỊCH TRÌNH ================= -->
                 <div id="editCampPane-publishing" class="modal-tab-pane">
                     <!-- Công Tắc Tự Động Đăng (auto_upload) -->
-                    <div class="form-group full-width"
+                    <div class="form-group full-width" id="editCampaignAutoUploadSection"
                         style="background:rgba(255,255,255,0.02); padding:12px 16px; border-radius:var(--radius-md); border:1px solid rgba(255,255,255,0.08);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <label
@@ -1184,12 +1239,18 @@
                             </div>
                         </div>
                         <div class="multi-select-container">
-                            <div class="multi-select-search-wrap">
+                            <div class="multi-select-search-wrap" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" id="editCampaignGpmFilterInput" class="multi-select-search-input"
-                                    style="border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
+                                    style="flex:1; border:none !important; outline:none !important; box-shadow:none !important; background:transparent !important;"
                                     placeholder="Lọc nhanh tên profile hoặc username TikTok..."
                                     oninput="filterEditCampaignGpmList(this.value)">
+                                <select id="editCampaignGpmGroupFilter" class="custom-select" style="max-width:160px; height:32px; font-size:12px; padding:0 8px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" onchange="filterEditCampaignGpmList()">
+                                    <option value="all">Tất cả nhóm</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-secondary has-tooltip" id="btnEditSortCampaignGpm" onclick="toggleEditSortCampaignGpm()" data-tooltip="Sắp xếp Tăng / Giảm dần" style="height:32px; padding:0 10px; font-size:11.5px; white-space:nowrap;">
+                                    <i class="fa-solid fa-arrow-down-short-wide" id="editSortCampaignGpmIcon"></i> <span id="editSortCampaignGpmText">Tăng dần</span>
+                                </button>
                             </div>
                             <div id="editCampaignGpmList" class="multi-select-box">
                                 <div class="text-muted text-center py-2">Đang tải danh sách profile...
@@ -1351,10 +1412,44 @@
                             </label>
                             <small class="form-hint"
                                 style="color:var(--text-muted); font-size:11px; margin-left:24px; display:block;">
-                                Ngày 1-3: 1 clip/ngày &rarr; Ngày 4-7: 2 clip/ngày &rarr; Sau đó tự động tăng
-                                lên
+                                Ngày 1-3: 1 clip/ngày &rarr; Ngày 4-7: 2 clip/ngày &rarr; Sau đó tự động tăng lên
                                 mức tối đa để nuôi nick an toàn.
                             </small>
+                        </div>
+                    </div>
+
+                    <!-- Pure Warm-up Only Mode (Standalone Box) -->
+                    <div class="campaign-warmup-only-card form-group full-width mt-3">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label class="campaign-warmup-only-title"
+                                style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+                                <input type="checkbox" id="editCampaignWarmupOnlySwitch"
+                                    onchange="toggleCampaignWarmupOnly('edit', this.checked)"
+                                    style="width:17px; height:17px; accent-color:#eab308; cursor:pointer;">
+                                <span><i class="fa-solid fa-fire text-warning"></i> Chế độ Chỉ Lướt Nuôi Nick (Warm-up Only)</span>
+                            </label>
+                            <span class="campaign-warmup-only-badge badge">Chế Độ Riêng Biệt</span>
+                        </div>
+                        <small class="form-hint"
+                            style="font-size:11.5px; margin:5px 0 0 25px; display:block; line-height:1.45;">
+                            Chiến dịch nuôi nick độc lập: <strong>KHÔNG tải video YouTube, KHÔNG edit/render, KHÔNG đăng bài</strong>. Hệ thống chỉ tự động mở GPM Profile để lướt TikTok theo lịch.
+                        </small>
+                        <div id="editCampaignWarmupOnlyOptions" class="campaign-warmup-only-options" style="display:none; margin-top:12px; margin-left:25px; padding-top:10px; border-top:1px dashed rgba(234,179,8,0.25);">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                                <span style="font-size:11.5px; font-weight:600;"><i class="fa-solid fa-clock text-warning"></i> Thời lượng lướt mỗi phiên:</span>
+                                <select id="editCampaignWarmupDurationSelect" class="custom-select" style="font-size:11.5px; padding:3px 8px; width:auto; border-radius:6px;">
+                                    <option value="5">5 phút / phiên</option>
+                                    <option value="10" selected>10 phút / phiên (Khuyên dùng)</option>
+                                    <option value="15">15 phút / phiên</option>
+                                    <option value="20">20 phút / phiên</option>
+                                    <option value="30">30 phút / phiên</option>
+                                </select>
+                            </div>
+                            <div class="campaign-warmup-only-info">
+                                <span class="campaign-warmup-only-text">
+                                    <i class="fa-solid fa-circle-info"></i> <strong>Cơ chế:</strong> Đến các khung giờ cài đặt ở trên, hệ thống sẽ mở các profile được chọn để lướt feed TikTok For You, xem clip ngẫu nhiên & thả tim nhằm tạo Trust Score & Cookie mà không đăng video nào.
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

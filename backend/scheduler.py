@@ -442,6 +442,11 @@ class BackgroundScheduler:
                 self._check_and_trigger_daily_reports(now)
             except Exception:
                 pass
+            # 4. Tự động kiểm tra lịch lướt TikTok nuôi nick cho các Chiến Dịch "Chỉ Warm-up"
+            try:
+                self._check_and_trigger_warmup_only_campaigns(now)
+            except Exception as e:
+                log_event("WARNING", f"[WARM-UP SCHEDULER] Lỗi kiểm tra lịch nuôi nick: {e}")
             time.sleep(10)
     def _check_and_trigger_daily_reports(self, now):
         """Kiểm tra và tự động gửi Báo cáo hoạt động ngày cho các nhóm Telegram theo daily_report_time"""
@@ -477,8 +482,154 @@ class BackgroundScheduler:
             conn.close()
         except Exception:
             pass
-    def _check_and_trigger_follower_scan(self, now):
-        """Kểm tra thời gian và kích hoạt quét follower tự động theo cấu hình"""
+
+    def _check_and_trigger_warmup_only_campaigns(self, now):
+        """
+        Quét và kích hoạt chu kỳ lướt TikTok nuôi nick cho các Chiến Dịch 'Chỉ Warm-up' (Warm-up Only)
+        - Hoàn toàn KHÔNG tải video, KHÔNG render, KHÔNG upload.
+        - Tự động mở profile theo các khung giờ lên lịch (post_schedule) và thứ trong tuần (post_days_of_week)
+        - Lướt feed For You, xem video ngẫu nhiên, thả tim để tạo Trust Score & Cookie
+        """
+        now_dt = datetime.now()
+        today_str = now_dt.strftime("%Y-%m-%d")
+        now_hm = now_dt.strftime("%H:%M")
+        weekday_map = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
+        cur_dow = weekday_map.get(now_dt.weekday(), "mon")
+
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, gpm_profile_ids, gpm_profile_id, post_schedule, 
+                       post_days_of_week, warmup_duration_mins
+                FROM campaigns
+                WHERE is_active = 1 AND warmup_only = 1
+            """)
+            warmup_camps = [dict(r) for r in cursor.fetchall()]
+            conn.close()
+
+            if not warmup_camps:
+                return
+
+            if not hasattr(self, "_triggered_warmup_slots"):
+                self._triggered_warmup_slots = set()
+
+            for camp in warmup_camps:
+                camp_id = camp["id"]
+                camp_name = camp["name"] or f"Chiến dịch #{camp_id}"
+                dows = (camp.get("post_days_of_week") or "mon,tue,wed,thu,fri,sat,sun").lower().split(",")
+                if cur_dow not in [d.strip() for d in dows]:
+                    continue
+
+                raw_slots = [s.strip() for s in (camp.get("post_schedule") or "11:30, 18:00, 20:30").split(",") if s.strip()]
+                for slot in raw_slots:
+                    if slot == now_hm:
+                        slot_key = f"warmup_{camp_id}_{today_str}_{slot}"
+                        if slot_key in self._triggered_warmup_slots:
+                            continue
+                        self._triggered_warmup_slots.add(slot_key)
+                        # Dọn dẹp cache ngày cũ
+                        self._triggered_warmup_slots = {k for k in self._triggered_warmup_slots if today_str in k}
+
+                        gpm_ids = []
+                        if camp.get("gpm_profile_ids"):
+                            try:
+                                loaded = json.loads(camp["gpm_profile_ids"])
+                                if isinstance(loaded, list):
+                                    gpm_ids = [int(x) for x in loaded if x]
+                            except Exception:
+                                pass
+                        if not gpm_ids and camp.get("gpm_profile_id"):
+                            gpm_ids = [int(camp["gpm_profile_id"])]
+
+                        if not gpm_ids:
+                            continue
+
+                        duration = float(camp.get("warmup_duration_mins") or 10.0)
+                        log_event("INFO", f"🌱 [WARM-UP SCHEDULER] ⏰ Đến khung giờ {slot} của chiến dịch '{camp_name}'. Bắt đầu phiên lướt feed nuôi nick ({duration:.0f} phút/profile) cho {len(gpm_ids)} profiles.")
+
+                        threading.Thread(
+                            target=self._run_campaign_warmup_session,
+                            args=(camp_id, camp_name, gpm_ids, duration),
+                            daemon=True,
+                            name=f"Warmup_{camp_id}_{slot}"
+                        ).start()
+        except Exception as ex:
+            log_event("WARNING", f"[WARM-UP SCHEDULER] Lỗi kiểm tra lịch nuôi nick: {ex}")
+
+    def _run_campaign_warmup_session(self, camp_id: int, camp_name: str, gpm_db_ids: list, duration_minutes: float):
+        """Thực thi phiên lướt TikTok nuôi nick tuần tự hoặc song song an toàn cho từng profile"""
+        from backend.modules.account_warmup import account_warmup
+        from backend.modules.gpm_client import gpm_client
+        from backend.modules.tiktok_tracker import set_profile_busy
+        from playwright.sync_api import sync_playwright
+
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            placeholders = ",".join("?" * len(gpm_db_ids))
+            cursor.execute(f"SELECT id, gpm_id, name, browser_type FROM gpm_profiles WHERE id IN ({placeholders})", tuple(gpm_db_ids))
+            profiles = [dict(r) for r in cursor.fetchall()]
+            conn.close()
+        except Exception as ex:
+            log_event("WARNING", f"[WARM-UP] Không thể lấy thông tin profiles cho chiến dịch #{camp_id}: {ex}")
+            return
+
+        for p in profiles:
+            gid = p.get("gpm_id")
+            p_name = p.get("name") or gid
+            if not gid:
+                continue
+
+            set_profile_busy(gid, True)
+            try:
+                log_event("INFO", f"🔥 [WARM-UP ONLY] Chiến dịch '{camp_name}': Đang khởi động profile '{p_name}' ({gid}) để lướt TikTok {duration_minutes:.0f} phút...")
+                gpm_client.ensure_gpm_running()
+                remote_addr = gpm_client.start_profile(gid)
+                if not remote_addr:
+                    log_event("WARNING", f"[WARM-UP ONLY] Không thể khởi động profile '{p_name}' ({gid})")
+                    continue
+
+                with sync_playwright() as pw:
+                    browser = pw.chromium.connect_over_cdp(f"http://{remote_addr}")
+                    cdp_target = remote_addr if (remote_addr.startswith("ws://") or remote_addr.startswith("http://")) else f"http://{remote_addr}"
+                    browser = pw.chromium.connect_over_cdp(cdp_target)
+                    contexts = browser.contexts
+                    context = contexts[0] if contexts else browser.new_context()
+                    page = context.pages[0] if context.pages else context.new_page()
+
+                    res = account_warmup.run_feed_warmup(page, duration_minutes=duration_minutes, gpm_profile_id=gid)
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+
+                # Ghi lịch sử chiến dịch
+                conn2 = get_connection()
+                c2 = conn2.cursor()
+                c2.execute("""
+                    INSERT INTO campaign_logs (campaign_id, level, action, message, details)
+                    VALUES (?, 'SUCCESS', 'warmup', ?, ?)
+                """, (
+                    camp_id,
+                    f"Đã hoàn thành phiên lướt TikTok nuôi nick cho profile '{p_name}': xem {res.get('videos_watched', 0)} video, {res.get('likes_given', 0)} like trong {res.get('duration_minutes', 0)} phút.",
+                    json.dumps(res, ensure_ascii=False)
+                ))
+                conn2.commit()
+                conn2.close()
+
+            except Exception as e:
+                log_event("WARNING", f"[WARM-UP ONLY] Lỗi khi warm-up profile '{p_name}': {e}")
+            finally:
+                try:
+                    gpm_client.stop_profile(gid)
+                except Exception:
+                    pass
+                set_profile_busy(gid, False)
+                time.sleep(5)
+
+    def _check_and_trigger_follower_scan(self, now: float):
+        """Kiểm tra thời gian và kích hoạt quét follower tự động theo cấu hình"""
         if not self.follower_scan_enabled:
             return
         should_trigger = False

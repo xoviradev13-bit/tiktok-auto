@@ -102,6 +102,9 @@
                             onchange="handleGpmSortChange(this.value)">
                             <option value="followers_count">Số Follower</option>
                             <option value="name">Tên Profile</option>
+                            <option value="group_name">Nhóm Profile (Group)</option>
+                            <option value="total_views">Tổng Lượt Xem</option>
+                            <option value="campaign_name">Chiến Dịch (Campaign)</option>
                             <option value="tiktok_username">Account Username</option>
                             <option value="eligible_10k">Đạt Chỉ Tiêu / Beta</option>
                             <option value="creator_program">Creator Program</option>
@@ -115,6 +118,24 @@
                             <i class="fa-solid fa-arrow-down-wide-short" id="gpmSortDirIcon"></i>
                             <span id="gpmSortDirText">Giảm dần</span>
                         </button>
+                    </div>
+
+                    <!-- Filter Group -->
+                    <div class="sort-control">
+                        <label for="filterGpmGroup"><i class="fa-solid fa-users-rectangle text-cyan"></i> Nhóm:</label>
+                        <select id="filterGpmGroup" class="custom-select" style="min-width: 140px;"
+                            onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả nhóm</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter Campaign -->
+                    <div class="sort-control">
+                        <label for="filterGpmCampaign"><i class="fa-solid fa-bullhorn text-pink"></i> Chiến Dịch:</label>
+                        <select id="filterGpmCampaign" class="custom-select" style="min-width: 155px;"
+                            onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả chiến dịch</option>
+                        </select>
                     </div>
 
                     <!-- Filter Country -->
@@ -219,45 +240,57 @@
                 <thead>
                     <tr>
                         <th class="sortable" id="th-gpm-name" onclick="handleGpmHeaderSort('name')"
-                            title="Bấm để sắp xếp theo Tên Profile">
+                            title="Bấm để sắp xếp theo Tên Profile" style="min-width: 140px;">
                             Tên Profile <i class="fa-solid fa-sort sort-icon"></i>
+                        </th>
+                        <th class="sortable" id="th-gpm-group_name" onclick="handleGpmHeaderSort('group_name')"
+                            title="Bấm để sắp xếp theo Nhóm Profile" style="min-width: 120px;">
+                            Nhóm / Group <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-tiktok_username"
                             onclick="handleGpmHeaderSort('tiktok_username')"
-                            title="Bấm để sắp xếp theo Account Username">
+                            title="Bấm để sắp xếp theo Account Username" style="min-width: 150px;">
                             Account Username <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-country" onclick="handleGpmHeaderSort('country')"
-                            title="Bấm để sắp xếp theo Quốc Gia VPN" style="min-width: 145px;">
+                            title="Bấm để sắp xếp theo Quốc Gia VPN" style="min-width: 165px;">
                             Quốc Gia VPN <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-followers_count"
-                            onclick="handleGpmHeaderSort('followers_count')" title="Bấm để sắp xếp theo Follower">
+                            onclick="handleGpmHeaderSort('followers_count')" title="Bấm để sắp xếp theo Follower" style="min-width: 100px;">
                             Followers <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
+                        <th class="sortable" id="th-gpm-total_views" onclick="handleGpmHeaderSort('total_views')"
+                            title="Bấm để sắp xếp theo Tổng Views" style="min-width: 105px;">
+                            Tổng Views <i class="fa-solid fa-sort sort-icon"></i>
+                        </th>
+                        <th class="sortable" id="th-gpm-campaign" onclick="handleGpmHeaderSort('campaign_name')"
+                            title="Bấm để sắp xếp theo Chiến Dịch" style="min-width: 135px;">
+                            Chiến Dịch <i class="fa-solid fa-sort sort-icon"></i>
+                        </th>
                         <th class="sortable" id="th-gpm-eligible_10k" onclick="handleGpmHeaderSort('eligible_10k')"
-                            title="Bấm để sắp xếp theo trạng thái Đạt Chỉ Tiêu / Chuẩn Beta">
+                            title="Bấm để sắp xếp theo trạng thái Đạt Chỉ Tiêu / Chuẩn Beta" style="min-width: 125px;">
                             Đạt Chỉ Tiêu / Beta <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-creator_program"
                             onclick="handleGpmHeaderSort('creator_program')"
-                            title="Bấm để sắp xếp theo Creator Program (Beta)">
+                            title="Bấm để sắp xếp theo Creator Program (Beta)" style="min-width: 115px;">
                             Creator Program <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-flop_status" onclick="handleGpmHeaderSort('flop_status')"
-                            title="Bấm để sắp xếp theo Tình trạng Kênh (Flop / 0-view / Kẹt 200v / Khỏe)">
+                            title="Bấm để sắp xếp theo Tình trạng Kênh (Flop / 0-view / Kẹt 200v / Khỏe)" style="min-width: 125px;">
                             Hiệu Suất / Flop <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th class="sortable" id="th-gpm-notify_status" onclick="handleGpmHeaderSort('notify_status')"
-                            title="Bấm để sắp xếp theo Trạng thái theo dõi">
-                            Trạng Thái Theo Dõi <i class="fa-solid fa-sort sort-icon"></i>
+                        <th class="sortable" id="th-gpm-last_checked" onclick="handleGpmHeaderSort('last_checked')"
+                            title="Bấm để sắp xếp theo Thời gian đồng bộ / quét gần nhất" style="min-width: 120px;">
+                            Đồng Bộ Cuối <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
-                        <th style="text-align: center; width: 80px;">Thao Tác</th>
+                        <th style="text-align: center; width: 70px; min-width: 70px;">Thao Tác</th>
                     </tr>
                 </thead>
                 <tbody id="gpmTableBody">
                     <tr>
-                        <td colspan="9" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
+                        <td colspan="12" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
                             "Đồng Bộ" để nạp dữ liệu!</td>
                     </tr>
                 </tbody>

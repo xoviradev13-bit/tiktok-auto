@@ -438,10 +438,15 @@ function renderCampaignCard(c) {
         freqBadge = '<span class="badge badge-blue"><i class="fa-solid fa-calendar-days"></i> Mỗi ngày</span>';
     }
 
-    const warmupBadge = c.warmup_mode ? '<span class="badge badge-gold" title="Chế độ warm-up nuôi nick mới"><i class="fa-solid fa-fire"></i> Warm-up</span>' : '';
-    const uploadBadge = (c.auto_upload === 0)
-        ? '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);" title="Chỉ tải và render video về máy, không upload lên TikTok"><i class="fa-solid fa-film"></i> Chỉ Render</span>'
-        : '<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25);" title="Tự động upload lên dàn Account"><i class="fa-brands fa-tiktok"></i> Auto Upload</span>';
+    const isWarmupOnly = (c.warmup_only === 1);
+    const warmupBadge = isWarmupOnly
+        ? `<span class="badge" style="background:rgba(234,179,8,0.18); color:#eab308; border:1px solid rgba(234,179,8,0.3); font-size:10.5px; padding:2px 8px; border-radius:4px;" title="Chiến dịch Chỉ Lướt Nuôi Nick (Không tải, không edit, không đăng)"><i class="fa-solid fa-fire"></i> Chỉ Lướt Nuôi Nick (${c.warmup_duration_mins || 10}p)</span>`
+        : (c.warmup_mode ? '<span class="badge badge-gold" title="Chế độ warm-up nuôi nick mới"><i class="fa-solid fa-seedling"></i> Warm-up + Đăng</span>' : '');
+    const uploadBadge = isWarmupOnly
+        ? '<span class="badge" style="background:rgba(234,179,8,0.12); color:#eab308; border:1px solid rgba(234,179,8,0.25);" title="Chỉ lướt feed TikTok nuôi nick, không đăng video"><i class="fa-solid fa-fire"></i> Pure Warm-up</span>'
+        : ((c.auto_upload === 0)
+            ? '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);" title="Chỉ tải và render video về máy, không upload lên TikTok"><i class="fa-solid fa-film"></i> Chỉ Render</span>'
+            : '<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25);" title="Tự động upload lên dàn Account"><i class="fa-brands fa-tiktok"></i> Auto Upload</span>');
 
     const narrationBadge = (c.narration_enabled === 1)
         ? `<span class="badge" style="background:rgba(192, 132, 252, 0.15); color:#c084fc; border:1px solid rgba(192, 132, 252, 0.3); font-size:10.5px; padding:2px 6px;" title="Lồng tiếng AI & phụ đề đồng bộ: ${escapeHtml(c.narration_language || 'Gốc')}, Giọng: ${c.voice_gender === 'female' ? 'Nữ' : 'Nam'}, Style: ${c.narration_style || 'Giật gân'}"><i class="fa-solid fa-microphone-lines"></i> Lồng tiếng AI (${escapeHtml(c.narration_language || 'Gốc')})</span>`
@@ -475,9 +480,15 @@ function renderCampaignCard(c) {
                 ${warmupBadge}
             </div>
             <div class="campaign-header-actions">
+                ${isWarmupOnly ? `
+                <button class="btn btn-sm btn-secondary has-tooltip" onclick="triggerCampaignWarmupNow(${c.id}, this)" data-tooltip="Khởi động phiên lướt TikTok nuôi nick ngay cho dàn profile này">
+                    <i class="fa-solid fa-fire text-warning"></i> Nuôi Nick Ngay
+                </button>
+                ` : `
                 <button class="btn btn-sm btn-secondary has-tooltip" id="btnDirectRun_${c.id}" onclick="triggerDirectCampaignRun(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}', this)" data-tooltip="Quét RSS & chạy thử biên tập AI cho chiến dịch này ngay (Bấm lại để dừng)">
                     <i class="fa-solid fa-bolt text-gold"></i> Chạy Thử
                 </button>
+                `}
                 <button class="btn btn-sm btn-secondary has-tooltip" onclick="openCampaignLogs(${c.id}, '${escapeHtml(c.name).replace(/'/g, "\\'")}')" data-tooltip="Xem dữ liệu & nhật ký hoạt động chiến dịch này">
                     <i class="fa-solid fa-list-check text-cyan"></i> Nhật Ký
                 </button>
@@ -693,6 +704,228 @@ async function loadCampaigns() {
 // Global cached lists for modal
 let modalAllSavedChannels = [];
 let modalAllGpmProfiles = [];
+let modalAvailableSavedChannels = [];
+let modalAvailableGpmProfiles = [];
+let editModalAvailableSavedChannels = [];
+let editModalAvailableGpmProfiles = [];
+
+function getUsedCampaignResources(excludeCampaignId = null) {
+    const usedChannelIds = new Set();
+    const usedProfileIds = new Set();
+
+    const camps = cachedCampaigns || [];
+    camps.forEach(c => {
+        if (excludeCampaignId !== null && Number(c.id) === Number(excludeCampaignId)) {
+            return;
+        }
+
+        // Extract channel IDs
+        let chList = c.channel_ids_list;
+        if (!Array.isArray(chList)) {
+            if (typeof c.channel_ids === 'string') {
+                try { chList = JSON.parse(c.channel_ids); } catch (_) { chList = []; }
+            } else if (Array.isArray(c.channel_ids)) {
+                chList = c.channel_ids;
+            } else if (c.channel_id) {
+                chList = [c.channel_id];
+            }
+        }
+        if (Array.isArray(chList)) {
+            chList.forEach(id => {
+                if (id) usedChannelIds.add(String(id).trim());
+            });
+        }
+
+        // Extract GPM Profile IDs
+        let gpmList = c.gpm_profile_ids_list;
+        if (!Array.isArray(gpmList)) {
+            if (typeof c.gpm_profile_ids === 'string') {
+                try { gpmList = JSON.parse(c.gpm_profile_ids); } catch (_) { gpmList = []; }
+            } else if (Array.isArray(c.gpm_profile_ids)) {
+                gpmList = c.gpm_profile_ids;
+            } else if (c.gpm_profile_id) {
+                gpmList = [c.gpm_profile_id];
+            }
+        }
+        if (Array.isArray(gpmList)) {
+            gpmList.forEach(id => {
+                if (id !== undefined && id !== null && id !== '') {
+                    usedProfileIds.add(String(id).trim());
+                }
+            });
+        }
+    });
+
+    return { usedChannelIds, usedProfileIds };
+}
+window.getUsedCampaignResources = getUsedCampaignResources;
+
+// Sorting & Group state for Campaign Modals
+let campaignChannelsSortAsc = true;
+let campaignGpmSortAsc = true;
+let editCampaignChannelsSortAsc = true;
+let editCampaignGpmSortAsc = true;
+
+function getCampaignProfileGroupName(p) {
+    if (typeof getProfileGroupName === 'function') {
+        return getProfileGroupName(p);
+    }
+    if (!p) return '';
+    const isUuid = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const name = (p.group_name || '').trim();
+    if (name && !isUuid(name)) return name;
+    const id = (p.group_id || '').trim();
+    if (id && !isUuid(id)) return id;
+    if ((name && isUuid(name)) || (id && isUuid(id))) {
+        return 'Default group';
+    }
+    return '';
+}
+window.getCampaignProfileGroupName = getCampaignProfileGroupName;
+
+function updateCampaignSortBtnUI(btnId, iconId, textId, isAsc) {
+    const icon = document.getElementById(iconId);
+    const text = document.getElementById(textId);
+    if (icon) {
+        icon.className = isAsc ? 'fa-solid fa-arrow-down-short-wide' : 'fa-solid fa-arrow-up-wide-short';
+    }
+    if (text) {
+        text.textContent = isAsc ? 'Tăng dần' : 'Giảm dần';
+    }
+}
+window.updateCampaignSortBtnUI = updateCampaignSortBtnUI;
+
+function toggleSortCampaignChannels() {
+    campaignChannelsSortAsc = !campaignChannelsSortAsc;
+    updateCampaignSortBtnUI('btnSortCampaignChannels', 'sortCampaignChannelsIcon', 'sortCampaignChannelsText', campaignChannelsSortAsc);
+    const checkedIds = Array.from(document.querySelectorAll('#campaignChannelsList .campaign-ch-check:checked')).map(el => el.value);
+    const listToRender = modalAvailableSavedChannels && modalAvailableSavedChannels.length ? modalAvailableSavedChannels : modalAllSavedChannels;
+    renderCampaignChannelsCheckboxes(listToRender, checkedIds);
+    filterCampaignChannelList();
+}
+window.toggleSortCampaignChannels = toggleSortCampaignChannels;
+
+function toggleSortCampaignGpm() {
+    campaignGpmSortAsc = !campaignGpmSortAsc;
+    updateCampaignSortBtnUI('btnSortCampaignGpm', 'sortCampaignGpmIcon', 'sortCampaignGpmText', campaignGpmSortAsc);
+    const checkedProfileIds = Array.from(document.querySelectorAll('#campaignGpmList .campaign-gpm-check:checked')).map(el => el.value);
+    const listToRender = modalAvailableGpmProfiles && modalAvailableGpmProfiles.length ? modalAvailableGpmProfiles : modalAllGpmProfiles;
+    renderCampaignGpmCheckboxes(listToRender, checkedProfileIds);
+    filterCampaignGpmAccounts('new');
+}
+window.toggleSortCampaignGpm = toggleSortCampaignGpm;
+
+function toggleEditSortCampaignChannels() {
+    editCampaignChannelsSortAsc = !editCampaignChannelsSortAsc;
+    updateCampaignSortBtnUI('btnEditSortCampaignChannels', 'editSortCampaignChannelsIcon', 'editSortCampaignChannelsText', editCampaignChannelsSortAsc);
+    const checkedIds = Array.from(document.querySelectorAll('#editCampaignChannelsList .edit-campaign-ch-check:checked')).map(el => el.value);
+    const listToRender = editModalAvailableSavedChannels && editModalAvailableSavedChannels.length ? editModalAvailableSavedChannels : modalAllSavedChannels;
+    renderEditCampaignChannelsCheckboxes(listToRender, checkedIds);
+    filterEditCampaignChannelList();
+}
+window.toggleEditSortCampaignChannels = toggleEditSortCampaignChannels;
+
+function toggleEditSortCampaignGpm() {
+    editCampaignGpmSortAsc = !editCampaignGpmSortAsc;
+    updateCampaignSortBtnUI('btnEditSortCampaignGpm', 'editSortCampaignGpmIcon', 'editSortCampaignGpmText', editCampaignGpmSortAsc);
+    const checkedProfileIds = Array.from(document.querySelectorAll('#editCampaignGpmList .edit-campaign-gpm-check:checked')).map(el => el.value);
+    const listToRender = editModalAvailableGpmProfiles && editModalAvailableGpmProfiles.length ? editModalAvailableGpmProfiles : modalAllGpmProfiles;
+    renderEditCampaignGpmCheckboxes(listToRender, checkedProfileIds);
+    filterCampaignGpmAccounts('edit');
+}
+window.toggleEditSortCampaignGpm = toggleEditSortCampaignGpm;
+
+async function populateCampaignGroupFilters(mode = 'both') {
+    // 1. YouTube Channel Groups
+    let groups = window.cachedChannelGroups || [];
+    if (!groups.length) {
+        try {
+            const res = await fetch('/api/channel-groups');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'success' && data.groups) {
+                    groups = data.groups;
+                    window.cachedChannelGroups = groups;
+                }
+            } else {
+                const resAlt = await fetch('/api/youtube/groups');
+                if (resAlt.ok) {
+                    const dataAlt = await resAlt.json();
+                    if (dataAlt.status === 'success' && dataAlt.groups) {
+                        groups = dataAlt.groups;
+                        window.cachedChannelGroups = groups;
+                    }
+                }
+            }
+        } catch (_) { }
+    }
+
+    const fillChannelGroupSelect = (selId) => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        const curVal = sel.value || 'all';
+        let html = '<option value="all">Tất cả nhóm</option><option value="ungrouped">Chưa phân nhóm</option>';
+        groups.forEach(g => {
+            const rawName = g.name || 'Nhóm';
+            const displayName = rawName.length > 22 ? (rawName.substring(0, 21) + '…') : rawName;
+            html += `<option value="${g.id}" title="${escapeHtml(rawName)}">${escapeHtml(displayName)} (${g.channel_count || 0})</option>`;
+        });
+        sel.innerHTML = html;
+        if (curVal) sel.value = curVal;
+    };
+
+    if (mode === 'new' || mode === 'both') {
+        fillChannelGroupSelect('campaignChannelGroupFilter');
+    }
+    if (mode === 'edit' || mode === 'both') {
+        fillChannelGroupSelect('editCampaignChannelGroupFilter');
+    }
+
+    // 2. GPM Profile Groups
+    const fillGpmGroupSelect = (selId, profilesList) => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        const curVal = sel.value || 'all';
+        const groupCountMap = new Map();
+        let ungroupedCount = 0;
+
+        (profilesList || []).forEach(p => {
+            const grp = getCampaignProfileGroupName(p);
+            if (grp) {
+                groupCountMap.set(grp, (groupCountMap.get(grp) || 0) + 1);
+            } else {
+                ungroupedCount++;
+            }
+        });
+
+        let html = '<option value="all">Tất cả nhóm</option>';
+        if (ungroupedCount > 0) {
+            html += `<option value="ungrouped">Chưa phân nhóm (${ungroupedCount})</option>`;
+        }
+        const sortedGroups = Array.from(groupCountMap.keys()).sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
+        sortedGroups.forEach(grp => {
+            const count = groupCountMap.get(grp);
+            const displayName = grp.length > 22 ? (grp.substring(0, 21) + '…') : grp;
+            html += `<option value="${escapeHtml(grp)}" title="${escapeHtml(grp)}">${escapeHtml(displayName)} (${count})</option>`;
+        });
+        sel.innerHTML = html;
+        if (curVal) sel.value = curVal;
+    };
+
+    if (mode === 'new' || mode === 'both') {
+        const newProfiles = modalAvailableGpmProfiles && modalAvailableGpmProfiles.length ? modalAvailableGpmProfiles : modalAllGpmProfiles;
+        fillGpmGroupSelect('campaignGpmGroupFilter', newProfiles);
+        if (typeof filterCampaignChannelList === 'function') filterCampaignChannelList();
+        if (typeof filterCampaignGpmAccounts === 'function') filterCampaignGpmAccounts('new');
+    }
+    if (mode === 'edit' || mode === 'both') {
+        const editProfiles = editModalAvailableGpmProfiles && editModalAvailableGpmProfiles.length ? editModalAvailableGpmProfiles : modalAllGpmProfiles;
+        fillGpmGroupSelect('editCampaignGpmGroupFilter', editProfiles);
+        if (typeof filterEditCampaignChannelList === 'function') filterEditCampaignChannelList();
+        if (typeof filterCampaignGpmAccounts === 'function') filterCampaignGpmAccounts('edit');
+    }
+}
+window.populateCampaignGroupFilters = populateCampaignGroupFilters;
 
 // ========================================================
 // 6-TAB CAMPAIGN MODAL LOGIC & HELPERS
@@ -759,6 +992,83 @@ function toggleCampaignAutoEngagement(prefix, isChecked) {
 }
 window.toggleCampaignAutoEngagement = toggleCampaignAutoEngagement;
 
+function toggleCampaignWarmupOnly(prefix, isChecked) {
+    const p = (prefix === 'new') ? 'campaign' : 'editCampaign';
+    const optWrap = document.getElementById(`${p}WarmupOnlyOptions`);
+    if (optWrap) optWrap.style.display = isChecked ? 'block' : 'none';
+
+    // Disable posting warmup pacing when pure warmup is active to avoid confusion
+    const postWarmupSwitch = document.getElementById(`${p}WarmupSwitch`);
+    if (postWarmupSwitch) {
+        if (isChecked) {
+            postWarmupSwitch.dataset.prevChecked = postWarmupSwitch.checked ? '1' : '0';
+            postWarmupSwitch.checked = false;
+            postWarmupSwitch.disabled = true;
+            if (postWarmupSwitch.parentElement) {
+                postWarmupSwitch.parentElement.style.opacity = '0.45';
+                postWarmupSwitch.parentElement.title = 'Chế độ tăng dần số bài chỉ áp dụng khi đăng video';
+            }
+        } else {
+            postWarmupSwitch.disabled = false;
+            if (postWarmupSwitch.dataset.prevChecked === '1') {
+                postWarmupSwitch.checked = true;
+            }
+            if (postWarmupSwitch.parentElement) {
+                postWarmupSwitch.parentElement.style.opacity = '1';
+                postWarmupSwitch.parentElement.title = '';
+            }
+        }
+    }
+
+    // Hide or show the Auto Upload Section to eliminate any user confusion
+    const autoUpSec = document.getElementById(`${p}AutoUploadSection`);
+    if (autoUpSec) {
+        autoUpSec.style.display = isChecked ? 'none' : 'block';
+    }
+
+    // Keep the Account Selection List ALWAYS visible so user can select/view profiles to warm up!
+    const selectionWrap = document.getElementById(`${p}AccountSelectionWrap`);
+    if (selectionWrap) {
+        selectionWrap.style.display = 'block';
+    }
+
+    // Dynamically update the Account Selection header text
+    const gpmLabel = document.querySelector(`#${p}AccountSelectionWrap label`);
+    if (gpmLabel) {
+        if (isChecked) {
+            gpmLabel.innerHTML = '<i class="fa-solid fa-fire text-warning"></i> Chọn Account / Profile Cần Lướt Nuôi (Chọn nhiều nick):';
+        } else {
+            gpmLabel.innerHTML = '<i class="fa-solid fa-robot" style="color:var(--accent-gold);"></i> Chọn Account Nhận Video (Chọn nhiều nick):';
+        }
+    }
+}
+window.toggleCampaignWarmupOnly = toggleCampaignWarmupOnly;
+
+async function triggerCampaignWarmupNow(campaignId, btn) {
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang nuôi...';
+    }
+    try {
+        const res = await fetch(`/api/campaigns/${campaignId}/warmup-now`, { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast(data.message || 'Đã kích hoạt phiên nuôi nick thành công!');
+        } else {
+            showToast(data.detail || data.error || 'Lỗi khi kích hoạt nuôi nick', true);
+        }
+    } catch (e) {
+        showToast('Lỗi: ' + e.message, true);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml || '<i class="fa-solid fa-fire text-warning"></i> Nuôi Nick Ngay';
+        }
+    }
+}
+window.triggerCampaignWarmupNow = triggerCampaignWarmupNow;
+
 async function openNewCampaignModal() {
     if (window.LicenseManager && !window.LicenseManager.requireLicense('Tạo Chiến Dịch Tự Động')) {
         return;
@@ -775,9 +1085,9 @@ async function openNewCampaignModal() {
     const incShorts = document.getElementById('campaignIncludeShorts');
     if (incShorts) incShorts.checked = true;
     const incLong = document.getElementById('campaignIncludeLongform');
-    if (incLong) incLong.checked = true;
+    if (incLong) incLong.checked = false;
     const minDurInput = document.getElementById('campaignMinDurationInput');
-    // Both checked by default → disabled (Shorts is checked)
+    // Shorts checked, Longform unchecked → disabled min duration (0s)
     applyMinDurationState(
         document.getElementById('campaignIncludeShorts'),
         document.getElementById('campaignIncludeLongform'),
@@ -791,6 +1101,20 @@ async function openNewCampaignModal() {
     if (campVisSrc) campVisSrc.value = 'ai';
     const campStkWrap = document.getElementById('campaignStockWrap');
     if (campStkWrap) campStkWrap.style.display = 'none';
+
+    // Reset sort states & buttons
+    campaignChannelsSortAsc = true;
+    campaignGpmSortAsc = true;
+    updateCampaignSortBtnUI('btnSortCampaignChannels', 'sortCampaignChannelsIcon', 'sortCampaignChannelsText', true);
+    updateCampaignSortBtnUI('btnSortCampaignGpm', 'sortCampaignGpmIcon', 'sortCampaignGpmText', true);
+
+    // Reset channel & gpm search filters & group dropdowns
+    const campChFilterInp = document.getElementById('campaignChannelFilterInput');
+    if (campChFilterInp) campChFilterInp.value = '';
+    const campChGrpSel = document.getElementById('campaignChannelGroupFilter');
+    if (campChGrpSel) campChGrpSel.value = 'all';
+    const campGpmGrpSel = document.getElementById('campaignGpmGroupFilter');
+    if (campGpmGrpSel) campGpmGrpSel.value = 'all';
 
     // Reset Aspect Ratio & Split Screen
     const campAspect = document.getElementById('campaignAspectRatio');
@@ -847,6 +1171,13 @@ async function openNewCampaignModal() {
     const newRepDelay = document.getElementById('campaignReplyCommentsDelaySelect');
     if (newRepDelay) newRepDelay.value = '20';
 
+    // Reset Warmup Only Mode
+    const newWarmupOnlySwitch = document.getElementById('campaignWarmupOnlySwitch');
+    if (newWarmupOnlySwitch) newWarmupOnlySwitch.checked = false;
+    toggleCampaignWarmupOnly('new', false);
+    const newWarmupDur = document.getElementById('campaignWarmupDurationSelect');
+    if (newWarmupDur) newWarmupDur.value = '10';
+
     // Reset Target Platforms & Account Filter Input
     const newTtCheck = document.getElementById('newCampTargetTikTok');
     if (newTtCheck) newTtCheck.checked = true;
@@ -856,38 +1187,77 @@ async function openNewCampaignModal() {
     const chListEl = document.getElementById('campaignChannelsList');
     const gpmListEl = document.getElementById('campaignGpmList');
 
-    if (chListEl) chListEl.innerHTML = '<div class="text-muted text-center py-2"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp danh sách kênh...</div>';
-    if (gpmListEl) gpmListEl.innerHTML = '<div class="text-muted text-center py-2"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp profile...</div>';
+    // 0. Instant Optimistic Render from Memory Cache if available (Zero wait time)
+    if (window.cachedChannelGroups && window.cachedChannelGroups.length) {
+        populateCampaignGroupFilters('new');
+    }
+    const existingSavedChannels = (modalAllSavedChannels && modalAllSavedChannels.length) ? modalAllSavedChannels : (window.cachedSavedChannels || []);
+    const existingGpmProfiles = (modalAllGpmProfiles && modalAllGpmProfiles.length) ? modalAllGpmProfiles : (window.cachedProfiles || []);
+    const { usedChannelIds: initUsedCh, usedProfileIds: initUsedProf } = getUsedCampaignResources();
+
+    if (existingSavedChannels.length) {
+        modalAllSavedChannels = existingSavedChannels;
+        modalAvailableSavedChannels = existingSavedChannels.filter(ch => !initUsedCh.has(String(ch.channel_id).trim()));
+        renderCampaignChannelsCheckboxes(modalAvailableSavedChannels);
+    } else {
+        if (chListEl) chListEl.innerHTML = '<div class="text-muted text-center py-2"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp danh sách kênh...</div>';
+    }
+
+    if (existingGpmProfiles.length) {
+        modalAllGpmProfiles = existingGpmProfiles;
+        modalAvailableGpmProfiles = existingGpmProfiles.filter(p => !initUsedProf.has(String(p.id).trim()) && (!p.gpm_id || !initUsedProf.has(String(p.gpm_id).trim())));
+        renderCampaignGpmCheckboxes(modalAvailableGpmProfiles);
+    } else {
+        if (gpmListEl) gpmListEl.innerHTML = '<div class="text-muted text-center py-2"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp profile...</div>';
+    }
 
     modal.classList.add('show');
 
-    // 1. Fetch Saved Channels
+    // 1. Concurrently fetch fresh data in parallel using Promise.all (Campaigns, Channels, Profiles, Groups, Settings)
     try {
-        const res = await fetch('/api/youtube/channels');
-        modalAllSavedChannels = await res.json();
-        renderCampaignChannelsCheckboxes(modalAllSavedChannels);
-    } catch (e) {
-        if (chListEl) chListEl.innerHTML = '<div class="text-danger text-center py-2">Lỗi nạp danh sách kênh YouTube</div>';
-    }
+        const [cRes, chRes, gpmRes, grpRes, defData] = await Promise.all([
+            fetch('/api/campaigns').then(r => r.ok ? r.json() : []).catch(() => cachedCampaigns || []),
+            fetch('/api/youtube/channels').then(r => r.ok ? r.json() : []).catch(() => modalAllSavedChannels || []),
+            fetch('/api/gpm/profiles').then(r => r.ok ? r.json() : []).catch(() => modalAllGpmProfiles || []),
+            (!window.cachedChannelGroups || !window.cachedChannelGroups.length)
+                ? fetch('/api/channel-groups').then(r => r.ok ? r.json() : null).catch(() => null)
+                : Promise.resolve(null),
+            fetch('/api/settings/defaults').then(r => r.ok ? r.json() : {}).catch(() => ({}))
+        ]);
 
-    // 2. Fetch GPM Profiles
-    try {
-        const res = await fetch('/api/gpm/profiles');
-        modalAllGpmProfiles = await res.json();
-        renderCampaignGpmCheckboxes(modalAllGpmProfiles);
-    } catch (e) {
-        if (gpmListEl) gpmListEl.innerHTML = '<div class="text-danger text-center py-2">Lỗi nạp danh sách profile</div>';
-    }
+        if (Array.isArray(cRes)) cachedCampaigns = cRes;
+        if (Array.isArray(chRes) && chRes.length) {
+            modalAllSavedChannels = chRes;
+            window.cachedSavedChannels = chRes;
+        }
+        if (Array.isArray(gpmRes) && gpmRes.length) {
+            modalAllGpmProfiles = gpmRes;
+            window.cachedProfiles = gpmRes;
+        }
+        if (grpRes && grpRes.status === 'success' && grpRes.groups) {
+            window.cachedChannelGroups = grpRes.groups;
+        }
 
-    // 3. Restore persisted folder defaults from SQLite settings
-    try {
-        const defRes = await fetch('/api/settings/defaults');
-        const defData = await defRes.json();
-        const dlInput = document.getElementById('campaignDownloadDir');
-        const rdInput = document.getElementById('campaignRenderDir');
-        if (dlInput && defData.download_dir) dlInput.value = defData.download_dir;
-        if (rdInput && defData.render_dir) rdInput.value = defData.render_dir;
-    } catch (_) { }
+        const { usedChannelIds, usedProfileIds } = getUsedCampaignResources();
+
+        modalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()));
+        renderCampaignChannelsCheckboxes(modalAvailableSavedChannels);
+
+        modalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => !usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim())));
+        renderCampaignGpmCheckboxes(modalAvailableGpmProfiles);
+
+        await populateCampaignGroupFilters('new');
+
+        // Restore persisted folder defaults
+        if (defData) {
+            const dlInput = document.getElementById('campaignDownloadDir');
+            const rdInput = document.getElementById('campaignRenderDir');
+            if (dlInput && defData.download_dir) dlInput.value = defData.download_dir;
+            if (rdInput && defData.render_dir) rdInput.value = defData.render_dir;
+        }
+    } catch (e) {
+        console.warn('Lỗi đồng bộ dữ liệu chiến dịch:', e);
+    }
 
     // 4. Ensure BGM Categories loaded
     if (!cachedAudioCategories.length) {
@@ -901,12 +1271,20 @@ async function openNewCampaignModal() {
     }
 }
 
-function renderCampaignChannelsCheckboxes(channels) {
+function renderCampaignChannelsCheckboxes(channels, selectedIds = null) {
     const chListEl = document.getElementById('campaignChannelsList');
     if (!chListEl) return;
 
-    if (!channels.length) {
-        chListEl.innerHTML = `
+    if (!channels || !channels.length) {
+        const allList = (modalAllSavedChannels && modalAllSavedChannels.length) ? modalAllSavedChannels : (window.modalAllSavedChannels || []);
+        const hasSaved = allList && allList.length > 0;
+        chListEl.innerHTML = hasSaved ? `
+            <div class="text-muted text-center py-4" style="font-size:12.5px; padding: 20px 10px;">
+                <i class="fa-solid fa-circle-info" style="font-size:22px; color:var(--accent-cyan); display:block; margin-bottom:8px;"></i>
+                Tất cả kênh YouTube đã được phân bổ vào các chiến dịch khác.<br>
+                <span style="font-size:11px; opacity:0.8;">Hãy thêm kênh mới ở tab <strong>"1. Nguồn YouTube"</strong> hoặc xóa chiến dịch cũ để sử dụng lại kênh!</span>
+            </div>
+        ` : `
             <div class="text-muted text-center py-3" style="font-size:12px;">
                 Chưa có kênh nào được lưu. Hãy qua tab <strong>"1. Nguồn YouTube"</strong> để quét và lưu kênh trước!
             </div>
@@ -915,25 +1293,51 @@ function renderCampaignChannelsCheckboxes(channels) {
         return;
     }
 
-    chListEl.innerHTML = channels.map((ch, idx) => `
-        <label class="multi-select-item" style="display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:4px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03);">
-            <input type="checkbox" class="campaign-ch-check" value="${escapeHtml(ch.channel_id)}" ${idx < 3 ? 'checked' : ''} onchange="updateSelectedChannelsCount()">
-            <i class="fa-brands fa-youtube" style="color:#ff0000; font-size:14px;"></i>
-            <span style="font-weight:600; color:#fff; flex:1;">${escapeHtml(ch.display_name || ch.title)}</span>
-            <span style="font-size:11px; color:var(--accent-cyan);">${formatNumber(ch.subscriber_count || 0)} subs</span>
-            <span class="badge badge-secondary" style="font-size:10px;">${escapeHtml(ch.country || 'US')}</span>
-        </label>
-    `).join('');
+    const selSet = selectedIds ? new Set(selectedIds.map(String)) : null;
 
+    const sorted = [...channels].sort((a, b) => {
+        const nameA = (a.display_name || a.title || '').toLowerCase();
+        const nameB = (b.display_name || b.title || '').toLowerCase();
+        return campaignChannelsSortAsc
+            ? nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' })
+            : nameB.localeCompare(nameA, 'vi', { sensitivity: 'base' });
+    });
+
+    chListEl.innerHTML = sorted.map((ch, idx) => {
+        const isChecked = selSet ? selSet.has(String(ch.channel_id)) : (idx < 3);
+        const grpBadge = ch.group_name
+            ? `<span class="badge" title="Nhóm: ${escapeHtml(ch.group_name)}" style="font-size:9.5px; background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3); padding:1px 6px; border-radius:4px; flex-shrink:0; max-width:130px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"><i class="${escapeHtml(ch.group_icon || 'fa-solid fa-folder')}" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ch.group_name)}</span></span>`
+            : '';
+        return `
+        <label class="multi-select-item" data-channel-id="${escapeHtml(ch.channel_id)}" data-group-id="${escapeHtml(String(ch.group_id || ''))}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
+            <input type="checkbox" class="campaign-ch-check" value="${escapeHtml(ch.channel_id)}" ${isChecked ? 'checked' : ''} onchange="updateSelectedChannelsCount()" style="flex-shrink:0;">
+            <i class="fa-brands fa-youtube" style="color:#ff0000; font-size:14px; flex-shrink:0;"></i>
+            <span style="font-weight:600; color:#fff; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(ch.display_name || ch.title)}">${escapeHtml(ch.display_name || ch.title)}</span>
+            ${grpBadge}
+            <span style="font-size:11px; color:var(--accent-cyan); white-space:nowrap; flex-shrink:0;">${formatNumber(ch.subscriber_count || 0)} subs</span>
+            <span class="badge badge-secondary" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${escapeHtml(ch.country || 'US')}</span>
+        </label>
+        `;
+    }).join('');
+
+    chListEl.scrollTop = 0;
     updateSelectedChannelsCount();
 }
 
-function renderCampaignGpmCheckboxes(profiles) {
+function renderCampaignGpmCheckboxes(profiles, selectedIds = null) {
     const gpmListEl = document.getElementById('campaignGpmList');
     if (!gpmListEl) return;
 
-    if (!profiles.length) {
-        gpmListEl.innerHTML = `
+    if (!profiles || !profiles.length) {
+        const allList = (modalAllGpmProfiles && modalAllGpmProfiles.length) ? modalAllGpmProfiles : (window.modalAllGpmProfiles || []);
+        const hasProfiles = allList && allList.length > 0;
+        gpmListEl.innerHTML = hasProfiles ? `
+            <div class="text-muted text-center py-4" style="font-size:12.5px; padding: 20px 10px;">
+                <i class="fa-solid fa-circle-info" style="font-size:22px; color:var(--accent-gold); display:block; margin-bottom:8px;"></i>
+                Tất cả tài khoản / profile đã được gán vào các chiến dịch khác.<br>
+                <span style="font-size:11px; opacity:0.8;">Hãy thêm profile mới ở tab <strong>"Dàn Profile"</strong> hoặc xóa chiến dịch cũ để sử dụng lại tài khoản!</span>
+            </div>
+        ` : `
             <div class="text-muted text-center py-3" style="font-size:12px;">
                 Chưa có profile nào. Hãy bấm <strong>"Đồng Bộ"</strong> ở tab "Dàn Profile"!
             </div>
@@ -942,15 +1346,29 @@ function renderCampaignGpmCheckboxes(profiles) {
         return;
     }
 
+    const selSet = selectedIds ? new Set(selectedIds.map(String)) : null;
+
     // Pre-check tối đa 3 nick TikTok phù hợp
     const activePlatforms = new Set(['tiktok']);
 
     let matchingCheckedCount = 0;
     const itemsHtml = [];
 
-    profiles.forEach(p => {
+    const sorted = [...profiles].sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return campaignGpmSortAsc
+            ? nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' })
+            : nameB.localeCompare(nameA, 'vi', { sensitivity: 'base' });
+    });
+
+    sorted.forEach(p => {
         const plat = (p.platform || 'tiktok').toLowerCase();
         const hasSubChannels = (plat === 'youtube' || plat === 'facebook') && Array.isArray(p.channels) && p.channels.length > 0;
+        const grpName = getCampaignProfileGroupName(p);
+        const grpBadge = grpName
+            ? `<span class="badge" title="Nhóm: ${escapeHtml(grpName)}" style="background:rgba(99,102,241,0.15); color:#a5b4fc; border:1px solid rgba(99,102,241,0.3); font-size:9.5px; padding:1px 6px; border-radius:4px; flex-shrink:0; max-width:120px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"><i class="fa-solid fa-folder" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(grpName)}</span></span>`
+            : '';
 
         if (hasSubChannels) {
             p.channels.forEach(ch => {
@@ -977,8 +1395,10 @@ function renderCampaignGpmCheckboxes(profiles) {
                 const chTitle = ch.channel_name || ch.channel_url || p.name;
                 const chSub = ch.channel_url || '';
                 const isMatchingPlat = activePlatforms.has(plat);
-                const shouldPreCheck = isMatchingPlat && matchingCheckedCount < 3;
-                if (shouldPreCheck) matchingCheckedCount++;
+                const shouldPreCheck = selSet
+                    ? selSet.has(String(p.id))
+                    : (isMatchingPlat && matchingCheckedCount < 3);
+                if (!selSet && shouldPreCheck) matchingCheckedCount++;
 
                 const bType = (p.browser_type || 'gpm').toLowerCase();
                 const bBadge = bType === 'genlogin'
@@ -990,19 +1410,20 @@ function renderCampaignGpmCheckboxes(profiles) {
                 const dupBadge = isDup ? '<span class="badge" style="background:rgba(234,179,8,0.18); color:#eab308; font-size:9px; padding:1px 4px; flex-shrink:0;" title="Tài khoản này có mặt trên nhiều trình duyệt"><i class="fa-solid fa-link"></i> Trùng nick</span>' : '';
 
                 itemsHtml.push(`
-                <label class="multi-select-item" data-platform="${plat}" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03); min-width:0;">
+                <label class="multi-select-item" data-platform="${plat}" data-group-name="${escapeHtml(grpName)}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
                     <input type="checkbox" class="campaign-gpm-check" value="${p.id}" data-gpm-id="${escapeHtml(p.gpm_id)}" data-account-key="${escapeHtml(accountKey)}" data-browser-label="${escapeHtml(bLabel)}" data-profile-name="${escapeHtml(p.name)}" data-channel-id="${escapeHtml(ch.channel_id || '')}" data-channel-name="${escapeHtml(chTitle)}" data-platform="${plat}" ${shouldPreCheck ? 'checked' : ''} onchange="syncCampaignDuplicateCheckboxes('new'); if(this.checked && '${escapeHtml(ch.channel_id)}') handleChannelSelectionChange('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}')" style="flex-shrink:0;">
                     <span style="flex-shrink:0; display:inline-flex; align-items:center;">${platIcon}</span>
                     <div style="flex:1; min-width:0; display:flex; align-items:center; gap:8px; overflow:hidden;">
                         ${bBadge}
-                        <span style="font-size:11px; flex-shrink:0; color:var(--text-secondary); background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px; white-space:nowrap;">${escapeHtml(p.name)}</span>
-                        <span style="font-weight:600; color:#fff; min-width:0; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</span>
+                        <span style="font-size:11px; flex-shrink:0; color:var(--text-secondary); background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                        <span style="font-weight:600; color:#fff; min-width:0; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</span>
+                        ${grpBadge}
                         ${typeBadge}
                         ${dupBadge}
                     </div>
                     <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <span style="font-size:11px; color:${platColor}; white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(chSub)}">${escapeHtml(chSub)}</span>
-                        <span class="badge ${count >= 1000 ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap;">${count.toLocaleString()} ${flwText}</span>
+                        <span style="font-size:11px; color:${platColor}; white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(chSub)}">${escapeHtml(chSub)}</span>
+                        <span class="badge ${count >= 1000 ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${count.toLocaleString()} ${flwText}</span>
                     </div>
                 </label>
                 `);
@@ -1022,8 +1443,10 @@ function renderCampaignGpmCheckboxes(profiles) {
             }
 
             const isMatchingPlat = activePlatforms.has(plat);
-            const shouldPreCheck = isMatchingPlat && matchingCheckedCount < 3;
-            if (shouldPreCheck) matchingCheckedCount++;
+            const shouldPreCheck = selSet
+                ? selSet.has(String(p.id))
+                : (isMatchingPlat && matchingCheckedCount < 3);
+            if (!selSet && shouldPreCheck) matchingCheckedCount++;
 
             const bType = (p.browser_type || 'gpm').toLowerCase();
             const bBadge = bType === 'genlogin'
@@ -1035,17 +1458,18 @@ function renderCampaignGpmCheckboxes(profiles) {
             const dupBadge = isDup ? '<span class="badge" style="background:rgba(234,179,8,0.18); color:#eab308; font-size:9px; padding:1px 4px; flex-shrink:0;" title="Tài khoản này có mặt trên nhiều trình duyệt"><i class="fa-solid fa-link"></i> Trùng nick</span>' : '';
 
             itemsHtml.push(`
-            <label class="multi-select-item" data-platform="${plat}" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03); min-width:0;">
+            <label class="multi-select-item" data-platform="${plat}" data-group-name="${escapeHtml(grpName)}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
                 <input type="checkbox" class="campaign-gpm-check" value="${p.id}" data-gpm-id="${escapeHtml(p.gpm_id)}" data-account-key="${escapeHtml(accountKey)}" data-browser-label="${escapeHtml(bLabel)}" data-profile-name="${escapeHtml(p.name)}" data-channel-id="" data-channel-name="${escapeHtml(displayName)}" data-platform="${plat}" ${shouldPreCheck ? 'checked' : ''} onchange="syncCampaignDuplicateCheckboxes('new');" style="flex-shrink:0;">
                 <span style="flex-shrink:0; display:inline-flex; align-items:center;">${platIcon}</span>
                 <div style="flex:1; min-width:0; display:flex; align-items:center; gap:8px; overflow:hidden;">
                     ${bBadge}
-                    <span style="font-weight:600; color:#fff; min-width:0; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    <span style="font-weight:600; color:#fff; min-width:0; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    ${grpBadge}
                     ${dupBadge}
                 </div>
                 <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                    <span style="font-size:11px; color:${platColor}; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${displayName}">${displayName}</span>
-                    <span class="badge ${p.eligible_10k ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap;">${(p.followers_count || 0).toLocaleString()} flw</span>
+                    <span style="font-size:11px; color:${platColor}; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${displayName}">${displayName}</span>
+                    <span class="badge ${p.eligible_10k ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${(p.followers_count || 0).toLocaleString()} flw</span>
                 </div>
             </label>
             `);
@@ -1053,6 +1477,7 @@ function renderCampaignGpmCheckboxes(profiles) {
     });
 
     gpmListEl.innerHTML = itemsHtml.join('');
+    gpmListEl.scrollTop = 0;
     filterCampaignGpmAccounts('new');
     syncCampaignDuplicateCheckboxes('new');
 }
@@ -1191,11 +1616,20 @@ function selectAllCampaignGpm(select) {
 }
 
 function filterCampaignChannelList(query) {
-    const q = (query || '').toLowerCase().trim();
+    const q = (query !== undefined ? query : (document.getElementById('campaignChannelFilterInput')?.value || '')).toLowerCase().trim();
+    const groupFilter = document.getElementById('campaignChannelGroupFilter')?.value || 'all';
     const items = document.querySelectorAll('#campaignChannelsList .multi-select-item');
     items.forEach(item => {
         const text = item.textContent.toLowerCase();
-        item.style.display = text.includes(q) ? 'flex' : 'none';
+        const groupId = item.getAttribute('data-group-id') || '';
+        const matchQuery = !q || text.includes(q);
+        let matchGroup = true;
+        if (groupFilter === 'ungrouped') {
+            matchGroup = !groupId || groupId === '0' || groupId === 'null';
+        } else if (groupFilter !== 'all') {
+            matchGroup = (groupId === groupFilter);
+        }
+        item.style.display = (matchQuery && matchGroup) ? 'flex' : 'none';
     });
 }
 
@@ -1204,12 +1638,14 @@ function filterCampaignGpmAccounts(mode = 'new') {
     const isNew = mode === 'new';
     const listId = isNew ? 'campaignGpmList' : 'editCampaignGpmList';
     const searchId = isNew ? 'campaignGpmFilterInput' : 'editCampaignGpmFilterInput';
+    const groupFilterId = isNew ? 'campaignGpmGroupFilter' : 'editCampaignGpmGroupFilter';
     const prefix = isNew ? 'newCampTarget' : 'editCampTarget';
 
     const activePlatforms = new Set(['tiktok']);
 
     const searchInput = document.getElementById(searchId);
     const query = (searchInput?.value || '').toLowerCase().trim();
+    const groupFilter = document.getElementById(groupFilterId)?.value || 'all';
 
     const listEl = document.getElementById(listId);
     if (!listEl) return;
@@ -1219,14 +1655,21 @@ function filterCampaignGpmAccounts(mode = 'new') {
 
     items.forEach(item => {
         const plat = (item.getAttribute('data-platform') || 'tiktok').toLowerCase();
+        const groupName = item.getAttribute('data-group-name') || '';
         const input = item.querySelector('input');
         const gpmId = input?.getAttribute('data-gpm-id');
         const pickerEl = gpmId ? document.getElementById(`channel-picker-${gpmId}`) : null;
 
         const matchPlatform = activePlatforms.has(plat);
         const matchQuery = !query || item.textContent.toLowerCase().includes(query);
+        let matchGroup = true;
+        if (groupFilter === 'ungrouped') {
+            matchGroup = !groupName;
+        } else if (groupFilter !== 'all') {
+            matchGroup = (groupName.toLowerCase() === groupFilter.toLowerCase());
+        }
 
-        if (matchPlatform && matchQuery) {
+        if (matchPlatform && matchQuery && matchGroup) {
             item.style.display = 'flex';
             visibleCount++;
             if (pickerEl && input && input.checked) {
@@ -1353,8 +1796,9 @@ async function handleCreateCampaignSubmit(e) {
     const selectedChannelIds = Array.from(chBoxes).map(b => b.value);
     const sourceMode = 'youtube';
     const localFolder = '';
+    const isWarmupOnly = document.getElementById('campaignWarmupOnlySwitch')?.checked ? 1 : 0;
 
-    if (selectedChannelIds.length === 0) {
+    if (!isWarmupOnly && selectedChannelIds.length === 0) {
         showToast('⚠️ Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
         switchModalTab('new', 'source');
         return;
@@ -1363,7 +1807,7 @@ async function handleCreateCampaignSubmit(e) {
     // Target Platforms: TikTok only
     const targetPlatforms = ['tiktok'];
 
-    const autoUpload = document.getElementById('campaignAutoUploadSwitch')?.checked ? 1 : 0;
+    const autoUpload = isWarmupOnly ? 0 : (document.getElementById('campaignAutoUploadSwitch')?.checked ? 1 : 0);
 
     // 2. Gather Selected GPM Profiles
     const gpmBoxes = Array.from(document.querySelectorAll('.campaign-gpm-check:checked')).filter(b => {
@@ -1371,8 +1815,8 @@ async function handleCreateCampaignSubmit(e) {
         return item && item.style.display !== 'none';
     });
     const selectedGpmIds = Array.from(new Set(gpmBoxes.map(b => parseInt(b.value, 10)).filter(id => !isNaN(id))));
-    if (autoUpload && selectedGpmIds.length === 0) {
-        showToast('⚠️ Vui lòng chọn ít nhất 1 Profile nhận video (hoặc bỏ chọn "Tự động tải lên TikTok" nếu chỉ muốn render)!', 'warning');
+    if ((autoUpload || isWarmupOnly) && selectedGpmIds.length === 0) {
+        showToast('⚠️ Vui lòng chọn ít nhất 1 Profile nhận video / nuôi nick!', 'warning');
         return;
     }
 
@@ -1522,6 +1966,8 @@ async function handleCreateCampaignSubmit(e) {
         random_delay_minutes: randomDelay,
         min_post_interval_minutes: document.getElementById('campaignMinPostIntervalSelect')?.value ? parseInt(document.getElementById('campaignMinPostIntervalSelect').value, 10) : null,
         warmup_mode: warmup,
+        warmup_only: isWarmupOnly,
+        warmup_duration_mins: parseInt(document.getElementById('campaignWarmupDurationSelect')?.value, 10) || 10,
         is_active: 1,
         auto_engagement_enabled: document.getElementById('campaignAutoEngagementSwitch')?.checked ? 1 : 0,
         auto_pin_comment: document.getElementById('campaignAutoPinCommentSwitch')?.checked ? 1 : 0,
@@ -1682,6 +2128,22 @@ async function openEditCampaignModal(id) {
         document.getElementById('editCampaignId').value = c.id;
         document.getElementById('editCampaignNameInput').value = c.name || '';
 
+        // Reset sort states & buttons
+        editCampaignChannelsSortAsc = true;
+        editCampaignGpmSortAsc = true;
+        updateCampaignSortBtnUI('btnEditSortCampaignChannels', 'editSortCampaignChannelsIcon', 'editSortCampaignChannelsText', true);
+        updateCampaignSortBtnUI('btnEditSortCampaignGpm', 'editSortCampaignGpmIcon', 'editSortCampaignGpmText', true);
+
+        // Reset channel & gpm search filters & group dropdowns
+        const editChSearch = document.getElementById('editCampaignChannelFilterInput');
+        if (editChSearch) editChSearch.value = '';
+        const editChGrpSel = document.getElementById('editCampaignChannelGroupFilter');
+        if (editChGrpSel) editChGrpSel.value = 'all';
+        const editGpmSearch = document.getElementById('editCampaignGpmFilterInput');
+        if (editGpmSearch) editGpmSearch.value = '';
+        const editGpmGrpSel = document.getElementById('editCampaignGpmGroupFilter');
+        if (editGpmGrpSel) editGpmGrpSel.value = 'all';
+
         // Restore Source Mode & Local Folder
         updateCampaignSourceModeUI('edit', 'youtube');
         const tCheck = document.getElementById('editCampTargetTikTok');
@@ -1692,32 +2154,50 @@ async function openEditCampaignModal(id) {
             toggleCampaignAutoUpload('edit', editAutoUploadSwitch.checked);
         }
 
-        // Channels & Profiles lists
-        if (!modalAllSavedChannels || !modalAllSavedChannels.length) {
-            try {
-                const chRes = await fetch('/api/youtube/channels');
-                modalAllSavedChannels = await chRes.json();
-            } catch (_) { }
+        // Concurrently fetch fresh campaign, channels, profiles and groups in parallel
+        const [cRes, chRes, gpmRes, grpRes, defData] = await Promise.all([
+            fetch('/api/campaigns').then(r => r.ok ? r.json() : []).catch(() => cachedCampaigns || []),
+            (!modalAllSavedChannels || !modalAllSavedChannels.length)
+                ? fetch('/api/youtube/channels').then(r => r.ok ? r.json() : []).catch(() => [])
+                : Promise.resolve(modalAllSavedChannels),
+            (!modalAllGpmProfiles || !modalAllGpmProfiles.length)
+                ? fetch('/api/gpm/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
+                : Promise.resolve(modalAllGpmProfiles),
+            (!window.cachedChannelGroups || !window.cachedChannelGroups.length)
+                ? fetch('/api/channel-groups').then(r => r.ok ? r.json() : null).catch(() => null)
+                : Promise.resolve(null),
+            fetch('/api/settings/defaults').then(r => r.ok ? r.json() : {}).catch(() => ({}))
+        ]);
+
+        if (Array.isArray(cRes)) cachedCampaigns = cRes;
+        if (Array.isArray(chRes) && chRes.length) {
+            modalAllSavedChannels = chRes;
+            window.cachedSavedChannels = chRes;
         }
-        if (!modalAllGpmProfiles || !modalAllGpmProfiles.length) {
-            try {
-                const gpmRes = await fetch('/api/gpm/profiles');
-                modalAllGpmProfiles = await gpmRes.json();
-            } catch (_) { }
+        if (Array.isArray(gpmRes) && gpmRes.length) {
+            modalAllGpmProfiles = gpmRes;
+            window.cachedProfiles = gpmRes;
+        }
+        if (grpRes && grpRes.status === 'success' && grpRes.groups) {
+            window.cachedChannelGroups = grpRes.groups;
         }
 
-        renderEditCampaignChannelsCheckboxes(modalAllSavedChannels, c.channel_ids_list || []);
-        renderEditCampaignGpmCheckboxes(modalAllGpmProfiles, c.gpm_profile_ids_list || []);
+        const { usedChannelIds, usedProfileIds } = getUsedCampaignResources(c.id);
+        editModalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()));
+        editModalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => !usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim())));
+
+        renderEditCampaignChannelsCheckboxes(editModalAvailableSavedChannels, c.channel_ids_list || []);
+        renderEditCampaignGpmCheckboxes(editModalAvailableGpmProfiles, c.gpm_profile_ids_list || []);
+
+        await populateCampaignGroupFilters('edit');
 
         // Directories
         let defaultDl = 'data/downloads';
         let defaultRd = 'data/rendered';
-        try {
-            const defRes = await fetch('/api/settings/defaults');
-            const defData = await defRes.json();
+        if (defData) {
             if (defData.download_dir) defaultDl = defData.download_dir;
             if (defData.render_dir) defaultRd = defData.render_dir;
-        } catch (_) { }
+        }
 
         const editDlInput = document.getElementById('editCampaignDownloadDir');
         const editRdInput = document.getElementById('editCampaignRenderDir');
@@ -1891,6 +2371,14 @@ async function openEditCampaignModal(id) {
         const warmup = document.getElementById('editCampaignWarmupSwitch');
         if (warmup) warmup.checked = c.warmup_mode === 1;
 
+        const editWarmupOnly = document.getElementById('editCampaignWarmupOnlySwitch');
+        if (editWarmupOnly) {
+            editWarmupOnly.checked = (c.warmup_only === 1);
+            toggleCampaignWarmupOnly('edit', c.warmup_only === 1);
+        }
+        const editWarmupDur = document.getElementById('editCampaignWarmupDurationSelect');
+        if (editWarmupDur) editWarmupDur.value = String(c.warmup_duration_mins || 10);
+
 
         // Golden 30-Minute Engagement restore
         const autoEngSwitch = document.getElementById('editCampaignAutoEngagementSwitch');
@@ -1933,24 +2421,45 @@ function renderEditCampaignChannelsCheckboxes(channels, selectedIds = []) {
     if (!chListEl) return;
 
     if (!channels || !channels.length) {
-        chListEl.innerHTML = '<div class="text-muted text-center py-3" style="font-size:12px;">Chưa có kênh nào được lưu.</div>';
+        const allList = (modalAllSavedChannels && modalAllSavedChannels.length) ? modalAllSavedChannels : (window.modalAllSavedChannels || []);
+        const hasSaved = allList && allList.length > 0;
+        chListEl.innerHTML = hasSaved ? `
+            <div class="text-muted text-center py-4" style="font-size:12.5px; padding: 20px 10px;">
+                <i class="fa-solid fa-circle-info" style="font-size:22px; color:var(--accent-cyan); display:block; margin-bottom:8px;"></i>
+                Tất cả kênh YouTube đã được phân bổ vào các chiến dịch khác.
+            </div>
+        ` : '<div class="text-muted text-center py-3" style="font-size:12px;">Chưa có kênh nào được lưu.</div>';
         updateEditSelectedChannelsCount();
         return;
     }
 
     const selSet = new Set((selectedIds || []).map(String));
-    chListEl.innerHTML = channels.map(ch => {
+
+    const sorted = [...channels].sort((a, b) => {
+        const nameA = (a.display_name || a.title || '').toLowerCase();
+        const nameB = (b.display_name || b.title || '').toLowerCase();
+        return editCampaignChannelsSortAsc
+            ? nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' })
+            : nameB.localeCompare(nameA, 'vi', { sensitivity: 'base' });
+    });
+
+    chListEl.innerHTML = sorted.map(ch => {
         const isChecked = selSet.has(String(ch.channel_id));
+        const grpBadge = ch.group_name
+            ? `<span class="badge" title="Nhóm: ${escapeHtml(ch.group_name)}" style="font-size:9.5px; background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3); padding:1px 6px; border-radius:4px; flex-shrink:0; max-width:130px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"><i class="${escapeHtml(ch.group_icon || 'fa-solid fa-folder')}" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ch.group_name)}</span></span>`
+            : '';
         return `
-            <label class="multi-select-item" style="display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:4px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03);">
-                <input type="checkbox" class="edit-campaign-ch-check" value="${escapeHtml(ch.channel_id)}" ${isChecked ? 'checked' : ''} onchange="updateEditSelectedChannelsCount()">
-                <i class="fa-brands fa-youtube" style="color:#ff0000; font-size:14px;"></i>
-                <span style="font-weight:600; color:#fff; flex:1;">${escapeHtml(ch.display_name || ch.title)}</span>
-                <span style="font-size:11px; color:var(--accent-cyan);">${formatNumber(ch.subscriber_count || 0)} subs</span>
-                <span class="badge badge-secondary" style="font-size:10px;">${escapeHtml(ch.country || 'US')}</span>
+            <label class="multi-select-item" data-channel-id="${escapeHtml(ch.channel_id)}" data-group-id="${escapeHtml(String(ch.group_id || ''))}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
+                <input type="checkbox" class="edit-campaign-ch-check" value="${escapeHtml(ch.channel_id)}" ${isChecked ? 'checked' : ''} onchange="updateEditSelectedChannelsCount()" style="flex-shrink:0;">
+                <i class="fa-brands fa-youtube" style="color:#ff0000; font-size:14px; flex-shrink:0;"></i>
+                <span style="font-weight:600; color:#fff; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(ch.display_name || ch.title)}">${escapeHtml(ch.display_name || ch.title)}</span>
+                ${grpBadge}
+                <span style="font-size:11px; color:var(--accent-cyan); white-space:nowrap; flex-shrink:0;">${formatNumber(ch.subscriber_count || 0)} subs</span>
+                <span class="badge badge-secondary" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${escapeHtml(ch.country || 'US')}</span>
             </label>
         `;
     }).join('');
+    chListEl.scrollTop = 0;
 
     updateEditSelectedChannelsCount();
 }
@@ -1960,7 +2469,14 @@ function renderEditCampaignGpmCheckboxes(profiles, selectedIds = []) {
     if (!gpmListEl) return;
 
     if (!profiles || !profiles.length) {
-        gpmListEl.innerHTML = '<div class="text-muted text-center py-3" style="font-size:12px;">Chưa có profile nào.</div>';
+        const allList = (modalAllGpmProfiles && modalAllGpmProfiles.length) ? modalAllGpmProfiles : (window.modalAllGpmProfiles || []);
+        const hasProfiles = allList && allList.length > 0;
+        gpmListEl.innerHTML = hasProfiles ? `
+            <div class="text-muted text-center py-4" style="font-size:12.5px; padding: 20px 10px;">
+                <i class="fa-solid fa-circle-info" style="font-size:22px; color:var(--accent-gold); display:block; margin-bottom:8px;"></i>
+                Tất cả tài khoản / profile đã được gán vào các chiến dịch khác.
+            </div>
+        ` : '<div class="text-muted text-center py-3" style="font-size:12px;">Chưa có profile nào.</div>';
         updateEditSelectedGpmCount();
         return;
     }
@@ -1968,9 +2484,21 @@ function renderEditCampaignGpmCheckboxes(profiles, selectedIds = []) {
     const selSet = new Set((selectedIds || []).map(String));
     const itemsHtml = [];
 
-    profiles.forEach(p => {
+    const sorted = [...profiles].sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return editCampaignGpmSortAsc
+            ? nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' })
+            : nameB.localeCompare(nameA, 'vi', { sensitivity: 'base' });
+    });
+
+    sorted.forEach(p => {
         const plat = (p.platform || 'tiktok').toLowerCase();
         const hasSubChannels = (plat === 'youtube' || plat === 'facebook') && Array.isArray(p.channels) && p.channels.length > 0;
+        const grpName = getCampaignProfileGroupName(p);
+        const grpBadge = grpName
+            ? `<span class="badge" title="Nhóm: ${escapeHtml(grpName)}" style="background:rgba(99,102,241,0.15); color:#a5b4fc; border:1px solid rgba(99,102,241,0.3); font-size:9.5px; padding:1px 6px; border-radius:4px; flex-shrink:0; max-width:120px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"><i class="fa-solid fa-folder" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(grpName)}</span></span>`
+            : '';
 
         if (hasSubChannels) {
             p.channels.forEach(ch => {
@@ -2008,19 +2536,20 @@ function renderEditCampaignGpmCheckboxes(profiles, selectedIds = []) {
                 const dupBadge = isDup ? '<span class="badge" style="background:rgba(234,179,8,0.18); color:#eab308; font-size:9px; padding:1px 4px; flex-shrink:0;" title="Tài khoản này có mặt trên nhiều trình duyệt"><i class="fa-solid fa-link"></i> Trùng nick</span>' : '';
 
                 itemsHtml.push(`
-                <label class="multi-select-item" data-platform="${plat}" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03); min-width:0;">
+                <label class="multi-select-item" data-platform="${plat}" data-group-name="${escapeHtml(grpName)}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
                     <input type="checkbox" class="edit-campaign-gpm-check" value="${p.id}" data-gpm-id="${escapeHtml(p.gpm_id)}" data-account-key="${escapeHtml(accountKey)}" data-browser-label="${escapeHtml(bLabel)}" data-profile-name="${escapeHtml(p.name)}" data-channel-id="${escapeHtml(ch.channel_id || '')}" data-channel-name="${escapeHtml(chTitle)}" data-platform="${plat}" ${isChecked ? 'checked' : ''} onchange="syncCampaignDuplicateCheckboxes('edit'); if(this.checked && '${escapeHtml(ch.channel_id)}') handleChannelSelectionChange('${escapeHtml(p.gpm_id)}', '${escapeHtml(ch.channel_id)}')" style="flex-shrink:0;">
                     <span style="flex-shrink:0; display:inline-flex; align-items:center;">${platIcon}</span>
                     <div style="flex:1; min-width:0; display:flex; align-items:center; gap:8px; overflow:hidden;">
                         ${bBadge}
-                        <span style="font-size:11px; flex-shrink:0; color:var(--text-secondary); background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px; white-space:nowrap;">${escapeHtml(p.name)}</span>
-                        <span style="font-weight:600; color:#fff; min-width:0; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</span>
+                        <span style="font-size:11px; flex-shrink:0; color:var(--text-secondary); background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                        <span style="font-weight:600; color:#fff; min-width:0; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(chTitle)}">${escapeHtml(chTitle)}</span>
+                        ${grpBadge}
                         ${typeBadge}
                         ${dupBadge}
                     </div>
                     <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                        <span style="font-size:11px; color:${platColor}; white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(chSub)}">${escapeHtml(chSub)}</span>
-                        <span class="badge ${count >= 1000 ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap;">${count.toLocaleString()} ${flwText}</span>
+                        <span style="font-size:11px; color:${platColor}; white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(chSub)}">${escapeHtml(chSub)}</span>
+                        <span class="badge ${count >= 1000 ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${count.toLocaleString()} ${flwText}</span>
                     </div>
                 </label>
                 `);
@@ -2050,17 +2579,18 @@ function renderEditCampaignGpmCheckboxes(profiles, selectedIds = []) {
             const dupBadge = isDup ? '<span class="badge" style="background:rgba(234,179,8,0.18); color:#eab308; font-size:9px; padding:1px 4px; flex-shrink:0;" title="Tài khoản này có mặt trên nhiều trình duyệt"><i class="fa-solid fa-link"></i> Trùng nick</span>' : '';
 
             itemsHtml.push(`
-            <label class="multi-select-item" data-platform="${plat}" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; border-bottom:1px solid rgba(255,255,255,0.03); min-width:0;">
+            <label class="multi-select-item" data-platform="${plat}" data-group-name="${escapeHtml(grpName)}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:12.5px; min-width:0; overflow:hidden; min-height:42px; margin-bottom:4px;">
                 <input type="checkbox" class="edit-campaign-gpm-check" value="${p.id}" data-gpm-id="${escapeHtml(p.gpm_id)}" data-account-key="${escapeHtml(accountKey)}" data-browser-label="${escapeHtml(bLabel)}" data-profile-name="${escapeHtml(p.name)}" data-channel-id="" data-channel-name="${escapeHtml(displayName)}" data-platform="${plat}" ${isChecked ? 'checked' : ''} onchange="syncCampaignDuplicateCheckboxes('edit');" style="flex-shrink:0;">
                 <span style="flex-shrink:0; display:inline-flex; align-items:center;">${platIcon}</span>
                 <div style="flex:1; min-width:0; display:flex; align-items:center; gap:8px; overflow:hidden;">
                     ${bBadge}
-                    <span style="font-weight:600; color:#fff; min-width:0; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    <span style="font-weight:600; color:#fff; min-width:0; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    ${grpBadge}
                     ${dupBadge}
                 </div>
                 <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
-                    <span style="font-size:11px; color:${platColor}; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${displayName}">${displayName}</span>
-                    <span class="badge ${p.eligible_10k ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap;">${(p.followers_count || 0).toLocaleString()} flw</span>
+                    <span style="font-size:11px; color:${platColor}; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${displayName}">${displayName}</span>
+                    <span class="badge ${p.eligible_10k ? 'badge-success' : 'badge-secondary'}" style="font-size:10px; white-space:nowrap; flex-shrink:0;">${(p.followers_count || 0).toLocaleString()} flw</span>
                 </div>
             </label>
             `);
@@ -2068,6 +2598,7 @@ function renderEditCampaignGpmCheckboxes(profiles, selectedIds = []) {
     });
 
     gpmListEl.innerHTML = itemsHtml.join('');
+    gpmListEl.scrollTop = 0;
     filterCampaignGpmAccounts('edit');
     syncCampaignDuplicateCheckboxes('edit');
 }
@@ -2124,10 +2655,20 @@ function selectAllEditCampaignGpm(select) {
 }
 
 function filterEditCampaignChannelList(query) {
-    const q = (query || '').toLowerCase().trim();
+    const q = (query !== undefined ? query : (document.getElementById('editCampaignChannelFilterInput')?.value || '')).toLowerCase().trim();
+    const groupFilter = document.getElementById('editCampaignChannelGroupFilter')?.value || 'all';
     const items = document.querySelectorAll('#editCampaignChannelsList .multi-select-item');
     items.forEach(item => {
-        item.style.display = item.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+        const text = item.textContent.toLowerCase();
+        const groupId = item.getAttribute('data-group-id') || '';
+        const matchQuery = !q || text.includes(q);
+        let matchGroup = true;
+        if (groupFilter === 'ungrouped') {
+            matchGroup = !groupId || groupId === '0' || groupId === 'null';
+        } else if (groupFilter !== 'all') {
+            matchGroup = (groupId === groupFilter);
+        }
+        item.style.display = (matchQuery && matchGroup) ? 'flex' : 'none';
     });
 }
 
@@ -2165,22 +2706,23 @@ async function handleEditCampaignSubmit(e) {
     const selectedChannelIds = Array.from(chBoxes).map(b => b.value);
     const editLocalFolder = '';
     const editSourceMode = 'youtube';
+    const isWarmupOnly = document.getElementById('editCampaignWarmupOnlySwitch')?.checked ? 1 : 0;
 
-    if (selectedChannelIds.length === 0) {
+    if (!isWarmupOnly && selectedChannelIds.length === 0) {
         showToast('⚠️ Vui lòng chọn ít nhất 1 Kênh YouTube nguồn!', 'warning');
         switchModalTab('edit', 'source');
         return;
     }
 
-    const autoUpload = document.getElementById('editCampaignAutoUploadSwitch')?.checked ? 1 : 0;
+    const autoUpload = isWarmupOnly ? 0 : (document.getElementById('editCampaignAutoUploadSwitch')?.checked ? 1 : 0);
 
     const gpmBoxes = Array.from(document.querySelectorAll('.edit-campaign-gpm-check:checked')).filter(b => {
         const item = b.closest('label');
         return item && item.style.display !== 'none';
     });
     const selectedGpmIds = Array.from(new Set(gpmBoxes.map(b => parseInt(b.value, 10)).filter(id => !isNaN(id))));
-    if (autoUpload && selectedGpmIds.length === 0) {
-        showToast('⚠️ Vui lòng chọn ít nhất 1 Profile nhận video (hoặc bỏ chọn "Tự động tải lên TikTok" nếu chỉ muốn render)!', 'warning');
+    if ((autoUpload || isWarmupOnly) && selectedGpmIds.length === 0) {
+        showToast('⚠️ Vui lòng chọn ít nhất 1 Profile nhận video / nuôi nick!', 'warning');
         return;
     }
 
@@ -2329,6 +2871,8 @@ async function handleEditCampaignSubmit(e) {
         random_delay_minutes: randomDelay,
         min_post_interval_minutes: document.getElementById('editCampaignMinPostIntervalSelect')?.value ? parseInt(document.getElementById('editCampaignMinPostIntervalSelect').value, 10) : null,
         warmup_mode: warmup,
+        warmup_only: isWarmupOnly,
+        warmup_duration_mins: parseInt(document.getElementById('editCampaignWarmupDurationSelect')?.value, 10) || 10,
         is_active: editCampaignOriginalData ? editCampaignOriginalData.is_active : 1,
         auto_engagement_enabled: document.getElementById('editCampaignAutoEngagementSwitch')?.checked ? 1 : 0,
         auto_pin_comment: document.getElementById('editCampaignAutoPinCommentSwitch')?.checked ? 1 : 0,
@@ -2741,6 +3285,11 @@ window.filterCampaignGpmAccounts = filterCampaignGpmAccounts;
 window.filterCampaignGpmList = filterCampaignGpmList;
 window.filterEditCampaignChannelList = filterEditCampaignChannelList;
 window.filterEditCampaignGpmList = filterEditCampaignGpmList;
+window.toggleSortCampaignChannels = toggleSortCampaignChannels;
+window.toggleSortCampaignGpm = toggleSortCampaignGpm;
+window.toggleEditSortCampaignChannels = toggleEditSortCampaignChannels;
+window.toggleEditSortCampaignGpm = toggleEditSortCampaignGpm;
+window.populateCampaignGroupFilters = populateCampaignGroupFilters;
 window.loadCampaigns = loadCampaigns;
 window.filterAndRenderCampaigns = filterAndRenderCampaigns;
 window.goToCampaignPage = goToCampaignPage;
@@ -2775,6 +3324,10 @@ window.triggerCampaignTestRun = triggerCampaignTestRun;
 window.triggerDirectCampaignRun = triggerDirectCampaignRun;
 window.stopCampaignRun = stopCampaignRun;
 window.triggerProcessUploads = triggerProcessUploads;
+window.modalAvailableSavedChannels = modalAvailableSavedChannels;
+window.modalAvailableGpmProfiles = modalAvailableGpmProfiles;
+window.editModalAvailableSavedChannels = editModalAvailableSavedChannels;
+window.editModalAvailableGpmProfiles = editModalAvailableGpmProfiles;
 
 function syncCampaignDuplicateCheckboxes(mode = 'new') {
     const isNew = mode === 'new';

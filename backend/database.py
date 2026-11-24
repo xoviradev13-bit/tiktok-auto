@@ -59,7 +59,7 @@ def init_db():
         "min_video_duration": "INTEGER DEFAULT NULL",
         "max_video_duration": "INTEGER DEFAULT NULL",
         "include_shorts": "INTEGER DEFAULT NULL",
-        "include_longform": "INTEGER DEFAULT NULL",
+        "include_longform": "INTEGER DEFAULT 0",
         "disable_subtitle_for_shorts": "INTEGER DEFAULT 1",
         "hook_angle": "TEXT DEFAULT 'auto'",
         "generate_variants": "INTEGER DEFAULT 0",
@@ -90,6 +90,7 @@ def init_db():
         "target_platforms": "TEXT DEFAULT 'tiktok'",
         "youtube_profile_ids": "TEXT DEFAULT ''",
         "facebook_profile_ids": "TEXT DEFAULT ''",
+        "group_id": "INTEGER DEFAULT NULL",
     }
     for col, col_type in new_cols.items():
         if col not in existing_cols:
@@ -97,6 +98,19 @@ def init_db():
                 cursor.execute(f"ALTER TABLE channels ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+
+    # Bảng Quản lý Nhóm Kênh YouTube (Channel Groups)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS channel_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT DEFAULT '',
+        color TEXT DEFAULT '#6366f1',
+        icon TEXT DEFAULT 'fa-layer-group',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
 
     # Mặc định tắt phụ đề cho Shorts là 1 (checked) cho kênh
     try:
@@ -177,7 +191,7 @@ def init_db():
     # Migration columns cho gpm_profiles nếu chưa có
     cursor.execute("PRAGMA table_info(gpm_profiles)")
     existing_gpm_cols = {row["name"] for row in cursor.fetchall()}
-    for col in ["tiktok_nickname", "tiktok_uid", "sec_uid", "browser_type", "platform", "channel_handle", "fb_page_id", "country", "creator_program", "flop_status", "flop_since", "flop_window_views"]:
+    for col in ["tiktok_nickname", "tiktok_uid", "sec_uid", "browser_type", "platform", "channel_handle", "fb_page_id", "country", "creator_program", "flop_status", "flop_since", "flop_window_views", "group_name", "group_id", "campaign"]:
         if col not in existing_gpm_cols:
             try:
                 cursor.execute(f"ALTER TABLE gpm_profiles ADD COLUMN {col} TEXT DEFAULT ''")
@@ -378,6 +392,12 @@ def init_db():
         pass
 
     # Bảng Chiến dịch tự động hóa (Auto-Pilot Campaigns)
+    try:
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('download_include_longform', '0')")
+        cursor.execute("UPDATE settings SET value = '0' WHERE key = 'download_include_longform' AND value = '1'")
+    except Exception:
+        pass
+
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS campaigns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -424,12 +444,14 @@ def init_db():
         "bgm_volume": "REAL DEFAULT 0.15",
         "min_post_interval_minutes": "INTEGER DEFAULT 60",
         "include_shorts": "INTEGER DEFAULT 1",
-        "include_longform": "INTEGER DEFAULT 1",
+        "include_longform": "INTEGER DEFAULT 0",
         "shorts_keep_original": "INTEGER DEFAULT 1",
         "disable_subtitle_for_shorts": "INTEGER DEFAULT 1",
         "subtitle_position": "TEXT DEFAULT 'center'",
         "auto_engagement_enabled": "INTEGER DEFAULT 0",
         "auto_pin_comment": "INTEGER DEFAULT 1",
+        "warmup_only": "INTEGER DEFAULT 0",
+        "warmup_duration_mins": "INTEGER DEFAULT 10",
         "pin_comment_delay_mins": "INTEGER DEFAULT 3",
         "auto_reply_comments": "INTEGER DEFAULT 1",
         "reply_comments_delay_mins": "INTEGER DEFAULT 20",

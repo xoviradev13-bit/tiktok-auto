@@ -39,14 +39,15 @@ def kill_process_on_port(port: int):
     """Tự động giải phóng cổng nếu có tiến trình cũ chiếm dụng (NIST SP 800-218 / Command Injection Prevention)"""
     try:
         import subprocess
-        output = subprocess.check_output(["netstat", "-ano"], text=True, stderr=subprocess.DEVNULL)
+        cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        output = subprocess.check_output(["netstat", "-ano"], text=True, stderr=subprocess.DEVNULL, creationflags=cflags)
         target = f":{port}"
         for line in output.strip().split("\n"):
             parts = line.strip().split()
             if len(parts) >= 5 and "LISTENING" in parts and any(target in p for p in parts[:2]):
                 pid = parts[-1]
                 if pid.isdigit() and int(pid) > 0:
-                    subprocess.run(["taskkill", "/F", "/PID", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(["taskkill", "/F", "/PID", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=cflags)
                     time.sleep(0.5)
     except Exception:
         pass
@@ -187,19 +188,30 @@ if __name__ == "__main__":
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
-    # Chờ server FastAPI sẵn sàng nhận kết nối thay vì sleep cố định
-    start_wait = time.time()
-    server_ready = False
-    while time.time() - start_wait < 15:
-        if is_port_in_use(SERVER_PORT, SERVER_HOST):
-            server_ready = True
-            break
-        time.sleep(0.2)
-    if not server_ready:
-        print(f"[WARN] Server FastAPI mất quá 15s để khởi động trên port {SERVER_PORT}.")
-    else:
-        time.sleep(0.3)
     dashboard_url = f"http://{SERVER_HOST}:{SERVER_PORT}"
+
+    # Chờ máy chủ FastAPI thực sự phản hồi HTTP trước khi mở giao diện WebView2 (tránh lỗi 127.0.0.1 refused to connect)
+    def wait_for_http_ready(url: str, timeout: float = 30.0) -> bool:
+        import urllib.request
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "ClipFlow-HealthCheck"})
+                with urllib.request.urlopen(req, timeout=1.0) as resp:
+                    if resp.status < 500:
+                        return True
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return False
+
+    server_ready = wait_for_http_ready(dashboard_url, timeout=30.0)
+    if not server_ready:
+        print(f"[WARN] Server FastAPI mất quá 30s để phản hồi HTTP trên {dashboard_url}.")
+    else:
+        # Buffer ngắn đảm bảo engine ASGI đã hoàn tất mount router
+        time.sleep(0.3)
+
     print(f"\n=======================================================")
     print(f"🚀 CLIPFLOW & AI ENGINE ĐANG CHẠY TẠI:")
     print(f"👉 {dashboard_url}")

@@ -9,14 +9,99 @@ let gpmSortDirection = 'desc';
 let gpmCurrentPage = 1;
 let gpmPageSize = 20;
 
+function getProfileGroupName(p) {
+    if (!p) return '';
+    const isUuid = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const name = (p.group_name || '').trim();
+    if (name && !isUuid(name)) return name;
+    const id = (p.group_id || '').trim();
+    if (id && !isUuid(id)) return id;
+    if ((name && isUuid(name)) || (id && isUuid(id))) {
+        return 'Default group';
+    }
+    return '';
+}
+
 async function loadGpmProfiles() {
     try {
         const res = await fetch('/api/gpm/profiles');
         const profiles = await res.json();
         cachedGpmProfiles = profiles;
+        populateGpmGroupAndCampaignFilters();
         renderGpmProfilesTable();
     } catch (err) {
         console.error('Lỗi nạp profiles:', err);
+    }
+}
+
+function populateGpmGroupAndCampaignFilters() {
+    const groupSelect = document.getElementById('filterGpmGroup');
+    const campaignSelect = document.getElementById('filterGpmCampaign');
+    if (!cachedGpmProfiles || !Array.isArray(cachedGpmProfiles)) return;
+
+    // 1. Nhóm (Groups)
+    if (groupSelect) {
+        const currentGroupVal = groupSelect.value || 'ALL';
+        const groupsSet = new Set();
+        let hasUngrouped = false;
+
+        cachedGpmProfiles.forEach(p => {
+            const g = getProfileGroupName(p);
+            if (g) {
+                groupsSet.add(g);
+            } else {
+                hasUngrouped = true;
+            }
+        });
+
+        const sortedGroups = Array.from(groupsSet).sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
+        let groupHtml = `<option value="ALL">Tất cả nhóm</option>`;
+        if (hasUngrouped) {
+            groupHtml += `<option value="UNGROUPED">Chưa phân nhóm</option>`;
+        }
+        sortedGroups.forEach(g => {
+            groupHtml += `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`;
+        });
+        groupSelect.innerHTML = groupHtml;
+        if (currentGroupVal && (currentGroupVal === 'ALL' || currentGroupVal === 'UNGROUPED' || groupsSet.has(currentGroupVal))) {
+            groupSelect.value = currentGroupVal;
+        } else {
+            groupSelect.value = 'ALL';
+        }
+    }
+
+    // 2. Chiến Dịch (Campaigns)
+    if (campaignSelect) {
+        const currentCampVal = campaignSelect.value || 'ALL';
+        const campaignsSet = new Set();
+        let hasUnassigned = false;
+
+        cachedGpmProfiles.forEach(p => {
+            const cList = p.campaign_names && p.campaign_names.length > 0 ? p.campaign_names : (p.campaign_name ? [p.campaign_name] : []);
+            if (cList.length > 0) {
+                cList.forEach(c => {
+                    const cleanC = (c || '').trim();
+                    if (cleanC) campaignsSet.add(cleanC);
+                });
+            } else {
+                hasUnassigned = true;
+            }
+        });
+
+        const sortedCampaigns = Array.from(campaignsSet).sort((a, b) => a.localeCompare(b, 'vi', { sensitivity: 'base' }));
+        let campHtml = `<option value="ALL">Tất cả chiến dịch</option>`;
+        if (hasUnassigned) {
+            campHtml += `<option value="UNASSIGNED">Chưa gán chiến dịch</option>`;
+        }
+        sortedCampaigns.forEach(c => {
+            campHtml += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+        });
+        campaignSelect.innerHTML = campHtml;
+        if (currentCampVal && (currentCampVal === 'ALL' || currentCampVal === 'UNASSIGNED' || campaignsSet.has(currentCampVal))) {
+            campaignSelect.value = currentCampVal;
+        } else {
+            campaignSelect.value = 'ALL';
+        }
     }
 }
 
@@ -35,11 +120,12 @@ function toggleGpmSortDirection() {
 }
 
 function handleGpmHeaderSort(field) {
-    if (gpmSortField === field) {
+    const effField = field === 'campaign' ? 'campaign_name' : field;
+    if (gpmSortField === effField) {
         gpmSortDirection = gpmSortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-        gpmSortField = field;
-        gpmSortDirection = (field === 'followers_count' || field === 'eligible_10k') ? 'desc' : 'asc';
+        gpmSortField = effField;
+        gpmSortDirection = (effField === 'followers_count' || effField === 'total_views' || effField === 'eligible_10k') ? 'desc' : 'asc';
     }
     const select = document.getElementById('sortGpmField');
     if (select) select.value = gpmSortField;
@@ -56,6 +142,10 @@ function resetGpmFilters() {
     gpmCurrentPage = 1;
     const sortSel = document.getElementById('sortGpmField');
     if (sortSel) sortSel.value = 'followers_count';
+    const filterGroup = document.getElementById('filterGpmGroup');
+    if (filterGroup) filterGroup.value = 'ALL';
+    const filterCampaign = document.getElementById('filterGpmCampaign');
+    if (filterCampaign) filterCampaign.value = 'ALL';
     const filterCountry = document.getElementById('filterGpmCountry');
     if (filterCountry) filterCountry.value = 'ALL';
     const filterBeta = document.getElementById('filterGpmBeta');
@@ -89,6 +179,8 @@ async function exportGpmProfilesCsv() {
             console.warn('Lỗi tải profiles trước khi xuất CSV:', e);
         }
     }
+    const filterGroup = document.getElementById('filterGpmGroup')?.value || 'ALL';
+    const filterCampaign = document.getElementById('filterGpmCampaign')?.value || 'ALL';
     const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
     const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
     const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
@@ -99,6 +191,27 @@ async function exportGpmProfilesCsv() {
     const keyword = (document.getElementById('searchGpmKeyword')?.value || '').trim().toLowerCase();
 
     let list = (cachedGpmProfiles || []).slice();
+
+    // Filter Group
+    if (filterGroup !== 'ALL') {
+        if (filterGroup === 'UNGROUPED') {
+            list = list.filter(p => !getProfileGroupName(p));
+        } else {
+            list = list.filter(p => getProfileGroupName(p).toLowerCase() === filterGroup.toLowerCase());
+        }
+    }
+
+    // Filter Campaign
+    if (filterCampaign !== 'ALL') {
+        if (filterCampaign === 'UNASSIGNED') {
+            list = list.filter(p => (!p.campaign_names || p.campaign_names.length === 0) && !p.campaign_name);
+        } else {
+            list = list.filter(p => {
+                const cList = (p.campaign_names || []).concat(p.campaign_name ? [p.campaign_name] : []);
+                return cList.some(cn => (cn || '').toLowerCase() === filterCampaign.toLowerCase());
+            });
+        }
+    }
 
     // Filter Country
     if (filterCountry !== 'ALL') {
@@ -186,6 +299,12 @@ async function exportGpmProfilesCsv() {
             res = (a.followers_count || 0) - (b.followers_count || 0);
         } else if (gpmSortField === 'name') {
             res = (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' });
+        } else if (gpmSortField === 'group_name') {
+            res = getProfileGroupName(a).localeCompare(getProfileGroupName(b), 'vi', { sensitivity: 'base' });
+        } else if (gpmSortField === 'total_views') {
+            res = (a.total_views || 0) - (b.total_views || 0);
+        } else if (gpmSortField === 'campaign_name' || gpmSortField === 'campaign') {
+            res = (a.campaign_name || '').localeCompare(b.campaign_name || '', 'vi', { sensitivity: 'base' });
         } else if (gpmSortField === 'tiktok_username') {
             res = (a.tiktok_username || '').localeCompare(b.tiktok_username || '', 'vi', { sensitivity: 'base' });
         } else if (gpmSortField === 'eligible_10k') {
@@ -223,18 +342,25 @@ async function exportGpmProfilesCsv() {
         return gpmSortDirection === 'asc' ? res : -res;
     });
 
-    const header = ['Tên Profile', 'GPM ID', 'Nền Tảng', 'Account Username', 'Proxy', 'Số Follower / Subs', 'Đạt Chỉ Tiêu / Beta', 'Trạng Thái Theo Dõi', 'Lần Quét Cuối'];
+    const header = ['Tên Profile', 'GPM ID', 'Nhóm / Group', 'Account Username', 'Tổng Lượt Xem', 'Chiến Dịch', 'Nền Tảng', 'Quốc Gia VPN', 'Proxy', 'Số Follower / Subs', 'Đạt Chỉ Tiêu / Beta', 'Creator Program', 'Hiệu Suất / Flop', 'Trạng Thái Theo Dõi', 'Lần Quét Cuối'];
     const rows = [header, ...list.map(p => {
         const ns = (p.notify_status || 'tracking').toLowerCase();
         const nsLabel = ns === 'sent' ? 'Đã gửi' : (ns === 'muted' ? 'Bỏ theo dõi' : 'Đang theo dõi');
+        const cNames = p.campaign_names && p.campaign_names.length > 0 ? p.campaign_names.join(', ') : (p.campaign_name || '');
         return [
             p.name || '',
             p.gpm_id || '',
-            (p.platform || 'tiktok').toUpperCase(),
+            getProfileGroupName(p),
             p.tiktok_username || '',
+            p.total_views || 0,
+            cNames,
+            (p.platform || 'tiktok').toUpperCase(),
+            p.country || 'NONE',
             p.raw_proxy || '',
             p.followers_count || 0,
             isProfileEligible(p) ? 'Đạt' : 'Chưa Đạt',
+            p.creator_program || '',
+            p.flop_status || '',
             nsLabel,
             p.last_checked || ''
         ];
@@ -257,6 +383,8 @@ function renderGpmProfilesTable() {
     const eligibleGrid = document.getElementById('eligibleCardsGrid');
     if (!tbody) return;
 
+    const filterGroup = document.getElementById('filterGpmGroup')?.value || 'ALL';
+    const filterCampaign = document.getElementById('filterGpmCampaign')?.value || 'ALL';
     const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
     const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
     const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
@@ -272,6 +400,26 @@ function renderGpmProfilesTable() {
     let list = (cachedGpmProfiles || []).filter(p => {
         // Only support TikTok platform
         if ((p.platform || 'tiktok').toLowerCase() !== 'tiktok') return false;
+
+        // Group Filter
+        if (filterGroup !== 'ALL') {
+            const grp = getProfileGroupName(p).trim().toLowerCase();
+            if (filterGroup === 'UNGROUPED') {
+                if (grp) return false;
+            } else {
+                if (grp !== filterGroup.toLowerCase()) return false;
+            }
+        }
+
+        // Campaign Filter
+        if (filterCampaign !== 'ALL') {
+            const cList = (p.campaign_names || []).concat(p.campaign_name ? [p.campaign_name] : []);
+            if (filterCampaign === 'UNASSIGNED') {
+                if (cList.length > 0) return false;
+            } else {
+                if (!cList.some(cn => (cn || '').trim().toLowerCase() === filterCampaign.toLowerCase())) return false;
+            }
+        }
 
         // Country Filter
         if (filterCountry !== 'ALL') {
@@ -333,10 +481,13 @@ function renderGpmProfilesTable() {
         if (keyword) {
             const name = (p.name || '').toLowerCase();
             const u = (p.tiktok_username || '').toLowerCase();
+            const nick = (p.tiktok_nickname || '').toLowerCase();
             const proxy = (p.raw_proxy || '').toLowerCase();
             const gid = (p.gpm_id || '').toLowerCase();
             const nstat = (p.notify_status || 'tracking').toLowerCase();
-            if (!name.includes(keyword) && !u.includes(keyword) && !proxy.includes(keyword) && !gid.includes(keyword) && !nstat.includes(keyword)) {
+            const grp = getProfileGroupName(p).toLowerCase();
+            const camp = (p.campaign_name || (p.campaign_names || []).join(' ')).toLowerCase();
+            if (!name.includes(keyword) && !u.includes(keyword) && !nick.includes(keyword) && !proxy.includes(keyword) && !gid.includes(keyword) && !nstat.includes(keyword) && !grp.includes(keyword) && !camp.includes(keyword)) {
                 return false;
             }
         }
@@ -350,6 +501,12 @@ function renderGpmProfilesTable() {
             res = (a.followers_count || 0) - (b.followers_count || 0);
         } else if (gpmSortField === 'name') {
             res = (a.name || '').localeCompare(b.name || '', 'vi', { sensitivity: 'base' });
+        } else if (gpmSortField === 'group_name') {
+            res = getProfileGroupName(a).localeCompare(getProfileGroupName(b), 'vi', { sensitivity: 'base' });
+        } else if (gpmSortField === 'total_views') {
+            res = (a.total_views || 0) - (b.total_views || 0);
+        } else if (gpmSortField === 'campaign_name' || gpmSortField === 'campaign') {
+            res = (a.campaign_name || '').localeCompare(b.campaign_name || '', 'vi', { sensitivity: 'base' });
         } else if (gpmSortField === 'tiktok_username') {
             res = (a.tiktok_username || '').localeCompare(b.tiktok_username || '', 'vi', { sensitivity: 'base' });
         } else if (gpmSortField === 'eligible_10k') {
@@ -400,12 +557,13 @@ function renderGpmProfilesTable() {
     }
 
     // Cập nhật icon sort trên header
-    ['name', 'tiktok_username', 'followers_count', 'eligible_10k', 'creator_program', 'flop_status', 'notify_status'].forEach(f => {
+    ['name', 'group_name', 'tiktok_username', 'country', 'followers_count', 'total_views', 'campaign', 'eligible_10k', 'creator_program', 'flop_status', 'last_checked'].forEach(f => {
         const th = document.getElementById(`th-gpm-${f}`);
         if (!th) return;
         const icon = th.querySelector('.sort-icon');
         if (!icon) return;
-        if (gpmSortField === f) {
+        const isMatch = (f === 'campaign' && (gpmSortField === 'campaign_name' || gpmSortField === 'campaign')) || (gpmSortField === f);
+        if (isMatch) {
             th.classList.add('sorted');
             icon.className = gpmSortDirection === 'asc' ? 'fa-solid fa-sort-up sort-icon active' : 'fa-solid fa-sort-down sort-icon active';
         } else {
@@ -643,14 +801,19 @@ function renderGpmProfilesTable() {
             const targetTh = getPlatformThreshold(plat);
             const subLabel = plat === 'youtube' ? 'subs' : 'followers';
             const followersDisplay = `
-                <div>
-                    <strong style="font-size:14.5px; color:${isEligible ? 'var(--accent-gold)' : 'var(--accent-cyan)'};">
+                <div style="white-space:nowrap;">
+                    <strong style="font-size:14px; color:${isEligible ? 'var(--accent-gold)' : 'var(--accent-cyan)'};">
                         ${followersCount.toLocaleString()}
                     </strong>
                     <span style="font-size:11px; color:var(--text-muted); margin-left:2px;">${subLabel}</span>
-                    ${p.last_checked ? `<div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;"><i class="fa-regular fa-clock"></i> ${escapeHtml(p.last_checked.slice(5, 16))}</div>` : ''}
                 </div>
             `;
+
+            const lastCheckedDisplay = p.last_checked
+                ? `<div style="font-size:11.5px; color:var(--text-secondary); white-space:nowrap; display:inline-flex; align-items:center; gap:4px;" title="Lần quét gần nhất: ${escapeHtml(p.last_checked)}">
+                    <i class="fa-regular fa-clock" style="font-size:10px; color:var(--accent-cyan); opacity:0.8;"></i> ${escapeHtml(p.last_checked.slice(5, 16))}
+                   </div>`
+                : `<span class="text-muted" style="font-size:11px; opacity:0.5;">Chưa quét</span>`;
 
             const thSummary = `TikTok ${formatThresholdDisplay(followerThresholds.tiktok)}, YT ${formatThresholdDisplay(followerThresholds.youtube)}, FB ${formatThresholdDisplay(followerThresholds.facebook)}`;
             const nStatus = (p.notify_status || 'tracking').toLowerCase();
@@ -710,6 +873,31 @@ function renderGpmProfilesTable() {
                 flopBadge += ` <span class="badge has-tooltip tooltip-top" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px; padding:2px 5px;" data-tooltip="🔄 Đang Hồi Phục: Cần 2 clip liên tiếp > 300v để thoát trạng thái Flop"><i class="fa-solid fa-arrows-rotate"></i> Hồi Phục</span>`;
             }
 
+            const grpName = getProfileGroupName(p);
+            const groupDisplay = grpName
+                ? `<span class="badge" style="background:rgba(99,102,241,0.14); color:#818cf8; border:1px solid rgba(99,102,241,0.28); font-size:11px; font-weight:600; padding:2px 7px; border-radius:6px; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(grpName)}"><i class="fa-solid fa-users-rectangle" style="font-size:9.5px; margin-right:3px;"></i>${escapeHtml(grpName)}</span>`
+                : `<span class="text-muted" style="font-size:11px; opacity:0.6;">—</span>`;
+
+            const totViews = Number(p.total_views) || 0;
+            const viewsDisplay = `
+                <div>
+                    <strong style="font-size:13.5px; color:#38bdf8;">
+                        <i class="fa-solid fa-eye" style="font-size:10.5px; opacity:0.8; margin-right:3px;"></i>${totViews.toLocaleString('vi-VN')}
+                    </strong>
+                    <span style="font-size:10.5px; color:var(--text-muted); margin-left:1px;">views</span>
+                </div>`;
+
+            const cNames = p.campaign_names && p.campaign_names.length > 0 ? p.campaign_names : (p.campaign_name ? [p.campaign_name] : []);
+            const campaignDisplay = cNames.length > 0
+                ? `<div style="display:flex; flex-direction:column; gap:2px; max-width:140px;">
+                    ${cNames.map(cn => `
+                        <span class="badge" style="background:rgba(236,72,153,0.14); color:#f472b6; border:1px solid rgba(236,72,153,0.28); font-size:11px; font-weight:600; padding:2px 7px; border-radius:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${escapeHtml(cn)}">
+                            <i class="fa-solid fa-bullhorn" style="font-size:9.5px; margin-right:3px;"></i>${escapeHtml(cn)}
+                        </span>
+                    `).join('')}
+                  </div>`
+                : `<span class="text-muted" style="font-size:11px; opacity:0.6;">Chưa gán</span>`;
+
             const mainRowHtml = `
             <tr>
                 <td>
@@ -725,13 +913,14 @@ function renderGpmProfilesTable() {
                     if (b === 'genlogin') return '<span class="badge" style="background:rgba(34,197,94,0.15); color:#4ade80; font-size:10px;"><i class="fa-solid fa-shield"></i> GEN</span>';
                     return '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; font-size:10px;"><i class="fa-solid fa-cube"></i> GPM</span>';
                 })()}
-                        <strong ${hasMultiChannels ? `style="cursor:pointer;" onclick="toggleSubChannels('${escapeHtml(p.gpm_id)}', event)"` : ''}>${escapeHtml(p.name)}</strong>
+                        <strong class="profile-name-link has-tooltip tooltip-top" onclick="openProfileDetailModal('${escapeHtml(p.gpm_id)}')" data-tooltip="Bấm để xem chi tiết profile" style="cursor:pointer; color:var(--text-primary); transition:color 0.15s ease;">${escapeHtml(p.name)}</strong>
                         ${hasMultiChannels ? `
                         <span class="badge" style="background:rgba(99,102,241,0.18); color:#a5b4fc; font-size:9.5px; padding:1px 6px; font-weight:600; cursor:pointer;" onclick="toggleSubChannels('${escapeHtml(p.gpm_id)}', event)" title="Có ${channelsList.length} kênh/trang con (Bấm để xem)">
                             <i class="fa-solid fa-layer-group"></i> ${channelsList.length}
                         </span>` : ''}
                     </div>
                 </td>
+                <td>${groupDisplay}</td>
                 <td>${usernameDisplay}</td>
                 <td>
                     ${(() => {
@@ -760,15 +949,15 @@ function renderGpmProfilesTable() {
                     const selColor = isNone ? '#94a3b8' : '#38bdf8';
                     const activeProxy = p.raw_proxy || '';
                     const proxyHint = activeProxy
-                        ? `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:11px; font-family:monospace; color:var(--accent-cyan); margin-top:3px; display:flex; align-items:center; gap:4px; font-weight:600;"><i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8;"></i> ${escapeHtml(activeProxy.replace('socks5://', ''))}</div>`
-                        : `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:11px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:4px;"><i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6;"></i> Direct IP</div>`;
+                        ? `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:10.5px; font-family:monospace; color:var(--accent-cyan); margin-top:3px; display:inline-flex; align-items:center; gap:4px; font-weight:600; max-width:165px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(activeProxy)}"><i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8; flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(activeProxy.replace('socks5://', ''))}</span></div>`
+                        : `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:10.5px; color:var(--text-muted); margin-top:3px; display:inline-flex; align-items:center; gap:4px; max-width:165px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6; flex-shrink:0;"></i> Direct IP</div>`;
                     return `
-                        <div style="display:flex; flex-direction:column; min-width:130px;">
+                        <div style="display:flex; flex-direction:column; width:100%; max-width:170px; min-width:145px;">
                             <select class="custom-select country-cell-select"
                                 id="cellCountry_${escapeHtml(p.gpm_id)}"
                                 onchange="onTableCountryChange('${escapeHtml(p.gpm_id)}', this.value)"
                                 title="Chọn quốc gia VPN cho profile này hoặc Không Dùng Proxy"
-                                style="height:30px; font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; background:${selBg}; border:1px solid ${selBorder}; color:${selColor}; cursor:pointer; width:100%;">
+                                style="height:28px; font-size:11.5px; font-weight:700; padding:2px 6px; border-radius:6px; background:${selBg}; border:1px solid ${selBorder}; color:${selColor}; cursor:pointer; width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
                                 ${countryOpts.map(opt => `<option value="${opt.code}" ${cCode === opt.code ? 'selected' : ''} style="background:#1e293b; color:#fff;">${opt.flag} ${opt.name}</option>`).join('')}
                             </select>
                             ${proxyHint}
@@ -777,6 +966,8 @@ function renderGpmProfilesTable() {
                 })()}
                 </td>
                 <td>${followersDisplay}</td>
+                <td>${viewsDisplay}</td>
+                <td>${campaignDisplay}</td>
                 <td>
                     ${(() => {
                     const pStatus = (p.status || 'active').toLowerCase();
@@ -806,7 +997,7 @@ function renderGpmProfilesTable() {
                 </td>
                 <td>${creatorProgramBadge}</td>
                 <td>${flopBadge}</td>
-                <td>${notifyBadge}</td>
+                <td>${lastCheckedDisplay}</td>
                 <td style="text-align: center;">
                     <div class="action-dropdown-wrap">
                         <button type="button" class="btn-more-actions" id="btn-more-gpm-${escapeHtml(p.gpm_id)}" 
@@ -815,6 +1006,9 @@ function renderGpmProfilesTable() {
                             <i class="fa-solid fa-ellipsis"></i>
                         </button>
                         <div class="action-dropdown-menu" id="action-menu-gpm-${escapeHtml(p.gpm_id)}">
+                            <button type="button" class="action-dropdown-item" onclick="openProfileDetailModal('${escapeHtml(p.gpm_id)}'); closeAllActionMenus();">
+                                <i class="fa-solid fa-id-card" style="color:#38bdf8;"></i> Xem chi tiết Profile
+                            </button>
                             <button type="button" class="action-dropdown-item" onclick="scanSingleProfileFollowers('${escapeHtml(p.gpm_id)}', this); closeAllActionMenus();">
                                 <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--accent-pink);"></i> Quét Follower ngay
                             </button>
@@ -963,6 +1157,7 @@ function renderGpmProfilesTable() {
                                 </span>
                             </div>
                         </td>
+                        <td style="color:var(--text-muted); font-size:11px; opacity:0.6;">—</td>
                         <td>
                             <div style="display:flex; align-items:center; gap:6px;">
                                 ${chTypeBadge}
@@ -978,6 +1173,8 @@ function renderGpmProfilesTable() {
                                 <span style="font-size:10.5px; color:var(--text-muted); margin-left:2px;">${subLabel}</span>
                             </div>
                         </td>
+                        <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
+                        <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
                         <td>
                             ${chEligible ? (
                             plat === 'youtube'
@@ -987,7 +1184,7 @@ function renderGpmProfilesTable() {
                         </td>
                         <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
                         <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
-                        <td>${chNotifyBadge}</td>
+                        <td style="text-align: center; color: var(--text-muted); font-size: 11px; opacity: 0.6;">—</td>
                         <td style="text-align: center;">
                             <div class="action-dropdown-wrap">
                                 <button type="button" class="btn-more-actions" id="btn-more-${chMenuKey}" 
@@ -1570,6 +1767,15 @@ function openEditUsernameModal(gpmId, profileName, currentUsername, followers, c
         countrySelect.value = (country && country.toUpperCase() !== 'NONE') ? country.toUpperCase() : 'NONE';
     }
 
+    // Gán thông tin Nhóm, Chiến Dịch và Tổng Lượt Xem từ profile hiện tại
+    const matchedP = (cachedGpmProfiles || []).find(p => String(p.gpm_id) === String(gpmId));
+    const groupInput = document.getElementById('editProfileGroupName');
+    if (groupInput) groupInput.value = matchedP ? getProfileGroupName(matchedP) : '';
+    const campInput = document.getElementById('editProfileCampaign');
+    if (campInput) campInput.value = matchedP ? (matchedP.campaign || matchedP.campaign_name || '') : '';
+    const viewsInput = document.getElementById('editProfileTotalViews');
+    if (viewsInput) viewsInput.value = matchedP ? (matchedP.total_views || 0) : 0;
+
     updateEditProfileModalLabels(effPlat, channelId);
 
     const modal = document.getElementById('editProfileUsernameModal');
@@ -1657,6 +1863,9 @@ async function saveProfileUsernameFromModal(btn) {
         }
 
         const countryVal = (document.getElementById('editProfileCountry')?.value || 'NONE').toUpperCase();
+        const groupName = (document.getElementById('editProfileGroupName')?.value || '').trim();
+        const campaignVal = (document.getElementById('editProfileCampaign')?.value || '').trim();
+        const totalViews = Math.max(0, parseInt(document.getElementById('editProfileTotalViews')?.value || '0', 10) || 0);
 
         const resU = await fetch(`/api/profiles/${gpmId}/username`, {
             method: 'PUT',
@@ -1666,7 +1875,10 @@ async function saveProfileUsernameFromModal(btn) {
                 nickname: nickname,
                 browser_type: document.getElementById('editProfileBrowserType')?.value || 'gpm',
                 platform: platform,
-                country: countryVal
+                country: countryVal,
+                group_name: groupName,
+                campaign: campaignVal,
+                total_views: totalViews
             })
         });
         const dataU = await resU.json();
@@ -1688,7 +1900,7 @@ async function saveProfileUsernameFromModal(btn) {
             body: JSON.stringify({
                 gpm_id: gpmId,
                 followers: followers,
-                views: 0,
+                views: totalViews,
                 username: username,
                 nickname: nickname
             })
@@ -2776,3 +2988,409 @@ window.openWireguardFolderOnWindows = openWireguardFolderOnWindows;
 window.rescanWireguardConfigs = rescanWireguardConfigs;
 window.testWireguardCountry = testWireguardCountry;
 window.deleteWireguardConfig = deleteWireguardConfig;
+
+// ==========================================
+// 6. PROFILE DETAIL MODAL (MODAL CHI TIẾT PROFILE)
+// ==========================================
+
+let activeDetailGpmId = null;
+
+const countryDisplayMap = {
+    'US': { flag: '🇺🇸', name: 'Hoa Kỳ' },
+    'GB': { flag: '🇬🇧', name: 'Vương Quốc Anh' },
+    'UK': { flag: '🇬🇧', name: 'Vương Quốc Anh' },
+    'DE': { flag: '🇩🇪', name: 'Đức' },
+    'FR': { flag: '🇫🇷', name: 'Pháp' },
+    'JP': { flag: '🇯🇵', name: 'Nhật Bản' },
+    'KR': { flag: '🇰🇷', name: 'Hàn Quốc' },
+    'CA': { flag: '🇨🇦', name: 'Canada' },
+    'AU': { flag: '🇦🇺', name: 'Úc' },
+    'SG': { flag: '🇸🇬', name: 'Singapore' },
+    'NL': { flag: '🇳🇱', name: 'Hà Lan' },
+    'MX': { flag: '🇲🇽', name: 'Mexico' },
+    'ID': { flag: '🇮🇩', name: 'Indonesia' },
+    'MY': { flag: '🇲🇾', name: 'Malaysia' },
+    'PH': { flag: '🇵🇭', name: 'Philippines' },
+    'VN': { flag: '🇻🇳', name: 'Việt Nam' }
+};
+
+function openProfileDetailModal(gpmId) {
+    activeDetailGpmId = gpmId;
+    const modal = document.getElementById('profileDetailModal');
+    if (!modal) {
+        console.error('Không tìm thấy element #profileDetailModal trong DOM');
+        return;
+    }
+
+    // Hiển thị modal ngay lập tức
+    modal.classList.add('active', 'show');
+    modal.style.display = 'flex';
+
+    // Lấy profile từ cache nếu có để render trước
+    try {
+        const cached = (cachedGpmProfiles || []).find(p => String(p.gpm_id) === String(gpmId));
+        if (cached) {
+            populateProfileDetailData(cached);
+        }
+    } catch (err) {
+        console.warn('Lỗi render dữ liệu cache cho detail modal:', err);
+    }
+
+    // Tải chi tiết và danh sách video từ backend
+    fetch(`/api/gpm/profiles/${encodeURIComponent(gpmId)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (activeDetailGpmId === gpmId && data && !data.detail) {
+                try {
+                    populateProfileDetailData(data);
+                } catch (err) {
+                    console.warn('Lỗi render chi tiết profile từ API:', err);
+                }
+            }
+        })
+        .catch(err => console.warn('Lỗi tải chi tiết profile:', err));
+}
+
+function closeProfileDetailModal() {
+    activeDetailGpmId = null;
+    const modal = document.getElementById('profileDetailModal');
+    if (modal) {
+        modal.classList.remove('active', 'show');
+        modal.style.display = 'none';
+    }
+}
+
+function populateProfileDetailData(p) {
+    if (!p) return;
+
+    // Header info
+    const titleEl = document.getElementById('detailProfileTitle');
+    if (titleEl) titleEl.textContent = p.name || `Profile ${p.gpm_id}`;
+
+    const browserEl = document.getElementById('detailBrowserBadge');
+    if (browserEl) browserEl.textContent = (p.browser_type || 'GPM').toUpperCase();
+
+    const statusEl = document.getElementById('detailStatusBadge');
+    if (statusEl) {
+        const isRunning = p.status === 'running' || p.is_running;
+        statusEl.textContent = isRunning ? 'Đang chạy' : 'Sẵn sàng';
+        statusEl.className = isRunning ? 'badge badge-warning' : 'badge badge-success';
+    }
+
+    const gpmIdEl = document.getElementById('detailGpmIdText');
+    if (gpmIdEl) gpmIdEl.textContent = p.gpm_id || '-';
+
+    const lastScannedEl = document.getElementById('detailLastScanned');
+    if (lastScannedEl) {
+        lastScannedEl.innerHTML = p.last_checked
+            ? `<i class="fa-regular fa-clock"></i> Quét: ${escapeHtml(p.last_checked)}`
+            : `<i class="fa-regular fa-clock"></i> Chưa quét số liệu`;
+    }
+
+    // Avatar icon & color
+    const avatarEl = document.getElementById('detailProfileAvatar');
+    if (avatarEl) {
+        const plat = (p.platform || 'tiktok').toLowerCase();
+        let iconHtml = '<i class="fa-brands fa-tiktok"></i>';
+        let bgGrad = 'linear-gradient(135deg, #06b6d4, #3b82f6)';
+        if (plat === 'youtube') {
+            iconHtml = '<i class="fa-brands fa-youtube"></i>';
+            bgGrad = 'linear-gradient(135deg, #ef4444, #b91c1c)';
+        } else if (plat === 'facebook') {
+            iconHtml = '<i class="fa-brands fa-facebook"></i>';
+            bgGrad = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
+        }
+        avatarEl.innerHTML = iconHtml;
+        avatarEl.style.background = bgGrad;
+    }
+
+    // 4 KPI Cards
+    // 1. Followers + 10k Progress Bar
+    const followers = p.followers_count || 0;
+    const followersEl = document.getElementById('detailFollowersVal');
+    if (followersEl) followersEl.textContent = followers.toLocaleString('vi-VN');
+
+    const pct = Math.min(100, Math.round((followers / 10000) * 100));
+    const pctEl = document.getElementById('detailBetaPercent');
+    if (pctEl) pctEl.textContent = `${pct}%`;
+    const pBar = document.getElementById('detailBetaProgressBar');
+    if (pBar) {
+        pBar.style.width = `${pct}%`;
+        pBar.style.background = followers >= 10000
+            ? 'linear-gradient(90deg, #10b981, #059669)'
+            : 'linear-gradient(90deg, #38bdf8, #f59e0b)';
+    }
+
+    // 2. Total Views
+    const totalViews = p.total_views || 0;
+    const viewsEl = document.getElementById('detailTotalViewsVal');
+    if (viewsEl) viewsEl.textContent = totalViews.toLocaleString('vi-VN');
+    const viewsSubEl = document.getElementById('detailViewsSubtitle');
+    if (viewsSubEl) {
+        if (p.views_7d) {
+            viewsSubEl.textContent = `${Number(p.views_7d).toLocaleString('vi-VN')} views (7 ngày gần nhất)`;
+        } else {
+            viewsSubEl.textContent = 'Tổng lượt xem tích lũy';
+        }
+    }
+
+    // 3. Chuẩn 10k Beta
+    const isEligible = isProfileEligible(p);
+    const betaStatusVal = document.getElementById('detailBetaStatusVal');
+    if (betaStatusVal) {
+        betaStatusVal.textContent = isEligible ? '🏆 ĐỦ 10K BETA!' : '🌱 Đang Nuôi';
+        betaStatusVal.style.color = isEligible ? '#34d399' : '#f59e0b';
+    }
+    const betaSubtext = document.getElementById('detailBetaSubtext');
+    if (betaSubtext) {
+        betaSubtext.textContent = isEligible ? 'Đủ điều kiện bật kiếm tiền' : 'Cần ≥ 10.000 Follower';
+    }
+
+    // 4. Creator Rewards Program
+    const cp = (p.creator_program || (isEligible ? 'active' : 'ineligible')).toLowerCase();
+    const cpVal = document.getElementById('detailCreatorProgramVal');
+    const cpSub = document.getElementById('detailCpSubtext');
+    if (cpVal) {
+        if (cp === 'active') {
+            cpVal.textContent = 'Đã Bật';
+            cpVal.style.color = '#34d399';
+            if (cpSub) cpSub.textContent = 'Chương trình Sáng tạo Đang hoạt động';
+        } else if (cp === 'not_enrolled') {
+            cpVal.textContent = 'Chưa Đăng Ký';
+            cpVal.style.color = '#38bdf8';
+            if (cpSub) cpSub.textContent = 'Đủ điều kiện, cần gửi đơn duyệt';
+        } else if (cp === 'banned') {
+            cpVal.textContent = 'Bị Loại';
+            cpVal.style.color = '#ef4444';
+            if (cpSub) cpSub.textContent = 'Vi phạm chính sách TikTok';
+        } else {
+            cpVal.textContent = 'Chưa Đủ ĐK';
+            cpVal.style.color = '#94a3b8';
+            if (cpSub) cpSub.textContent = 'Cần đạt mốc 10.000 followers';
+        }
+    }
+
+    // Section 1: TikTok Identity
+    const cleanUsername = (p.tiktok_username || '').replace(/^@/, '');
+    const handleEl = document.getElementById('detailTiktokHandle');
+    if (handleEl) handleEl.textContent = cleanUsername ? `@${cleanUsername}` : '-';
+
+    const nickEl = document.getElementById('detailTiktokNickname');
+    if (nickEl) nickEl.textContent = p.tiktok_nickname || p.name || '-';
+
+    const secUidEl = document.getElementById('detailTiktokSecUid');
+    if (secUidEl) {
+        secUidEl.textContent = p.sec_uid || '-';
+        secUidEl.title = p.sec_uid || '';
+    }
+
+    const sessionEl = document.getElementById('detailSessionState');
+    if (sessionEl) {
+        if (p.has_cookie) {
+            sessionEl.textContent = 'Đã có Cookie';
+            sessionEl.className = 'badge badge-success';
+        } else if (cleanUsername) {
+            sessionEl.textContent = 'Chưa quét Cookie';
+            sessionEl.className = 'badge badge-warning';
+        } else {
+            sessionEl.textContent = 'Chưa gán Nick';
+            sessionEl.className = 'badge badge-secondary';
+        }
+    }
+
+    // Section 2: Nhóm & Chiến Dịch
+    const groupBadge = document.getElementById('detailGroupNameBadge');
+    if (groupBadge) {
+        const gName = getProfileGroupName(p);
+        groupBadge.textContent = gName || 'Chưa phân nhóm';
+        groupBadge.style.background = gName ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.06)';
+        groupBadge.style.color = gName ? '#a5b4fc' : 'var(--text-muted)';
+    }
+
+    const campListEl = document.getElementById('detailCampaignList');
+    if (campListEl) {
+        const camps = (p.campaigns && p.campaigns.length > 0)
+            ? p.campaigns
+            : ((p.campaign_names && p.campaign_names.length > 0)
+                ? p.campaign_names.map(name => ({ name }))
+                : (p.campaign_name || p.campaign ? [{ name: p.campaign_name || p.campaign }] : []));
+        if (camps.length > 0) {
+            campListEl.innerHTML = camps.map(c => `
+                <span class="badge" style="background: rgba(236, 72, 153, 0.16); color: #f472b6; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-bullhorn" style="font-size: 10px;"></i> ${escapeHtml(c.name || c.id || 'Chiến dịch')}
+                </span>
+            `).join('');
+        } else {
+            campListEl.innerHTML = `<span class="badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-weight: 500;">Chưa gán chiến dịch</span>`;
+        }
+    }
+
+    const postEl = document.getElementById('detailTotalPosts');
+    if (postEl) {
+        const vids = p.profile_videos || [];
+        const count = p.post_count || vids.length || 0;
+        postEl.textContent = `${count} video`;
+    }
+
+    const avgMaxEl = document.getElementById('detailAvgMaxViews');
+    if (avgMaxEl) {
+        if (p.avg_views || p.max_views) {
+            avgMaxEl.textContent = `${(p.avg_views || 0).toLocaleString('vi-VN')} / ${(p.max_views || 0).toLocaleString('vi-VN')}`;
+        } else {
+            avgMaxEl.textContent = `${totalViews.toLocaleString('vi-VN')} views`;
+        }
+    }
+
+    // Section 3: Mạng & Proxy SOCKS5
+    const countryEl = document.getElementById('detailCountryDisplay');
+    if (countryEl) {
+        const cCode = (p.country || '').toUpperCase();
+        if (cCode && cCode !== 'NONE') {
+            const cInfo = countryDisplayMap[cCode] || { flag: '🌐', name: cCode };
+            countryEl.innerHTML = `${cInfo.flag} ${cCode} - ${escapeHtml(cInfo.name)}`;
+        } else {
+            countryEl.innerHTML = `🌐 Direct IP (Không dùng Proxy)`;
+        }
+    }
+
+    const proxyEl = document.getElementById('detailProxyDisplay');
+    if (proxyEl) {
+        const px = p.raw_proxy || p.proxy_url || '';
+        proxyEl.textContent = px || 'Direct (Không proxy)';
+    }
+
+    const netModeEl = document.getElementById('detailNetworkMode');
+    if (netModeEl) {
+        const px = p.raw_proxy || p.proxy_url || '';
+        if (px.includes('127.0.0.1:108') || px.includes('wireproxy')) {
+            netModeEl.textContent = 'WireGuard SOCKS5 Cục Bộ';
+            netModeEl.style.background = 'rgba(56, 189, 248, 0.15)';
+            netModeEl.style.color = '#38bdf8';
+        } else if (px) {
+            netModeEl.textContent = 'Proxy Cố Định Ngoài';
+            netModeEl.style.background = 'rgba(168, 85, 247, 0.15)';
+            netModeEl.style.color = '#c084fc';
+        } else {
+            netModeEl.textContent = 'Direct IP Mạng Cục Bộ';
+            netModeEl.style.background = 'rgba(148, 163, 184, 0.15)';
+            netModeEl.style.color = '#94a3b8';
+        }
+    }
+
+    // Section 4: Hiệu Suất / Flop
+    const flopContainer = document.getElementById('detailFlopBadgeContainer');
+    if (flopContainer) {
+        const fs = (p.flop_status || 'new').toLowerCase();
+        let fHtml = '<span class="badge badge-secondary">Mới nuôi</span>';
+        if (fs === 'good') fHtml = '<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Rất tốt</span>';
+        else if (fs === 'unstable') fHtml = '<span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> Không ổn định</span>';
+        else if (fs === '200_view') fHtml = '<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> Flop 200 view</span>';
+        else if (fs === '0_view') fHtml = '<span class="badge badge-danger"><i class="fa-solid fa-ban"></i> 0 view (Shadowban)</span>';
+        flopContainer.innerHTML = fHtml;
+    }
+
+    const medianEl = document.getElementById('detailMedianViews');
+    if (medianEl) {
+        medianEl.textContent = `${(p.median_views || 0).toLocaleString('vi-VN')} views`;
+    }
+
+    const createdEl = document.getElementById('detailCreatedAt');
+    if (createdEl) {
+        createdEl.textContent = p.created_at || 'Đồng bộ từ GPMLogin';
+    }
+
+    // TikTok Web Link button
+    const tiktokWebBtn = document.getElementById('btnDetailOpenTiktokWeb');
+    if (tiktokWebBtn) {
+        if (cleanUsername) {
+            tiktokWebBtn.href = `https://www.tiktok.com/@${cleanUsername}`;
+            tiktokWebBtn.style.display = 'inline-flex';
+        } else {
+            tiktokWebBtn.style.display = 'none';
+        }
+    }
+
+    // Recent Videos Table
+    const vidsSec = document.getElementById('detailRecentVideosSection');
+    const vidsTbody = document.getElementById('detailRecentVideosTableBody');
+    const vidsBadge = document.getElementById('detailVideosCountBadge');
+    const vids = p.profile_videos || [];
+    if (vidsSec && vidsTbody) {
+        if (vids.length > 0) {
+            vidsSec.style.display = 'block';
+            if (vidsBadge) vidsBadge.textContent = `${vids.length} video`;
+            vidsTbody.innerHTML = vids.map((v, i) => `
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+                    <td style="padding: 8px 10px; color: var(--text-muted); font-size: 11px;">#${i + 1}</td>
+                    <td style="padding: 8px 10px; font-weight: 500; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        <span title="${escapeHtml(v.title || v.desc || 'Video')}">${escapeHtml(v.title || v.desc || 'Video ' + (v.video_id || (i + 1)))}</span>
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #38bdf8;">
+                        ${(v.view_count || v.views || 0).toLocaleString('vi-VN')}
+                    </td>
+                    <td style="padding: 8px 10px; text-align: right; color: var(--text-muted); font-size: 11px;">
+                        ${escapeHtml(v.posted_at || v.created_at || '-')}
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            vidsSec.style.display = 'none';
+        }
+    }
+}
+
+function copyDetailGpmId() {
+    const el = document.getElementById('detailGpmIdText');
+    const id = el ? el.textContent.trim() : '';
+    if (!id || id === '-') return;
+    navigator.clipboard.writeText(id).then(() => {
+        showToast(`📋 Đã sao chép GPM ID: ${id}`, 'success');
+    }).catch(() => {
+        showToast('Không thể sao chép ID!', 'error');
+    });
+}
+
+function copyDetailProxy() {
+    const el = document.getElementById('detailProxyDisplay');
+    const px = el ? el.textContent.trim() : '';
+    if (!px || px.startsWith('Direct')) return;
+    navigator.clipboard.writeText(px).then(() => {
+        showToast(`📋 Đã sao chép Proxy: ${px}`, 'success');
+    }).catch(() => {
+        showToast('Không thể sao chép proxy!', 'error');
+    });
+}
+
+function openEditFromDetailModal() {
+    if (!activeDetailGpmId) return;
+    const p = (cachedGpmProfiles || []).find(item => String(item.gpm_id) === String(activeDetailGpmId));
+    if (!p) return;
+    closeProfileDetailModal();
+    openEditUsernameModal(
+        p.gpm_id,
+        p.name,
+        p.tiktok_username,
+        p.followers_count || 0,
+        p.tiktok_nickname || '',
+        p.browser_type || 'gpm',
+        p.platform || 'tiktok',
+        '',
+        p.country || 'NONE'
+    );
+}
+
+async function scanDetailProfileFollowers(btn) {
+    if (!activeDetailGpmId) return;
+    await scanSingleProfileFollowers(activeDetailGpmId, btn);
+    const updated = (cachedGpmProfiles || []).find(item => String(item.gpm_id) === String(activeDetailGpmId));
+    if (updated) {
+        populateProfileDetailData(updated);
+    }
+}
+
+window.openProfileDetailModal = openProfileDetailModal;
+window.closeProfileDetailModal = closeProfileDetailModal;
+window.copyDetailGpmId = copyDetailGpmId;
+window.copyDetailProxy = copyDetailProxy;
+window.openEditFromDetailModal = openEditFromDetailModal;
+window.scanDetailProfileFollowers = scanDetailProfileFollowers;

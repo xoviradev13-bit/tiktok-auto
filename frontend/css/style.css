@@ -1868,55 +1868,67 @@ tr.row-saved:hover td:last-child:not([colspan]) {
     white-space: nowrap;
     line-height: 1.2;
 }
+
 .badge-plat i {
     font-size: 11.5px;
 }
+
 .badge-plat-tiktok {
     background: #000000 !important;
     color: #ffffff !important;
     border: 1px solid rgba(255, 255, 255, 0.25) !important;
     box-shadow: 0 0 6px rgba(0, 242, 254, 0.25), 0 0 6px rgba(255, 0, 80, 0.25);
 }
+
 .badge-plat-youtube {
     background: rgba(239, 68, 68, 0.15) !important;
     color: #f87171 !important;
     border: 1px solid rgba(239, 68, 68, 0.35) !important;
 }
+
 .badge-plat-facebook {
     background: rgba(59, 130, 246, 0.15) !important;
     color: #60a5fa !important;
     border: 1px solid rgba(59, 130, 246, 0.35) !important;
 }
+
 .badge-plat-instagram {
     background: rgba(236, 72, 153, 0.15) !important;
     color: #f472b6 !important;
     border: 1px solid rgba(236, 72, 153, 0.35) !important;
 }
+
 .badge-plat-douyin {
     background: rgba(20, 184, 166, 0.15) !important;
     color: #2dd4bf !important;
     border: 1px solid rgba(20, 184, 166, 0.35) !important;
 }
-.badge-plat-rednote, .badge-plat-xiaohongshu {
+
+.badge-plat-rednote,
+.badge-plat-xiaohongshu {
     background: rgba(244, 63, 94, 0.15) !important;
     color: #fb7185 !important;
     border: 1px solid rgba(244, 63, 94, 0.35) !important;
 }
+
 .badge-plat-bilibili {
     background: rgba(14, 165, 233, 0.15) !important;
     color: #38bdf8 !important;
     border: 1px solid rgba(14, 165, 233, 0.35) !important;
 }
+
 .badge-plat-weibo {
     background: rgba(249, 115, 22, 0.15) !important;
     color: #fb923c !important;
     border: 1px solid rgba(249, 115, 22, 0.35) !important;
 }
+
 .badge-plat-direct {
     background: rgba(56, 189, 248, 0.15) !important;
     color: #38bdf8 !important;
     border: 1px solid rgba(56, 189, 248, 0.35) !important;
 }
+
 .badge-plat-local {
     background: rgba(245, 158, 11, 0.15) !important;
     color: #fbbf24 !important;
@@ -2117,6 +2129,8 @@ tr.row-saved:hover td:not(:first-child):not(:last-child) {
 
 .modal.active,
 .modal.show,
+#profileDetailModal.active,
+#profileDetailModal.show,
 #followerSchedulerModal.active,
 #followerSchedulerModal.show,
 #thresholdSettingsModal.active,
@@ -5525,19 +5539,22 @@ body.light-mode .studio-platform-opt:hover {
 .multi-select-box {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    max-height: 160px;
+    gap: 4px;
+    max-height: 230px;
     overflow-y: auto;
-    padding: 6px;
+    padding: 8px 10px;
 }
 
 .multi-select-item {
-    transition: background 0.15s ease;
-    border-radius: 6px !important;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .multi-select-item:hover {
-    background: rgba(255, 255, 255, 0.06) !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 .multi-select-item input[type="checkbox"] {
@@ -7508,6 +7525,7 @@ tr.sub-channel-row.facebook-page td:first-child {
     max-width: 100%;
     width: 100%;
 }
+
 .video-title-click-link .video-title-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7516,16 +7534,23 @@ tr.sub-channel-row.facebook-page td:first-child {
     min-width: 0;
     flex: 1;
 }
+
 .video-title-click-link:hover {
     color: var(--accent-cyan, #38bdf8) !important;
     text-decoration: underline;
 }
+
 .video-title-click-link:hover i {
     transform: scale(1.15);
     transition: transform 0.18s ease;
 }
 
 @keyframes syncShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }

@@ -170,6 +170,8 @@ class RenderVideoRequest(BaseModel):
     split_folder: Optional[str] = "data/gameplay"
     split_keywords: Optional[str] = "minecraft parkour, satisfying asmr, subway surfers"
     split_provider: Optional[str] = "all"
+    warmup_only: Optional[int] = 0
+    warmup_duration_mins: Optional[int] = 10
     hook_angle: Optional[str] = "auto"
     use_ai_images: Optional[bool] = False
     image_style: Optional[str] = "cinematic"
@@ -207,6 +209,8 @@ class SmartRenderVideoRequest(BaseModel):
     split_folder: Optional[str] = "data/gameplay"
     split_keywords: Optional[str] = "minecraft parkour, satisfying asmr, subway surfers"
     split_provider: Optional[str] = "all"
+    warmup_only: Optional[int] = 0
+    warmup_duration_mins: Optional[int] = 10
     hook_angle: Optional[str] = "auto"
     use_ai_images: Optional[bool] = False
     image_style: Optional[str] = "cinematic"
@@ -247,6 +251,9 @@ class UpdateProfileUsernameRequest(BaseModel):
     platform: Optional[str] = "tiktok"
     country: Optional[str] = ""
     auto_connect_vpn: Optional[bool] = False
+    group_name: Optional[str] = None
+    campaign: Optional[str] = None
+    total_views: Optional[int] = None
 
 class ConnectProtonVpnRequest(BaseModel):
     country: Optional[str] = None
@@ -502,7 +509,7 @@ class CreateCampaignRequest(BaseModel):
     min_video_duration: Optional[int] = None
     max_video_duration: Optional[int] = None
     include_shorts: Optional[int] = 1
-    include_longform: Optional[int] = 1
+    include_longform: Optional[int] = 0
     shorts_keep_original: Optional[int] = 1
     disable_subtitle_for_shorts: Optional[int] = 1
     bgm_folder: Optional[str] = ""
@@ -535,12 +542,14 @@ class CreateCampaignRequest(BaseModel):
     split_folder: Optional[str] = "data/gameplay"
     split_keywords: Optional[str] = "minecraft parkour, satisfying asmr, subway surfers"
     split_provider: Optional[str] = "all"
+    warmup_only: Optional[int] = 0
+    warmup_duration_mins: Optional[int] = 10
 
 class DownloadFilterSettingsRequest(BaseModel):
     min_video_duration: int = 300
     max_video_duration: int = 3600
     include_shorts: bool = True
-    include_longform: bool = True
+    include_longform: bool = False
 
 class CleanupSettingsRequest(BaseModel):
     retention_mode: str = "7"  # "0", "3", "7", "14", "30", "custom", "never"
@@ -731,14 +740,18 @@ def sync_gpm_profiles():
     for p in profiles:
         active_gpm_ids.add(p["id"])
         b_type = p.get("browser_type") or (active_browser if active_browser != "auto" else "gpm")
+        g_id = str(p.get("group_id") or p.get("groupId") or "").strip()
+        g_name = str(p.get("group_name") or p.get("groupName") or p.get("group") or "").strip()
         cursor.execute('''
-        INSERT INTO gpm_profiles (gpm_id, name, raw_proxy, browser_type)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO gpm_profiles (gpm_id, name, raw_proxy, browser_type, group_id, group_name)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(gpm_id) DO UPDATE SET
             name = excluded.name,
             raw_proxy = excluded.raw_proxy,
-            browser_type = COALESCE(NULLIF(excluded.browser_type, ''), gpm_profiles.browser_type, 'gpm')
-        ''', (p["id"], p.get("name") or p["id"], p.get("raw_proxy", ""), b_type))
+            browser_type = COALESCE(NULLIF(excluded.browser_type, ''), gpm_profiles.browser_type, 'gpm'),
+            group_id = COALESCE(NULLIF(excluded.group_id, ''), gpm_profiles.group_id, ''),
+            group_name = COALESCE(NULLIF(excluded.group_name, ''), gpm_profiles.group_name, '')
+        ''', (p["id"], p.get("name") or p["id"], p.get("raw_proxy", ""), b_type, g_id, g_name))
         synced += 1
 
     removed_count = 0
@@ -919,6 +932,43 @@ def list_gpm_profiles():
     except Exception:
         ut_stats = {}
 
+    # Ánh xạ Campaign vào từng profile
+    camp_by_profile_id = {}
+    try:
+        cursor.execute("SELECT id, name, gpm_profile_id, gpm_profile_ids, is_active FROM campaigns ORDER BY id DESC")
+        for c in cursor.fetchall():
+            c_dict = dict(c)
+            c_name = c_dict.get("name") or f"Chiến dịch #{c_dict.get('id')}"
+            c_id = c_dict.get("id")
+            p_ids = set()
+            if c_dict.get("gpm_profile_id"):
+                p_ids.add(str(c_dict["gpm_profile_id"]))
+            if c_dict.get("gpm_profile_ids"):
+                try:
+                    loaded = json.loads(c_dict["gpm_profile_ids"])
+                    if isinstance(loaded, list):
+                        for x in loaded:
+                            p_ids.add(str(x))
+                except Exception:
+                    pass
+            for pid_key in p_ids:
+                camp_by_profile_id.setdefault(pid_key, []).append({
+                    "id": c_id,
+                    "name": c_name,
+                    "is_active": c_dict.get("is_active", 1)
+                })
+    except Exception:
+        pass
+
+    # Nhóm: Phục hồi và ánh xạ tên nhóm từ GPM API nếu group_name chưa có hoặc là UUID
+    group_map = {}
+    try:
+        from backend.modules.gpm_client import gpm_client
+        group_map = gpm_client.list_groups()
+    except Exception:
+        pass
+
+    db_updated = False
     for r in rows:
         pid = r.get("id")
         p_stat = pv_stats.get(pid) or ut_stats.get(pid, {})
@@ -937,8 +987,168 @@ def list_gpm_profiles():
         except Exception:
             r["flop_window_views"] = []
 
+        # Campaign info
+        matched_camps = camp_by_profile_id.get(str(pid), []) + camp_by_profile_id.get(str(r.get("gpm_id", "")), [])
+        seen_cid = set()
+        camps = []
+        for c in matched_camps:
+            if c["id"] not in seen_cid:
+                seen_cid.add(c["id"])
+                camps.append(c)
+        r["campaigns"] = camps
+        r["campaign_names"] = [c["name"] for c in camps]
+        manual_camp = (r.get("campaign") or "").strip()
+        if manual_camp and manual_camp not in r["campaign_names"]:
+            r["campaign_names"].append(manual_camp)
+        r["campaign_name"] = ", ".join(r["campaign_names"]) if r["campaign_names"] else manual_camp
+
+        # Group Name & Total Views normalized (Ưu tiên hiển thị Group Name chuẩn, không hiển thị raw UUID)
+        raw_gid = (r.get("group_id") or "").strip()
+        raw_gname = (r.get("group_name") or "").strip()
+        is_uuid_name = bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", raw_gname, re.I))
+        
+        final_gname = ""
+        if raw_gname and not is_uuid_name:
+            final_gname = raw_gname
+        elif raw_gid and raw_gid in group_map:
+            final_gname = group_map[raw_gid]
+        elif raw_gname and raw_gname in group_map:
+            final_gname = group_map[raw_gname]
+        elif raw_gid:
+            final_gname = "Default group"
+
+        r["group_name"] = final_gname
+        r["total_views"] = int(r.get("total_views") or 0)
+
+        if final_gname and (not raw_gname or is_uuid_name):
+            try:
+                cursor.execute("UPDATE gpm_profiles SET group_name = ? WHERE gpm_id = ?", (final_gname, r.get("gpm_id")))
+                db_updated = True
+            except Exception:
+                pass
+
+    if db_updated:
+        try:
+            conn.commit()
+        except Exception:
+            pass
+
     conn.close()
     return rows
+
+@app.get("/api/gpm/profiles/{gpm_id}")
+def get_gpm_profile_detail(gpm_id: str):
+    """Lấy thông tin chi tiết đầy đủ của một profile GPMLogin (bao gồm thống kê, video, chiến dịch)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM gpm_profiles WHERE gpm_id = ? OR id = ?", (gpm_id, gpm_id))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile GPMLogin")
+
+    profile = dict(row)
+    pid = profile["id"]
+
+    # Channels
+    try:
+        cursor.execute("SELECT * FROM profile_channels WHERE gpm_id = ? ORDER BY is_default DESC, id ASC", (profile["gpm_id"],))
+        profile["channels"] = [dict(c) for c in cursor.fetchall()]
+    except Exception:
+        profile["channels"] = []
+
+    # Campaigns
+    profile_camps = []
+    try:
+        cursor.execute("SELECT id, name, gpm_profile_id, gpm_profile_ids, is_active FROM campaigns ORDER BY id DESC")
+        for c in cursor.fetchall():
+            c_dict = dict(c)
+            c_name = c_dict.get("name") or f"Chiến dịch #{c_dict.get('id')}"
+            p_ids = set()
+            if c_dict.get("gpm_profile_id"):
+                p_ids.add(str(c_dict["gpm_profile_id"]))
+            if c_dict.get("gpm_profile_ids"):
+                try:
+                    loaded = json.loads(c_dict["gpm_profile_ids"])
+                    if isinstance(loaded, list):
+                        for x in loaded:
+                            p_ids.add(str(x))
+                except Exception:
+                    pass
+            if str(pid) in p_ids or str(profile["gpm_id"]) in p_ids:
+                profile_camps.append({
+                    "id": c_dict["id"],
+                    "name": c_name,
+                    "is_active": c_dict.get("is_active", 1)
+                })
+    except Exception:
+        pass
+
+    profile["campaigns"] = profile_camps
+    profile["campaign_names"] = [c["name"] for c in profile_camps]
+    manual_camp = (profile.get("campaign") or "").strip()
+    if manual_camp and manual_camp not in profile["campaign_names"]:
+        profile["campaign_names"].append(manual_camp)
+    profile["campaign_name"] = ", ".join(profile["campaign_names"]) if profile["campaign_names"] else manual_camp
+    profile["group_name"] = (profile.get("group_name") or profile.get("group_id") or "").strip()
+    profile["total_views"] = int(profile.get("total_views") or 0)
+
+    # Thống kê video
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as total_posts,
+                   COALESCE(AVG(views_count), 0) as avg_views,
+                   COALESCE(MAX(views_count), 0) as max_views
+            FROM profile_videos
+            WHERE gpm_profile_id = ? AND video_status = 'published'
+        """, (pid,))
+        pv_s = cursor.fetchone()
+        profile["total_posts"] = pv_s["total_posts"] if pv_s else 0
+        profile["avg_views"] = round(pv_s["avg_views"], 1) if pv_s else 0.0
+        profile["max_views"] = pv_s["max_views"] if pv_s else 0
+    except Exception:
+        profile["total_posts"] = 0
+        profile["avg_views"] = 0.0
+        profile["max_views"] = 0
+
+    # Recent published videos
+    try:
+        cursor.execute("""
+            SELECT id, video_title, video_url, video_cover, views_count, likes_count, published_at
+            FROM profile_videos
+            WHERE gpm_profile_id = ?
+            ORDER BY id DESC LIMIT 10
+        """, (pid,))
+        profile["recent_videos"] = [dict(v) for v in cursor.fetchall()]
+    except Exception:
+        profile["recent_videos"] = []
+
+    # Recent upload tasks
+    try:
+        cursor.execute("""
+            SELECT id, title, video_url, status, schedule_time, completed_at, error_message
+            FROM upload_tasks
+            WHERE gpm_profile_id = ?
+            ORDER BY id DESC LIMIT 10
+        """, (pid,))
+        profile["recent_tasks"] = [dict(t) for t in cursor.fetchall()]
+    except Exception:
+        profile["recent_tasks"] = []
+
+    # Group Name normalized
+    raw_gid = (profile.get("group_id") or "").strip()
+    raw_gname = (profile.get("group_name") or "").strip()
+    is_uuid_name = bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", raw_gname, re.I))
+    if is_uuid_name or not raw_gname:
+        try:
+            from backend.modules.gpm_client import gpm_client
+            g_map = gpm_client.list_groups()
+            profile["group_name"] = g_map.get(raw_gid) or g_map.get(raw_gname) or ("Default group" if raw_gid else "")
+        except Exception:
+            profile["group_name"] = "Default group" if raw_gid else ""
+
+    conn.close()
+    return profile
 
 @app.delete("/api/gpm/profiles/{gpm_id}")
 def delete_gpm_profile(gpm_id: str):
@@ -1276,21 +1486,328 @@ def get_ai_voices_catalog():
     except Exception as e:
         return {"status": "error", "error": str(e), "voices": []}
 
+# ==========================================
+# CHANNEL GROUPS MANAGEMENT APIS
+# ==========================================
+
+class ChannelGroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    color: Optional[str] = "#6366f1"
+    icon: Optional[str] = "fa-layer-group"
+
+class ChannelGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+class ChannelGroupAssignBulk(BaseModel):
+    channel_ids: List[str]
+
+class ChannelAssignSingle(BaseModel):
+    channel_id: str
+    group_id: Optional[int] = None
+
+@app.get("/api/channel-groups")
+@app.get("/api/youtube/groups")
+def get_channel_groups():
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            SELECT 
+                cg.*,
+                COUNT(c.id) as channel_count,
+                SUM(CASE WHEN c.is_active = 1 THEN 1 ELSE 0 END) as active_channels,
+                COALESCE(SUM(c.subscriber_count), 0) as total_subscribers,
+                COALESCE(SUM(c.video_count), 0) as total_videos,
+                COALESCE(AVG(c.avg_views), 0) as avg_views
+            FROM channel_groups cg
+            LEFT JOIN channels c ON cg.id = c.group_id
+            GROUP BY cg.id
+            ORDER BY cg.name ASC
+        ''')
+        groups = [dict(r) for r in cursor.fetchall()]
+
+        # Batch load preview channels for all groups in a single query (O(1) instead of N queries)
+        preview_map = {}
+        try:
+            cursor.execute('''
+                SELECT group_id, channel_id, title, display_name, thumbnail_url
+                FROM (
+                    SELECT group_id, channel_id, title, display_name, thumbnail_url,
+                           ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY subscriber_count DESC) as rn
+                    FROM channels
+                    WHERE group_id IS NOT NULL AND group_id > 0
+                )
+                WHERE rn <= 4
+            ''')
+            for r in cursor.fetchall():
+                r_dict = dict(r)
+                gid = r_dict.pop("group_id")
+                r_dict.pop("rn", None)
+                preview_map.setdefault(gid, []).append(r_dict)
+        except Exception:
+            for g in groups:
+                cursor.execute('''
+                    SELECT channel_id, title, display_name, thumbnail_url 
+                    FROM channels 
+                    WHERE group_id = ? 
+                    ORDER BY subscriber_count DESC 
+                    LIMIT 4
+                ''', (g["id"],))
+                preview_map[g["id"]] = [dict(r) for r in cursor.fetchall()]
+
+        for g in groups:
+            g["preview_channels"] = preview_map.get(g["id"], [])
+
+        # System-wide statistics for channel grouping
+        cursor.execute("SELECT COUNT(*) as total FROM channels")
+        row_tot = cursor.fetchone()
+        total_channels = row_tot["total"] if row_tot else 0
+        
+        cursor.execute("SELECT COUNT(*) as total FROM channels WHERE group_id IS NOT NULL AND group_id > 0")
+        row_grp = cursor.fetchone()
+        grouped_channels = row_grp["total"] if row_grp else 0
+        ungrouped_channels = max(0, total_channels - grouped_channels)
+        active_groups = len([g for g in groups if (g.get("channel_count") or 0) > 0])
+
+        return {
+            "status": "success",
+            "groups": groups,
+            "stats": {
+                "total_groups": len(groups),
+                "total_channels": total_channels,
+                "grouped_channels": grouped_channels,
+                "ungrouped_channels": ungrouped_channels,
+                "active_groups": active_groups
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e), "groups": [], "stats": {}}
+    finally:
+        conn.close()
+
+@app.post("/api/channel-groups")
+def create_channel_group(req: ChannelGroupCreate):
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Tên nhóm không được để trống")
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM channel_groups WHERE name = ? COLLATE NOCASE", (name,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail=f"Nhóm '{name}' đã tồn tại")
+        
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute('''
+            INSERT INTO channel_groups (name, description, color, icon, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (name, (req.description or "").strip(), req.color or "#6366f1", req.icon or "fa-layer-group", now, now))
+        conn.commit()
+        new_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM channel_groups WHERE id = ?", (new_id,))
+        new_group = dict(cursor.fetchone())
+        new_group["channel_count"] = 0
+        new_group["preview_channels"] = []
+        return {"status": "success", "message": f"Tạo nhóm '{name}' thành công", "group": new_group}
+    finally:
+        conn.close()
+
+@app.get("/api/channel-groups/{group_id}")
+def get_channel_group_detail(group_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM channel_groups WHERE id = ?", (group_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Nhóm không tồn tại")
+        group = dict(row)
+
+        cursor.execute('''
+            SELECT c.*,
+                (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id) as downloaded_count,
+                (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id AND v.status = 'rendered') as rendered_count
+            FROM channels c
+            WHERE c.group_id = ?
+            ORDER BY c.subscriber_count DESC
+        ''', (group_id,))
+        channels = [dict(r) for r in cursor.fetchall()]
+        group["channels"] = channels
+        group["channel_count"] = len(channels)
+        return {"status": "success", "group": group}
+    finally:
+        conn.close()
+
+@app.put("/api/channel-groups/{group_id}")
+def update_channel_group(group_id: int, req: ChannelGroupUpdate):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM channel_groups WHERE id = ?", (group_id,))
+        existing = cursor.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Nhóm không tồn tại")
+        
+        fields = []
+        params = []
+        if req.name is not None:
+            name = req.name.strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Tên nhóm không được để trống")
+            cursor.execute("SELECT id FROM channel_groups WHERE name = ? COLLATE NOCASE AND id != ?", (name, group_id))
+            if cursor.fetchone():
+                raise HTTPException(status_code=400, detail=f"Tên nhóm '{name}' đã được sử dụng")
+            fields.append("name = ?")
+            params.append(name)
+        if req.description is not None:
+            fields.append("description = ?")
+            params.append(req.description.strip())
+        if req.color is not None:
+            fields.append("color = ?")
+            params.append(req.color.strip())
+        if req.icon is not None:
+            fields.append("icon = ?")
+            params.append(req.icon.strip())
+        
+        if fields:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            fields.append("updated_at = ?")
+            params.append(now)
+            params.append(group_id)
+            cursor.execute(f"UPDATE channel_groups SET {', '.join(fields)} WHERE id = ?", tuple(params))
+            conn.commit()
+        
+        cursor.execute("SELECT * FROM channel_groups WHERE id = ?", (group_id,))
+        updated = dict(cursor.fetchone())
+        return {"status": "success", "message": "Cập nhật nhóm thành công", "group": updated}
+    finally:
+        conn.close()
+
+@app.delete("/api/channel-groups/{group_id}")
+def delete_channel_group(group_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT name FROM channel_groups WHERE id = ?", (group_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Nhóm không tồn tại")
+        group_name = row["name"]
+
+        cursor.execute("UPDATE channels SET group_id = NULL WHERE group_id = ?", (group_id,))
+        cursor.execute("DELETE FROM channel_groups WHERE id = ?", (group_id,))
+        conn.commit()
+        return {"status": "success", "message": f"Đã xóa nhóm '{group_name}'. Các kênh trong nhóm đã được đưa về trạng thái chưa phân nhóm."}
+    finally:
+        conn.close()
+
+@app.post("/api/channel-groups/{group_id}/channels")
+def assign_channels_to_group(group_id: int, req: ChannelGroupAssignBulk):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, name FROM channel_groups WHERE id = ?", (group_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Nhóm không tồn tại")
+        
+        if not req.channel_ids:
+            return {"status": "success", "updated": 0}
+        
+        placeholders = ','.join(['?'] * len(req.channel_ids))
+        cursor.execute(f"UPDATE channels SET group_id = ? WHERE channel_id IN ({placeholders})", [group_id] + req.channel_ids)
+        conn.commit()
+        updated_count = cursor.rowcount
+        return {"status": "success", "message": f"Đã thêm {updated_count} kênh vào nhóm", "updated": updated_count}
+    finally:
+        conn.close()
+
+@app.delete("/api/channel-groups/{group_id}/channels/{channel_id}")
+def remove_channel_from_group(group_id: int, channel_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE channels SET group_id = NULL WHERE channel_id = ? AND group_id = ?", (channel_id, group_id))
+        conn.commit()
+        return {"status": "success", "message": "Đã gỡ kênh khỏi nhóm"}
+    finally:
+        conn.close()
+
+@app.post("/api/channels/assign-group")
+def assign_single_channel_group(req: ChannelAssignSingle):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        gid = req.group_id if (req.group_id and req.group_id > 0) else None
+        if gid:
+            cursor.execute("SELECT name FROM channel_groups WHERE id = ?", (gid,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Nhóm không tồn tại")
+        
+        cursor.execute("UPDATE channels SET group_id = ? WHERE channel_id = ?", (gid, req.channel_id))
+        conn.commit()
+        return {"status": "success", "message": "Cập nhật nhóm cho kênh thành công"}
+    finally:
+        conn.close()
+
 @app.get("/api/youtube/channels")
 def list_saved_channels():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT c.*, 
+            cg.name as group_name,
+            cg.color as group_color,
+            cg.icon as group_icon,
             (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id) as downloaded_count,
             (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id AND v.status = 'rendered') as rendered_count
         FROM channels c 
+        LEFT JOIN channel_groups cg ON c.group_id = cg.id
         ORDER BY c.is_active DESC, c.id DESC
     ''')
     rows = [dict(r) for r in cursor.fetchall()]
+
+    # Ánh xạ Campaign vào từng kênh YouTube
+    camp_by_channel_id = {}
+    try:
+        cursor.execute("SELECT id, name, channel_id, channel_ids, is_active FROM campaigns ORDER BY id DESC")
+        for c in cursor.fetchall():
+            c_dict = dict(c)
+            c_name = c_dict.get("name") or f"Chiến dịch #{c_dict.get('id')}"
+            c_id = c_dict.get("id")
+            ch_ids = set()
+            if c_dict.get("channel_id"):
+                ch_ids.add(str(c_dict["channel_id"]).strip())
+            if c_dict.get("channel_ids"):
+                try:
+                    loaded = json.loads(c_dict["channel_ids"])
+                    if isinstance(loaded, list):
+                        for x in loaded:
+                            if x:
+                                ch_ids.add(str(x).strip())
+                except Exception:
+                    pass
+            for cid_key in ch_ids:
+                camp_by_channel_id.setdefault(cid_key, []).append({
+                    "id": c_id,
+                    "name": c_name,
+                    "is_active": c_dict.get("is_active", 1)
+                })
+    except Exception:
+        pass
+
     conn.close()
     for r in rows:
         r["is_saved"] = True
+        ch_key = str(r.get("channel_id", "")).strip()
+        matched_camps = camp_by_channel_id.get(ch_key, [])
+        r["campaigns"] = matched_camps
+        r["campaign_names"] = [mc["name"] for mc in matched_camps]
+        r["campaign_name"] = ", ".join(r["campaign_names"]) if r["campaign_names"] else ""
         if not r.get("download_dir") or r.get("download_dir") == "data/downloads":
             r["download_dir"] = str(DOWNLOADS_DIR)
         if not r.get("render_dir") or r.get("render_dir") == "data/rendered":
@@ -1303,9 +1820,13 @@ def get_channel_detail(channel_id: str):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT c.*, 
+            cg.name as group_name,
+            cg.color as group_color,
+            cg.icon as group_icon,
             (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id) as downloaded_count,
             (SELECT COUNT(*) FROM videos v WHERE v.channel_id = c.channel_id AND v.status = 'rendered') as rendered_count
         FROM channels c 
+        LEFT JOIN channel_groups cg ON c.group_id = cg.id
         WHERE c.channel_id = ? COLLATE NOCASE
     ''', (channel_id,))
     row = cursor.fetchone()
@@ -1541,8 +2062,9 @@ def stop_youtube_channel_scan():
     if sys.platform == "win32":
         try:
             import subprocess
-            subprocess.run(["taskkill", "/F", "/IM", "yt-dlp.exe", "/T"], capture_output=True, text=True)
-            subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True)
+            cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            subprocess.run(["taskkill", "/F", "/IM", "yt-dlp.exe", "/T"], capture_output=True, text=True, creationflags=cflags)
+            subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True, creationflags=cflags)
             terminated = True
         except Exception:
             pass
@@ -1971,7 +2493,7 @@ def get_download_filter_settings():
         "min_video_duration": int(db_s.get("download_min_duration", 180)),
         "max_video_duration": int(db_s.get("download_max_duration", 3600)),
         "include_shorts": db_s.get("download_include_shorts", "1") == "1",
-        "include_longform": db_s.get("download_include_longform", "1") == "1",
+        "include_longform": db_s.get("download_include_longform", "0") == "1",
     }
 
 @app.post("/api/settings/download-filter")
@@ -2070,15 +2592,19 @@ def create_campaign(req: CreateCampaignRequest):
         raise HTTPException(status_code=400, detail="Tên chiến dịch không được để trống!")
     source_mode = "youtube"
     local_folder = ""
+    is_warmup_only = (req.warmup_only == 1)
     ch_ids = req.channel_ids if req.channel_ids else ([req.channel_id] if req.channel_id else [])
-    
-    if not ch_ids:
-        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
     gpm_ids = req.gpm_profile_ids if req.gpm_profile_ids else ([req.gpm_profile_id] if req.gpm_profile_id else [])
 
-
-    if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
-        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một Profile GPMLogin đích (hoặc bỏ chọn 'Tự động tải lên TikTok' nếu chỉ muốn render video)!")
+    if is_warmup_only:
+        ch_ids = []  # Chế độ thuần warm-up nuôi nick: không cần kênh YouTube
+        if not gpm_ids:
+            raise HTTPException(status_code=400, detail="Chế độ Chỉ Warm-up (Nuôi Nick) yêu cầu chọn ít nhất một Profile GPM!")
+    else:
+        if not ch_ids:
+            raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
+        if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
+            raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một Profile GPMLogin đích (hoặc bỏ chọn 'Tự động tải lên TikTok' nếu chỉ muốn render video)!")
     if req.min_video_duration is not None and req.max_video_duration is not None:
         if req.min_video_duration >= req.max_video_duration:
             raise HTTPException(status_code=400, detail="Thời lượng cắt tối thiểu phải nhỏ hơn thời lượng tối đa!")
@@ -2089,6 +2615,41 @@ def create_campaign(req: CreateCampaignRequest):
 
     conn = get_connection()
     cursor = conn.cursor()
+
+    # Kiểm tra xem kênh YouTube hoặc Profile đã được dùng trong chiến dịch đang tồn tại hay chưa
+    cursor.execute("SELECT id, name, channel_id, channel_ids, gpm_profile_id, gpm_profile_ids, warmup_only FROM campaigns")
+    for row in cursor.fetchall():
+        r_name = row["name"] or f"Chiến dịch #{row['id']}"
+        # Check channels (chỉ khi không phải warmup-only)
+        if not is_warmup_only:
+            r_chs = []
+            if row["channel_ids"]:
+                try:
+                    r_chs = json.loads(row["channel_ids"])
+                except Exception:
+                    r_chs = [row["channel_id"]] if row["channel_id"] else []
+            elif row["channel_id"]:
+                r_chs = [row["channel_id"]]
+            r_chs_clean = [str(x).strip() for x in r_chs if x]
+            for ch in ch_ids:
+                if ch and str(ch).strip() in r_chs_clean:
+                    conn.close()
+                    raise HTTPException(status_code=400, detail=f"Kênh YouTube '{ch}' đã được gán vào '{r_name}'. Vui lòng chọn kênh khác hoặc xóa chiến dịch cũ để sử dụng lại!")
+
+        # Check GPM profiles
+        r_gpms = []
+        if row["gpm_profile_ids"]:
+            try:
+                r_gpms = json.loads(row["gpm_profile_ids"])
+            except Exception:
+                r_gpms = [row["gpm_profile_id"]] if row["gpm_profile_id"] else []
+        elif row["gpm_profile_id"]:
+            r_gpms = [row["gpm_profile_id"]]
+        r_gpms_clean = [str(x).strip() for x in r_gpms if x is not None]
+        for gp in gpm_ids:
+            if gp is not None and str(gp).strip() in r_gpms_clean:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Tài khoản profile #{gp} đã được gán vào '{r_name}'. Vui lòng chọn profile khác hoặc xóa chiến dịch cũ để sử dụng lại!")
 
     main_ch = ch_ids[0] if ch_ids else ""
     main_gpm = gpm_ids[0] if gpm_ids else None
@@ -2113,9 +2674,10 @@ def create_campaign(req: CreateCampaignRequest):
             auto_reply_comments, reply_comments_delay_mins,
             narration_enabled, narration_language, voice_gender, narration_style, disable_narration_for_shorts, keep_original_script_for_shorts, ken_burns_enabled, endcard_enabled, use_ai_images, image_style, visual_source, ai_image_model, ai_video_model, stock_provider, auto_upload,
             tts_engine, elevenlabs_voice_id, elevenlabs_model,
-            split_source_type, split_folder, split_keywords, split_provider
+            split_source_type, split_folder, split_keywords, split_provider,
+            warmup_only, warmup_duration_mins
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         req.name,
         source_mode,
@@ -2185,7 +2747,9 @@ def create_campaign(req: CreateCampaignRequest):
         req.split_source_type or 'local',
         req.split_folder or 'data/gameplay',
         req.split_keywords or 'minecraft parkour, satisfying asmr, subway surfers',
-        req.split_provider or 'all'
+        req.split_provider or 'all',
+        1 if req.warmup_only else 0,
+        req.warmup_duration_mins or 10
     ))
     campaign_id = cursor.lastrowid
     # Persist last used download/render dirs in settings table for future campaigns
@@ -2259,16 +2823,22 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
         raise HTTPException(status_code=400, detail="Tên chiến dịch không được để trống!")
     source_mode = "youtube"
     local_folder = ""
+    is_warmup_only = (req.warmup_only == 1)
     ch_ids = req.channel_ids if req.channel_ids else ([req.channel_id] if req.channel_id else [])
-    if not ch_ids:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
     gpm_ids = req.gpm_profile_ids if req.gpm_profile_ids else ([req.gpm_profile_id] if req.gpm_profile_id else [])
 
-
-    if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một Profile GPMLogin đích (hoặc bỏ chọn 'Tự động tải lên TikTok' nếu chỉ muốn render video)!")
+    if is_warmup_only:
+        ch_ids = []  # Chế độ thuần warm-up nuôi nick: không cần kênh YouTube
+        if not gpm_ids:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Chế độ Chỉ Warm-up (Nuôi Nick) yêu cầu chọn ít nhất một Profile GPM!")
+    else:
+        if not ch_ids:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một kênh YouTube nguồn!")
+        if (req.auto_upload is None or req.auto_upload != 0) and not gpm_ids:
+            conn.close()
+            raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất một Profile GPMLogin đích (hoặc bỏ chọn 'Tự động tải lên TikTok' nếu chỉ muốn render video)!")
     if req.min_video_duration is not None and req.max_video_duration is not None:
         if req.min_video_duration >= req.max_video_duration:
             conn.close()
@@ -2279,6 +2849,41 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
     if req.bgm_volume is not None and (req.bgm_volume < 0.0 or req.bgm_volume > 1.0):
         conn.close()
         raise HTTPException(status_code=400, detail="Âm lượng nhạc nền BGM phải từ 0.0 đến 1.0!")
+
+    # Kiểm tra xem kênh YouTube hoặc Profile đã được dùng trong chiến dịch khác hay chưa
+    cursor.execute("SELECT id, name, channel_id, channel_ids, gpm_profile_id, gpm_profile_ids FROM campaigns WHERE id != ?", (campaign_id,))
+    for row in cursor.fetchall():
+        r_name = row["name"] or f"Chiến dịch #{row['id']}"
+        # Check channels
+        if not is_warmup_only:
+            r_chs = []
+            if row["channel_ids"]:
+                try:
+                    r_chs = json.loads(row["channel_ids"])
+                except Exception:
+                    r_chs = [row["channel_id"]] if row["channel_id"] else []
+            elif row["channel_id"]:
+                r_chs = [row["channel_id"]]
+            r_chs_clean = [str(x).strip() for x in r_chs if x]
+            for ch in ch_ids:
+                if ch and str(ch).strip() in r_chs_clean:
+                    conn.close()
+                    raise HTTPException(status_code=400, detail=f"Kênh YouTube '{ch}' đã được gán vào '{r_name}'. Vui lòng chọn kênh khác hoặc xóa chiến dịch cũ để sử dụng lại!")
+
+        # Check GPM profiles
+        r_gpms = []
+        if row["gpm_profile_ids"]:
+            try:
+                r_gpms = json.loads(row["gpm_profile_ids"])
+            except Exception:
+                r_gpms = [row["gpm_profile_id"]] if row["gpm_profile_id"] else []
+        elif row["gpm_profile_id"]:
+            r_gpms = [row["gpm_profile_id"]]
+        r_gpms_clean = [str(x).strip() for x in r_gpms if x is not None]
+        for gp in gpm_ids:
+            if gp is not None and str(gp).strip() in r_gpms_clean:
+                conn.close()
+                raise HTTPException(status_code=400, detail=f"Tài khoản profile #{gp} đã được gán vào '{r_name}'. Vui lòng chọn profile khác hoặc xóa chiến dịch cũ để sử dụng lại!")
 
     main_ch = ch_ids[0] if ch_ids else ""
     main_gpm = gpm_ids[0] if gpm_ids else None
@@ -2356,7 +2961,9 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
             split_source_type = ?,
             split_folder = ?,
             split_keywords = ?,
-            split_provider = ?
+            split_provider = ?,
+            warmup_only = ?,
+            warmup_duration_mins = ?
         WHERE id = ?
     ''', (
         req.name,
@@ -2427,6 +3034,8 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
         req.split_folder or 'data/gameplay',
         req.split_keywords or 'minecraft parkour, satisfying asmr, subway surfers',
         req.split_provider or 'all',
+        1 if req.warmup_only else 0,
+        req.warmup_duration_mins or 10,
         campaign_id
     ))
     if req.download_dir:
@@ -2437,6 +3046,43 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
     conn.close()
     log_campaign_event(campaign_id, "INFO", "system", f"Đã cập nhật chiến dịch: '{req.name}' ({len(ch_ids)} kênh -> {len(gpm_ids)} nick GPM)")
     return {"status": "success", "message": "Đã lưu thay đổi chiến dịch thành công"}
+
+@app.post("/api/campaigns/{campaign_id}/warmup-now")
+def trigger_campaign_warmup_now(campaign_id: int, bg_tasks: BackgroundTasks):
+    """Kích hoạt ngay một phiên lướt feed TikTok nuôi nick (Pure Warm-up) cho chiến dịch"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, gpm_profile_ids, gpm_profile_id, warmup_duration_mins FROM campaigns WHERE id = ?", (campaign_id,))
+    camp = cursor.fetchone()
+    conn.close()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chiến dịch")
+
+    gpm_ids = []
+    if camp["gpm_profile_ids"]:
+        try:
+            loaded = json.loads(camp["gpm_profile_ids"])
+            if isinstance(loaded, list):
+                gpm_ids = [int(x) for x in loaded if x]
+        except Exception:
+            pass
+    if not gpm_ids and camp["gpm_profile_id"]:
+        gpm_ids = [int(camp["gpm_profile_id"])]
+
+    if not gpm_ids:
+        raise HTTPException(status_code=400, detail="Chiến dịch này chưa được gán Profile GPM nào để nuôi nick!")
+
+    duration = float(camp["warmup_duration_mins"] or 10.0)
+
+    def _run():
+        from backend.scheduler import scheduler
+        scheduler._run_campaign_warmup_session(camp["id"], camp["name"], gpm_ids, duration)
+
+    bg_tasks.add_task(_run)
+    return {
+        "status": "success",
+        "message": f"Đã bắt đầu phiên lướt TikTok nuôi nick ({duration:.0f} phút) cho {len(gpm_ids)} profiles trong nền!"
+    }
 
 @app.get("/api/campaigns/{campaign_id}/logs")
 def get_campaign_logs(campaign_id: int):
@@ -2671,7 +3317,8 @@ def stop_campaign(campaign_id: int):
     if sys.platform == "win32":
         try:
             import subprocess
-            res = subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True)
+            cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            res = subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True, creationflags=cflags)
             terminated = (res.returncode == 0)
         except Exception:
             pass
@@ -3429,7 +4076,8 @@ def stop_video_render():
     if sys.platform == "win32":
         try:
             import subprocess
-            res = subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True)
+            cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            res = subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True, text=True, creationflags=cflags)
             terminated = (res.returncode == 0)
         except Exception as e:
             logger.warning(f"Lỗi khi dừng ffmpeg: {e}")
@@ -3560,9 +4208,16 @@ def update_profile_username(gpm_id: str, req: UpdateProfileUsernameRequest):
             sec_uid = COALESCE(NULLIF(?, ''), sec_uid),
             browser_type = COALESCE(NULLIF(?, ''), browser_type),
             platform = COALESCE(NULLIF(?, ''), platform),
-            country = ?
+            country = ?,
+            group_name = CASE WHEN ? IS NOT NULL THEN ? ELSE group_name END,
+            campaign = CASE WHEN ? IS NOT NULL THEN ? ELSE campaign END,
+            total_views = CASE WHEN ? IS NOT NULL AND ? >= 0 THEN ? ELSE total_views END
         WHERE gpm_id = ?
-    """, (cleaned_u, cleaned_nick, cleaned_uid, cleaned_sec, req.browser_type or 'gpm', req.platform or 'tiktok', cleaned_country, gpm_id))
+    """, (cleaned_u, cleaned_nick, cleaned_uid, cleaned_sec, req.browser_type or 'gpm', req.platform or 'tiktok', cleaned_country,
+          req.group_name, (req.group_name or "").strip() if req.group_name is not None else None,
+          req.campaign, (req.campaign or "").strip() if req.campaign is not None else None,
+          req.total_views, req.total_views if req.total_views is not None else -1, int(req.total_views) if req.total_views is not None else 0,
+          gpm_id))
     conn.commit()
     conn.close()
 
@@ -5094,9 +5749,9 @@ def on_startup():
         log_event("WARNING", f"Không thể tự khởi động Background Scheduler: {e}")
 
     try:
-        # 3. Start WireGuard Proxies for ClipFlow profiles
+        # 3. Start WireGuard Proxies in background thread (Không làm nghẽn FastAPI HTTP startup)
         from backend.modules.wireproxy_manager import wireproxy_manager
-        wireproxy_manager.start_all()
+        threading.Thread(target=wireproxy_manager.start_all, daemon=True, name="Wireproxy-Startup").start()
     except Exception as wp_start_err:
         log_event("WARNING", f"Không thể tự khởi động WireGuard Proxies: {wp_start_err}")
 

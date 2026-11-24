@@ -31,6 +31,7 @@ RUNTIME_DIR = VPN_CONFIGS_DIR / ".runtime"
 BASE_COUNTRY_PORTS: Dict[str, int] = {
     "US": 10801,  # Hoa Kỳ
     "GB": 10811,  # Vương Quốc Anh
+    "UK": 10811,  # Vương Quốc Anh alias
     "DE": 10821,  # Đức
     "FR": 10831,  # Pháp
     "JP": 10841,  # Nhật Bản
@@ -48,7 +49,7 @@ BASE_COUNTRY_PORTS: Dict[str, int] = {
 
 COUNTRY_NAMES_LOOKUP: Dict[str, str] = {
     "UNITED STATES": "US", "USA": "US", "AMERICA": "US",
-    "UNITED KINGDOM": "GB", "BRITAIN": "GB", "ENGLAND": "GB",
+    "UNITED KINGDOM": "GB", "BRITAIN": "GB", "ENGLAND": "GB", "UK": "GB",
     "GERMANY": "DE", "DEUTSCHLAND": "DE",
     "FRANCE": "FR",
     "JAPAN": "JP",
@@ -144,29 +145,41 @@ class WireproxyManager:
             pass
 
         # 1. Nhận diện quốc gia từ metadata Proton VPN hoặc tên file
-        # Ưu tiên A: Proton VPN peer comment (VD: # US-FREE#3, # NL-FREE#1, # JP-FREE#2)
+        def _norm_c(c: str) -> str:
+            u = (c or "").upper()
+            return "GB" if u == "UK" else u
+
+        # Ưu tiên A: Proton VPN peer comment (VD: # US-FREE#3, # NL-FREE#1, # JP-FREE#2, # UK#226)
         if peer_comment:
             m_peer = re.match(r"^([A-Za-z]{2})(?:[-_#.]|$)", peer_comment)
-            if m_peer and m_peer.group(1).upper() in BASE_COUNTRY_PORTS:
-                country = m_peer.group(1).upper()
+            if m_peer:
+                cand_c = _norm_c(m_peer.group(1))
+                if cand_c in BASE_COUNTRY_PORTS:
+                    country = cand_c
 
         # Ưu tiên B: Proton VPN Key for comment (VD: # Key for us_miami)
         if not country and key_for:
             m_kf = re.match(r"^([A-Za-z]{2})(?:[-_#.]|$)", key_for)
-            if m_kf and m_kf.group(1).upper() in BASE_COUNTRY_PORTS:
-                country = m_kf.group(1).upper()
+            if m_kf:
+                cand_c = _norm_c(m_kf.group(1))
+                if cand_c in BASE_COUNTRY_PORTS:
+                    country = cand_c
 
-        # Ưu tiên C: Khớp 2 ký tự ở đầu tên file (VD: US.conf, US-Miami.conf, US-FREE#3.conf)
+        # Ưu tiên C: Khớp 2 ký tự ở đầu tên file (VD: US.conf, US-Miami.conf, US-FREE#3.conf, UK-226.conf)
         if not country:
-            m_start = re.match(r"^([A-Za-z]{2})(?:[-_#.]|$)", stem)
-            if m_start and m_start.group(1).upper() in BASE_COUNTRY_PORTS:
-                country = m_start.group(1).upper()
+            m_start = re.match(r"^(?:wg[-_])?([A-Za-z]{2})(?:[-_#.]|$)", stem, re.IGNORECASE)
+            if m_start:
+                cand_c = _norm_c(m_start.group(1))
+                if cand_c in BASE_COUNTRY_PORTS:
+                    country = cand_c
 
         # Ưu tiên D: Tìm mã quốc gia bất kỳ trong tên file
         if not country:
             m_any = re.search(r"(?:^|[_\-.])([A-Za-z]{2})(?:[_\-.]|$)", stem)
-            if m_any and m_any.group(1).upper() in BASE_COUNTRY_PORTS:
-                country = m_any.group(1).upper()
+            if m_any:
+                cand_c = _norm_c(m_any.group(1))
+                if cand_c in BASE_COUNTRY_PORTS:
+                    country = cand_c
 
         # Ưu tiên E: Tìm theo tên nước tiếng Anh
         if not country:
@@ -282,14 +295,15 @@ class WireproxyManager:
             return
         if sys.platform == "win32":
             try:
+                cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 cmd = f"netstat -ano | findstr :{port}"
-                out = subprocess.check_output(cmd, shell=True).decode("utf-8", errors="ignore")
+                out = subprocess.check_output(cmd, shell=True, creationflags=cflags).decode("utf-8", errors="ignore")
                 for line in out.splitlines():
                     if "LISTENING" in line:
                         parts = line.strip().split()
                         pid = parts[-1]
                         if pid and pid != "0":
-                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=2)
+                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=2, creationflags=cflags)
                 time.sleep(0.3)
             except Exception:
                 pass

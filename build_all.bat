@@ -25,15 +25,7 @@ if %errorlevel% neq 0 (
 
 REM 2. Code Signing & Inno Setup
 echo [2/3] Dang ky so Authenticode va bien dich Installer...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$cert = Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -match 'ClipFlow' } | Select-Object -First 1;" ^
-    "if (-not $cert) { $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=ClipFlow Developer, O=ClipFlow Systems' -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5); }" ^
-    "Set-AuthenticodeSignature -FilePath 'dist\ClipFlow\ClipFlow.exe' -Certificate $cert -HashAlgorithm SHA256 | Out-Null;" ^
-    "& 'C:\Users\datng\AppData\Local\Programs\Inno Setup 6\ISCC.exe' installer.iss;" ^
-    "if (Test-Path 'dist_installer\ClipFlow_Setup_v1.0.0.exe') {" ^
-    "    Set-AuthenticodeSignature -FilePath 'dist_installer\ClipFlow_Setup_v1.0.0.exe' -Certificate $cert -HashAlgorithm SHA256 | Out-Null;" ^
-    "    Export-Certificate -Cert $cert -FilePath 'dist_installer\ClipFlow_Developer.cer' -Force | Out-Null;" ^
-    "}"
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_installer.ps1
 
 if %errorlevel% neq 0 (
     echo [LOI] Qua trinh bien dich Installer that bai!

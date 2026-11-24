@@ -1,6 +1,5 @@
 """
-Script tự động obfuscate license_manager.py và các file quan trọng bằng PyArmor.
-Hỗ trợ cả PyArmor Trial (giới hạn dung lượng từng file) và PyArmor Pro/Basic.
+Script tự động obfuscate toàn bộ core backend modules bằng PyArmor để chống dịch ngược (Anti-Reverse Engineering).
 """
 import os
 import sys
@@ -11,36 +10,66 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent
 DIST_OBF = ROOT_DIR / "dist_obf"
 
-def obfuscate_critical_files():
-    print("=" * 60)
-    print(" [ClipFlow] TIẾN HÀNH MÃ HÓA BẢN QUYỀN VỚI PYARMOR")
-    print("=" * 60)
+CRITICAL_MODULES = [
+    "license_manager.py",
+    "license_client.py",
+    "diagnostics.py",
+    "browser_adapters.py",
+    "account_health.py",
+    "session_reader.py",
+    "multi_uploader.py",
+    "local_ingestion.py",
+    "proton_vpn_controller.py",
+    "channel_evaluator.py",
+    "tray_manager.py",
+    "account_warmup.py",
+    "yt_downloader.py",
+    "multi_downloader.py",
+    "api_v2_routes.py",
+    "gpm_client.py",
+    "distributor.py",
+    "metrics_tracker.py",
+    "notifier.py",
+    "wireproxy_manager.py",
+    "tiktok_uploader.py",
+    "tiktok_tracker.py",
+    "engagement_bot.py",
+    "ai_video_engine.py"
+]
+
+def obfuscate_all_core_modules():
+    print("=" * 65)
+    print(" [ClipFlow] TIẾN HÀNH MÃ HÓA TOÀN BỘ CORE BACKEND CHỐNG DỊCH NGƯỢC")
+    print("=" * 65)
 
     if DIST_OBF.exists():
         shutil.rmtree(DIST_OBF, ignore_errors=True)
     DIST_OBF.mkdir(parents=True, exist_ok=True)
 
-    target_file = ROOT_DIR / "backend" / "modules" / "license_manager.py"
-    if not target_file.exists():
-        print(f"[!] Không tìm thấy file: {target_file}")
-        return False
+    target_paths = []
+    for m in CRITICAL_MODULES:
+        p = ROOT_DIR / "backend" / "modules" / m
+        if p.exists():
+            target_paths.append(str(p))
+
+    print(f"[*] Tìm thấy {len(target_paths)}/{len(CRITICAL_MODULES)} modules core cần mã hóa...")
 
     cmd = [
         sys.executable, "-m", "pyarmor.cli", "gen",
-        "-O", str(DIST_OBF),
-        str(target_file)
-    ]
+        "-O", str(DIST_OBF)
+    ] + target_paths
 
-    print(f"[*] Mã hóa: {target_file.name} -> {DIST_OBF}")
     res = subprocess.run(cmd, cwd=str(ROOT_DIR))
 
     if res.returncode == 0:
-        print("\n[OK] Mã hóa thành công! Đã tạo bytecode mã hóa và runtime C-extension (.pyd).")
+        obf_files = list(DIST_OBF.glob("*.py"))
+        runtime_files = list(DIST_OBF.glob("pyarmor_runtime_*/*"))
+        print(f"\n[OK] Đã mã hóa thành công {len(obf_files)} core modules và tạo {len(runtime_files)} runtime files!")
         return True
     else:
-        print(f"\n[!] Thất bại với returncode: {res.returncode}")
+        print(f"\n[!] Quá trình mã hóa thất bại (Code: {res.returncode})")
         return False
 
 if __name__ == "__main__":
-    ok = obfuscate_critical_files()
+    ok = obfuscate_all_core_modules()
     sys.exit(0 if ok else 1)

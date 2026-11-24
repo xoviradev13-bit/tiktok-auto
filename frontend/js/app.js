@@ -174,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGpmProfiles();
     loadVideos();
     loadSavedChannels();
+    if (typeof loadChannelGroups === 'function') loadChannelGroups();
     loadCampaigns();
     loadPipelineStatus();
     loadSchedulerSettings();
@@ -878,9 +879,15 @@ function switchTab(tabId) {
     } else if (tabId === 'tab-saved-channels') {
         tabId = 'tab-sources';
         switchSourceSubTab('saved');
+    } else if (tabId === 'tab-channel-groups') {
+        tabId = 'tab-sources';
+        switchSourceSubTab('groups');
     } else if (tabId === 'tab-sources') {
         const btnSaved = document.getElementById('btnSubnavSaved');
-        if (btnSaved && btnSaved.classList.contains('active')) {
+        const btnGroups = document.getElementById('btnSubnavGroups');
+        if (btnGroups && btnGroups.classList.contains('active')) {
+            switchSourceSubTab('groups');
+        } else if (btnSaved && btnSaved.classList.contains('active')) {
             switchSourceSubTab('saved');
         } else {
             switchSourceSubTab('search');
@@ -1028,19 +1035,31 @@ function switchTab(tabId) {
 function switchSourceSubTab(sub) {
     const btnSaved = document.getElementById('btnSubnavSaved');
     const btnSearch = document.getElementById('btnSubnavSearch');
+    const btnGroups = document.getElementById('btnSubnavGroups');
     const viewSaved = document.getElementById('sourceSubViewSaved');
     const viewSearch = document.getElementById('sourceSubViewSearch');
+    const viewGroups = document.getElementById('sourceSubViewGroups');
+
+    btnSaved?.classList.remove('active');
+    btnSearch?.classList.remove('active');
+    btnGroups?.classList.remove('active');
+
+    if (viewSaved) viewSaved.style.display = 'none';
+    if (viewSearch) viewSearch.style.display = 'none';
+    if (viewGroups) viewGroups.style.display = 'none';
 
     if (sub === 'saved') {
         btnSaved?.classList.add('active');
-        btnSearch?.classList.remove('active');
         if (viewSaved) viewSaved.style.display = 'block';
-        if (viewSearch) viewSearch.style.display = 'none';
         loadSavedChannels();
+    } else if (sub === 'groups') {
+        btnGroups?.classList.add('active');
+        if (viewGroups) viewGroups.style.display = 'block';
+        if (typeof loadChannelGroups === 'function') {
+            loadChannelGroups();
+        }
     } else {
         btnSearch?.classList.add('active');
-        btnSaved?.classList.remove('active');
-        if (viewSaved) viewSaved.style.display = 'none';
         if (viewSearch) viewSearch.style.display = 'block';
     }
 }

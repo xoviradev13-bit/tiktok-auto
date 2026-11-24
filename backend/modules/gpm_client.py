@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import requests
 from typing import List, Dict, Optional, Any
@@ -130,6 +131,33 @@ class GPMClient:
 
         return False
 
+    def list_groups(self) -> Dict[str, str]:
+        """Lấy danh sách nhóm từ GPMLogin API (ánh xạ group_id -> group_name)"""
+        base = self.discover_api_base()
+        if not base:
+            return {}
+        try:
+            r = requests.get(f"{base}/groups?page=1&per_page=200", timeout=4)
+            if r.status_code == 200:
+                data = r.json()
+                raw_d = data.get("data", []) if isinstance(data, dict) else data
+                if isinstance(raw_d, dict):
+                    items = raw_d.get("data", [])
+                elif isinstance(raw_d, list):
+                    items = raw_d
+                else:
+                    items = []
+                g_map = {}
+                for g in items:
+                    gid = str(g.get("id") or g.get("group_id") or "").strip()
+                    gname = str(g.get("name") or g.get("group_name") or "").strip()
+                    if gid and gname:
+                        g_map[gid] = gname
+                return g_map
+        except Exception:
+            pass
+        return {}
+
     def get_profiles(self) -> List[Dict[str, Any]]:
         """Lấy toàn bộ danh sách profile từ GPMLogin (hỗ trợ phân trang đầy đủ cho 1.000+ accounts)"""
         base = self.discover_api_base()
@@ -139,6 +167,7 @@ class GPMClient:
         if not base:
             return []
 
+        group_map = self.list_groups()
         all_profiles = []
         page = 1
         while page <= 50:
@@ -163,11 +192,14 @@ class GPMClient:
                     p_id = p.get("id") or p.get("profile_id")
                     if not p_id:
                         continue
+                    g_id = str(p.get("group_id", "") or p.get("groupId", "") or "")
+                    g_name = str(p.get("group_name") or p.get("groupName") or p.get("group") or group_map.get(g_id) or "").strip()
                     all_profiles.append({
                         "id": str(p_id),
                         "name": p.get("name", f"Profile {p_id}"),
                         "raw_proxy": p.get("raw_proxy", "") or p.get("proxy", ""),
-                        "group_id": p.get("group_id", ""),
+                        "group_id": g_id,
+                        "group_name": g_name,
                         "created_at": p.get("created_at", "")
                     })
 
@@ -199,7 +231,8 @@ class GPMClient:
                 pass
 
             search_terms = [t for t in [prof_name, profile_id, profile_id[:8]] if t]
-            out = subprocess.check_output('tasklist /V /FO CSV', shell=True).decode('utf-8', errors='ignore')
+            cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            out = subprocess.check_output('tasklist /V /FO CSV', shell=True, creationflags=cflags).decode('utf-8', errors='ignore')
             target_pids = []
             for line in out.splitlines():
                 if 'chrome.exe' in line.lower():
@@ -212,7 +245,7 @@ class GPMClient:
 
             for pid in target_pids:
                 try:
-                    net_out = subprocess.check_output(f'netstat -ano | findstr {pid}', shell=True).decode('utf-8', errors='ignore')
+                    net_out = subprocess.check_output(f'netstat -ano | findstr {pid}', shell=True, creationflags=cflags).decode('utf-8', errors='ignore')
                     for net_line in net_out.splitlines():
                         if 'LISTENING' in net_line and '127.0.0.1:' in net_line:
                             m = re.search(r'127\.0\.0\.1:(\d+)', net_line)
@@ -437,15 +470,16 @@ class GPMClient:
         """Đảm bảo tắt các tiến trình Chrome của profile nếu bị kẹt ngầm"""
         import subprocess
         try:
+            cflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             search_terms = [t for t in [profile_id, profile_id[:8]] if t]
-            out = subprocess.check_output('tasklist /V /FO CSV', shell=True).decode('utf-8', errors='ignore')
+            out = subprocess.check_output('tasklist /V /FO CSV', shell=True, creationflags=cflags).decode('utf-8', errors='ignore')
             for line in out.splitlines():
                 if 'chrome.exe' in line.lower() and any(term.lower() in line.lower() for term in search_terms):
                     parts = line.split('","')
                     if len(parts) > 1:
                         pid = parts[1].replace('"', '').strip()
                         if pid.isdigit():
-                            subprocess.run(f"taskkill /F /T /PID {pid}", shell=True, capture_output=True)
+                            subprocess.run(f"taskkill /F /T /PID {pid}", shell=True, capture_output=True, creationflags=cflags)
             return True
         except Exception:
             return False

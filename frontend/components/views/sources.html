@@ -10,6 +10,11 @@
                         <i class="fa-solid fa-bookmark" style="color:var(--accent-blue);"></i> Kênh Đang Giám Sát (<span
                             id="sourceSavedCountBadge">0</span>)
                     </button>
+                    <button type="button" class="subnav-tab-btn" id="btnSubnavGroups"
+                        onclick="switchSourceSubTab('groups')">
+                        <i class="fa-solid fa-layer-group" style="color:var(--accent-purple);"></i> Nhóm Kênh (<span
+                            id="sourceGroupsCountBadge">0</span>)
+                    </button>
                 </div>
 
                 <!-- Subview: Search Channels (Active by default) -->
@@ -454,6 +459,17 @@
                                                 </button>
                                             </div>
 
+                                            <!-- Filter Group -->
+                                            <div class="sort-control">
+                                                <label for="savedFilterGroupSelect"><i
+                                                        class="fa-solid fa-layer-group"></i> Nhóm:</label>
+                                                <select id="savedFilterGroupSelect" class="custom-select sort-select"
+                                                    onchange="handleSavedFilterGroupChange(this.value)">
+                                                    <option value="all">Tất cả nhóm</option>
+                                                    <option value="ungrouped">Chưa phân nhóm</option>
+                                                </select>
+                                            </div>
+
                                             <!-- Filter Country -->
                                             <div class="sort-control">
                                                 <label for="savedFilterCountrySelect"><i
@@ -568,6 +584,9 @@
                                             <th id="th-saved-id" style="min-width: 140px;">
                                                 Mã Channel ID
                                             </th>
+                                            <th id="th-saved-group" style="min-width: 130px;">
+                                                Nhóm / Group
+                                            </th>
                                             <th class="sortable" id="th-saved-country"
                                                 onclick="handleSavedHeaderSort('country')"
                                                 title="Bấm để sắp xếp theo Quốc Gia">
@@ -644,6 +663,139 @@
                         </div>
                     </div> <!-- /#tab-saved-channels -->
                 </div> <!-- /#sourceSubViewSaved -->
+
+                <!-- Subview: Channel Groups Management -->
+                <div id="sourceSubViewGroups" style="display:none;">
+                    <div id="tab-channel-groups">
+                        <!-- Stats Grid for Channel Groups -->
+                        <div class="stats-grid mb-4">
+                            <div class="stat-card">
+                                <div class="stat-icon bg-purple"><i class="fa-solid fa-layer-group"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-num" id="groupStatTotal">0</span>
+                                    <span class="stat-title">Tổng Số Nhóm</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon bg-blue"><i class="fa-solid fa-folder-tree"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-num" id="groupStatGroupedChannels">0</span>
+                                    <span class="stat-title">Kênh Đã Phân Nhóm</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon bg-gold"><i class="fa-solid fa-inbox"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-num" id="groupStatUngroupedChannels">0</span>
+                                    <span class="stat-title">Kênh Chưa Phân Nhóm</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon bg-green"><i class="fa-solid fa-chart-pie"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-num" id="groupStatActiveGroups">0</span>
+                                    <span class="stat-title">Nhóm Đang Hoạt Động</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3><i class="fa-solid fa-layer-group text-purple"></i> Quản Lý Nhóm Kênh YouTube</h3>
+                                    <p class="panel-sub">Phân chia kênh theo chủ đề, ngách nội dung (Niche) hoặc team phụ trách để quản lý và lọc dữ liệu tập trung</p>
+                                </div>
+                                <div class="panel-actions-inline">
+                                    <button class="btn btn-secondary has-tooltip" id="btnRefreshChannelGroups" onclick="loadChannelGroups(this)" data-tooltip="Tải lại danh sách nhóm">
+                                        <i class="fa-solid fa-rotate"></i> Làm Mới
+                                    </button>
+                                    <button class="btn btn-primary has-tooltip" onclick="openCreateGroupModal()" data-tooltip="Tạo nhóm phân loại kênh mới">
+                                        <i class="fa-solid fa-plus"></i> Tạo Nhóm Mới
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Toolbar: Search, Sort, Filter -->
+                            <div class="table-toolbar mt-3" id="groupsToolbar">
+                                <div class="toolbar-multi">
+                                    <div class="toolbar-row">
+                                        <div class="toolbar-group">
+                                            <!-- Sort by -->
+                                            <div class="sort-control">
+                                                <label for="groupSortSelect"><i class="fa-solid fa-arrow-down-short-wide"></i> Sắp xếp:</label>
+                                                <select id="groupSortSelect" class="custom-select sort-select" onchange="handleGroupSortChange(this.value)">
+                                                    <option value="name_asc">Tên nhóm (A &rarr; Z)</option>
+                                                    <option value="name_desc">Tên nhóm (Z &rarr; A)</option>
+                                                    <option value="channel_count_desc" selected>Nhiều kênh nhất</option>
+                                                    <option value="subs_desc">Tổng Subs cao nhất</option>
+                                                    <option value="videos_desc">Tổng Videos nhiều nhất</option>
+                                                    <option value="created_desc">Mới tạo nhất</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Filter by Status -->
+                                            <div class="sort-control">
+                                                <label for="groupFilterState"><i class="fa-solid fa-filter"></i> Lọc:</label>
+                                                <select id="groupFilterState" class="custom-select sort-select" onchange="renderChannelGroups()">
+                                                    <option value="all">Tất cả nhóm</option>
+                                                    <option value="has_channels">Nhóm đã có kênh</option>
+                                                    <option value="empty">Nhóm trống (chưa có kênh)</option>
+                                                </select>
+                                            </div>
+
+                                            <button type="button" class="btn-reset-filter has-tooltip tooltip-top" onclick="resetGroupFilters()" data-tooltip="Khôi phục bộ lọc nhóm">
+                                                <i class="fa-solid fa-rotate-left"></i> Đặt lại
+                                            </button>
+                                        </div>
+
+                                        <div class="toolbar-group">
+                                            <div class="table-search-box">
+                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                <input type="text" id="searchGroupKeyword" placeholder="Tìm kiếm nhóm theo tên, mô tả..." oninput="renderChannelGroups()">
+                                            </div>
+                                            <span class="badge badge-purple" id="badgeGroupsCount">0 Nhóm</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Groups Grid Container -->
+                            <div id="channelGroupsGrid" class="mt-4" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px;">
+                                <!-- Dynamically populated cards -->
+                            </div>
+
+                            <!-- Channel Groups Pagination -->
+                            <div id="channelGroupsPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border-color); background: rgba(255, 255, 255, 0.02); border-radius: 0 0 10px 10px; margin-top: 18px; flex-wrap: wrap; gap: 10px;">
+                                <div style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-muted);">
+                                    <span>Hiển thị</span>
+                                    <select id="channelGroupsPageSizeSelect" class="input-field" style="height: 30px; font-size: 12px; padding: 0 8px; border-radius: 6px; width: 95px;" onchange="changeChannelGroupsPageSize(this.value)">
+                                        <option value="10">10 / trang</option>
+                                        <option value="20" selected>20 / trang</option>
+                                        <option value="50">50 / trang</option>
+                                        <option value="100">100 / trang</option>
+                                    </select>
+                                    <span id="channelGroupsPaginationInfo">0 nhóm</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px;" id="channelGroupsPaginationNav">
+                                </div>
+                            </div>
+
+                            <!-- Empty State Container -->
+                            <div id="channelGroupsEmptyState" style="display: none; padding: 48px 24px; text-align: center;">
+                                <div style="width: 64px; height: 64px; border-radius: 16px; background: rgba(99, 102, 241, 0.12); color: #818cf8; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 16px;">
+                                    <i class="fa-solid fa-layer-group"></i>
+                                </div>
+                                <h4 style="margin: 0 0 8px 0; font-size: 17px; font-weight: 700; color: var(--text-primary);">Chưa Có Nhóm Kênh Nào</h4>
+                                <p style="margin: 0 0 20px 0; font-size: 13px; color: var(--text-muted); max-width: 440px; margin-left: auto; margin-right: auto;">
+                                    Hãy tạo các nhóm như <em>Podcast US, Scary Stories, Daily Facts, Tin Tức Crypto...</em> để tổ chức dàn kênh và cấu hình auto-render chuyên nghiệp hơn!
+                                </p>
+                                <button type="button" class="btn btn-primary" onclick="openCreateGroupModal()">
+                                    <i class="fa-solid fa-plus"></i> Tạo Nhóm Đầu Tiên
+                                </button>
+                            </div>
+                        </div>
+                    </div> <!-- /#tab-channel-groups -->
+                </div> <!-- /#sourceSubViewGroups -->
             </section> <!-- /#tab-sources -->
 
             <!-- TAB: AUDIO STUDIO (KHO ÂM THANH & BGM) -->

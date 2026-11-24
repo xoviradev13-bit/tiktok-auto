@@ -242,18 +242,23 @@ function validateMinDurationInput(input) {
  */
 function toggleCampaignAutoUpload(mode, isChecked) {
     const isNew = mode === 'new';
+    const p = isNew ? 'campaign' : 'editCampaign';
+    const warmupOnlySwitch = document.getElementById(`${p}WarmupOnlySwitch`);
+    const isWarmupOnly = warmupOnlySwitch ? warmupOnlySwitch.checked : false;
+
     const actionsWrap = document.getElementById(isNew ? 'campaignAccountActionsWrap' : 'editCampaignAccountActionsWrap');
     const notice = document.getElementById(isNew ? 'campaignNoUploadNotice' : 'editCampaignNoUploadNotice');
     const selectionWrap = document.getElementById(isNew ? 'campaignAccountSelectionWrap' : 'editCampaignAccountSelectionWrap');
 
     if (actionsWrap) {
-        actionsWrap.style.display = isChecked ? 'flex' : 'none';
+        actionsWrap.style.display = (isChecked || isWarmupOnly) ? 'flex' : 'none';
     }
     if (notice) {
-        notice.style.display = isChecked ? 'none' : 'block';
+        notice.style.display = (isChecked || isWarmupOnly) ? 'none' : 'block';
     }
     if (selectionWrap) {
-        selectionWrap.style.display = isChecked ? 'block' : 'none';
+        // ALWAYS keep account selection list visible if Auto-Upload is ON OR if Warmup Only is ON!
+        selectionWrap.style.display = (isChecked || isWarmupOnly) ? 'block' : 'none';
     }
 }
 
@@ -350,7 +355,7 @@ async function loadDownloadFilterSettings() {
         const longformEl = document.getElementById('settingFilterIncludeLongform');
 
         if (shortsEl && data.include_shorts != null) shortsEl.checked = !!data.include_shorts;
-        if (longformEl && data.include_longform != null) longformEl.checked = !!data.include_longform;
+        if (longformEl) longformEl.checked = data.include_longform != null ? !!data.include_longform : false;
 
         applyMinDurationState(shortsEl, longformEl, minEl, data.min_video_duration ?? null);
         if (maxEl && data.max_video_duration != null) maxEl.value = data.max_video_duration;
@@ -363,7 +368,7 @@ async function saveDownloadFilterSettings(silent = false) {
     const minVal = parseInt(document.getElementById('settingMinVideoDuration')?.value || '0', 10);
     const maxVal = parseInt(document.getElementById('settingMaxVideoDuration')?.value || '3600', 10);
     const includeShorts = document.getElementById('settingFilterIncludeShorts')?.checked ?? true;
-    const includeLongform = document.getElementById('settingFilterIncludeLongform')?.checked ?? true;
+    const includeLongform = document.getElementById('settingFilterIncludeLongform')?.checked ?? false;
 
     if (!includeShorts && !includeLongform) {
         showToast('⚠️ Vui lòng chọn ít nhất một loại video: Shorts hoặc Video Dài!', true);

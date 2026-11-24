@@ -222,6 +222,8 @@ class YouTubeRSSMonitor:
 
         matched_campaigns = []
         for camp in campaign_candidates:
+            if camp.get("warmup_only") == 1:
+                continue
             ch_ids = []
             try:
                 ch_ids = json.loads(camp.get("channel_ids") or "[]")
@@ -890,7 +892,7 @@ class YouTubeRSSMonitor:
         global_min = int(db_s.get("download_min_duration", 300))
         global_max = int(db_s.get("download_max_duration", 3600))
         global_shorts = db_s.get("download_include_shorts", "1") == "1"
-        global_longform = db_s.get("download_include_longform", "1") == "1"
+        global_longform = db_s.get("download_include_longform", "0") == "1"
 
         # 2. Tìm chiến dịch liên kết (Campaign)
         camp_row = None

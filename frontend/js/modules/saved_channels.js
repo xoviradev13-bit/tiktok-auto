@@ -23,6 +23,7 @@ async function loadSavedChannels(btn) {
             throw new Error(channels && channels.detail ? channels.detail : 'Dữ liệu kênh không đúng định dạng');
         }
         cachedSavedChannels = channels.map(c => ({ ...c, is_saved: true }));
+        window.cachedSavedChannels = cachedSavedChannels;
 
         const total = cachedSavedChannels.length;
         const activeCount = cachedSavedChannels.filter(c => c.is_active === 1 || c.is_active === true).length;
@@ -59,10 +60,16 @@ async function loadSavedChannels(btn) {
 // Saved Channels Sorting & Filtering State
 let savedSortField = 'default';
 let savedSortDirection = 'asc';
+let savedFilterGroup = 'all';
 let savedFilterCountry = 'all';
 let savedFilterMinViews = 0;
 let savedFilterMinSubs = 0;
 let savedFilterCadence = 'all';
+
+function handleSavedFilterGroupChange(val) {
+    savedFilterGroup = val;
+    renderSavedChannelsTable();
+}
 
 function handleSavedSortSelectChange(val) {
     savedSortField = val;
@@ -118,6 +125,7 @@ function handleSavedFilterCadenceChange(val) {
 function resetSavedFilters() {
     savedSortField = 'default';
     savedSortDirection = 'asc';
+    savedFilterGroup = 'all';
     savedFilterCountry = 'all';
     savedFilterMinViews = 0;
     savedFilterMinSubs = 0;
@@ -125,6 +133,8 @@ function resetSavedFilters() {
 
     const selSort = document.getElementById('savedSortSelect');
     if (selSort) selSort.value = 'default';
+    const selGroup = document.getElementById('savedFilterGroupSelect');
+    if (selGroup) selGroup.value = 'all';
     const selCountry = document.getElementById('savedFilterCountrySelect');
     if (selCountry) selCountry.value = 'all';
     const selViews = document.getElementById('savedFilterViewsSelect');
@@ -161,6 +171,16 @@ function getFilteredSavedChannels() {
         list = list.filter(c => c && (c.is_active === 1 || c.is_active === true));
     } else if (statusFilter === 'inactive') {
         list = list.filter(c => c && (c.is_active === 0 || c.is_active === false));
+    }
+
+    // Group Filter
+    if (savedFilterGroup !== 'all') {
+        if (savedFilterGroup === 'ungrouped') {
+            list = list.filter(c => c && (!c.group_id || c.group_id === 0));
+        } else {
+            const gid = parseInt(savedFilterGroup, 10);
+            list = list.filter(c => c && c.group_id === gid);
+        }
     }
 
     // 2. Country Filter
@@ -261,6 +281,7 @@ async function exportSavedChannelsCsv() {
     const headers = [
         'Channel ID',
         'Tên Hiển Thị (Display Name)',
+        'Nhóm Kênh (Group)',
         'Tên Gốc Kênh',
         'Handle',
         'URL Kênh YouTube',
@@ -288,6 +309,7 @@ async function exportSavedChannelsCsv() {
         rows.push([
             c.channel_id || '',
             c.display_name || c.title || '',
+            c.group_name || 'Chưa phân nhóm',
             c.title || '',
             c.handle || '',
             c.url || (c.channel_id ? `https://www.youtube.com/channel/${c.channel_id}` : ''),
@@ -460,6 +482,18 @@ function renderSavedChannelsTable() {
                     </div>
                 </td>
 
+                <!-- Col: Nhóm / Group -->
+                <td>
+                    ${c.group_name
+                ? `<span class="badge has-tooltip" style="background:${c.group_color || '#6366f1'}20; color:${c.group_color || '#6366f1'}; border:1px solid ${c.group_color || '#6366f1'}40; cursor:pointer; font-weight:700; font-size:11px;" onclick="openAssignChannelGroupModal('${escapeHtml(cid)}')" data-tooltip="Bấm để đổi nhóm">
+                            <i class="fa-solid ${escapeHtml(c.group_icon || 'fa-layer-group')}"></i> ${escapeHtml(c.group_name)}
+                           </span>`
+                : `<span class="badge badge-secondary has-tooltip" style="cursor:pointer; opacity:0.6; font-size:10.5px;" onclick="openAssignChannelGroupModal('${escapeHtml(cid)}')" data-tooltip="Bấm để gán nhóm cho kênh">
+                            <i class="fa-solid fa-plus"></i> Gán nhóm
+                           </span>`
+            }
+                </td>
+
                 <!-- Col 3: Quốc Gia -->
                 <td>${getCountryBadge(c.country)}</td>
 
@@ -531,6 +565,9 @@ function renderSavedChannelsTable() {
                             </button>
                             <button type="button" class="action-dropdown-item" onclick="openChannelSettingsModal('${escapeHtml(cid)}')">
                                 <i class="fa-solid fa-gear" style="color:#a855f7;"></i> Cài đặt kênh
+                            </button>
+                            <button type="button" class="action-dropdown-item" onclick="openAssignChannelGroupModal('${escapeHtml(cid)}')">
+                                <i class="fa-solid fa-layer-group" style="color:#818cf8;"></i> Gán Nhóm Kênh
                             </button>
                             <div class="dropdown-divider"></div>
                             <a href="${escapeHtml(chUrl)}" target="_blank" rel="noopener" class="action-dropdown-item" onclick="closeAllActionMenus()">
@@ -795,6 +832,7 @@ async function scanAllSavedChannels(btn) {
                 const channels = await res.json();
                 if (Array.isArray(channels)) {
                     cachedSavedChannels = channels.map(c => ({ ...c, is_saved: true }));
+                    window.cachedSavedChannels = cachedSavedChannels;
                 }
             }
         } catch (err) {
@@ -1030,7 +1068,7 @@ async function openChannelSettingsModal(channelId) {
         const chIncShorts = document.getElementById('settingChannelIncludeShorts');
         if (chIncShorts) chIncShorts.checked = (channel.include_shorts !== 0);
         const chIncLong = document.getElementById('settingChannelIncludeLongform');
-        if (chIncLong) chIncLong.checked = (channel.include_longform !== 0);
+        if (chIncLong) chIncLong.checked = (channel.include_longform === 1);
         const chMinDur = document.getElementById('settingChannelMinDuration');
         if (typeof applyMinDurationState === 'function') {
             applyMinDurationState(chIncShorts, chIncLong, chMinDur, channel.min_video_duration ?? null);
@@ -1177,11 +1215,11 @@ async function saveChannelSettings(btn) {
     const customProxy = (document.getElementById('settingCustomProxy')?.value || '').trim();
     const downloadDir = (document.getElementById('settingDownloadDir')?.value || '').trim();
     const renderDir = (document.getElementById('settingRenderDir')?.value || '').trim();
-        if (customProxy && !isValidProxyFormat(customProxy)) {
+    if (customProxy && !isValidProxyFormat(customProxy)) {
         markInputError('settingCustomProxy', 'Định dạng Proxy không hợp lệ! Ví dụ: ip:port hoặc ip:port:user:pass');
         return;
     }
-    
+
     const incShorts = document.getElementById('settingChannelIncludeShorts')?.checked ? 1 : 0;
     const incLong = document.getElementById('settingChannelIncludeLongform')?.checked ? 1 : 0;
     if (!incShorts && !incLong) {
@@ -1211,7 +1249,7 @@ async function saveChannelSettings(btn) {
         is_active: document.getElementById('settingIsActive')?.checked ? 1 : 0,
         auto_download: document.getElementById('settingAutoDownload')?.checked ? 1 : 0,
         auto_render: document.getElementById('settingAutoRender')?.checked ? 1 : 0,
-                        min_video_duration: minDur,
+        min_video_duration: minDur,
         max_video_duration: maxDur,
         include_shorts: incShorts,
         include_longform: incLong,
@@ -1227,7 +1265,7 @@ async function saveChannelSettings(btn) {
         disable_narration_for_shorts: document.getElementById('settingChannelDisableNarrationForShorts')?.checked ? 1 : 0,
         keep_original_script_for_shorts: document.getElementById('settingChannelKeepOriginalScriptForShorts')?.checked ? 1 : 0,
         tts_engine: document.querySelector('input[name="channelTtsEngineRadio"]:checked')?.value || 'edge-tts',
-                
+
         ken_burns_enabled: document.getElementById('settingChannelKenBurnsSwitch')?.checked ? 1 : 0,
         endcard_enabled: document.getElementById('settingChannelEndcardSwitch')?.checked ? 1 : 0,
         use_ai_images: document.getElementById('settingChannelUseAiImages')?.checked ? 1 : 0,
@@ -1275,7 +1313,7 @@ async function saveChannelSettings(btn) {
                 ch.is_active = payload.is_active;
                 ch.auto_download = payload.auto_download;
                 ch.auto_render = payload.auto_render;
-                                                ch.min_video_duration = minDur;
+                ch.min_video_duration = minDur;
                 ch.max_video_duration = maxDur;
                 ch.include_shorts = incShorts;
                 ch.include_longform = incLong;
@@ -1440,6 +1478,7 @@ window.copyCurrentChannelUrl = copyCurrentChannelUrl;
 window.deleteChannelFromModal = deleteChannelFromModal;
 window.exportSavedChannelsCsv = exportSavedChannelsCsv;
 window.getFilteredSavedChannels = getFilteredSavedChannels;
+window.handleSavedFilterGroupChange = handleSavedFilterGroupChange;
 window.handleSavedFilterCadenceChange = handleSavedFilterCadenceChange;
 window.handleSavedFilterCountryChange = handleSavedFilterCountryChange;
 window.handleSavedFilterSubsChange = handleSavedFilterSubsChange;

@@ -7,12 +7,13 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
+    pathex=['.', 'dist_obf'],
     binaries=[],
     datas=[
         ('frontend', 'frontend'),
         ('logo', 'logo'),
         ('.env.example', '.'),
+        ('tools', 'tools'),
     ],
     hiddenimports=[
         'uvicorn',
@@ -64,6 +65,7 @@ a = Analysis(
         'backend.modules.yt_monitor',
         'backend.modules.tiktok_tracker',
         'backend.modules.diagnostics',
+        'pyarmor_runtime_000000',
     ],
     hookspath=[],
     hooksconfig={},
@@ -74,6 +76,30 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# --- PYARMOR OBFUSCATION INTEGRATION (ANTI-REVERSE ENGINEERING) ---
+obf_dir = os.path.abspath('dist_obf')
+if os.path.exists(obf_dir):
+    print(">>> [PyArmor] Patcher: Dang thay the ma nguon bang ma hoa chong dich nguoc (Anti-Reverse)...")
+    patched_count = 0
+    # Thay thế các file nguồn trong pure
+    for i in range(len(a.pure)):
+        mod_name = a.pure[i][0]
+        if mod_name.startswith('backend.modules.'):
+            base_mod = mod_name.split('.')[-1] + '.py'
+            obf_file = os.path.join(obf_dir, base_mod)
+            if os.path.exists(obf_file):
+                a.pure[i] = (mod_name, obf_file, a.pure[i][2])
+                patched_count += 1
+    print(f">>> [PyArmor] Da tich hop thanh cong {patched_count} modules ma hoa chong reverse vao PYZ bundle!")
+
+    # Bổ sung pyarmor runtime C-extension vào datas
+    runtime_dir = os.path.join(obf_dir, 'pyarmor_runtime_000000')
+    if os.path.exists(runtime_dir):
+        for r_file in os.listdir(runtime_dir):
+            src_f = os.path.join(runtime_dir, r_file)
+            if os.path.isfile(src_f):
+                a.datas.append((f'pyarmor_runtime_000000/{r_file}', src_f, 'DATA'))
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

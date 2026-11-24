@@ -47,6 +47,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "dist\ClipFlow\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "logo\*"; DestDir: "{app}\logo"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 
 [Dirs]
@@ -56,6 +57,7 @@ Name: "{userappdata}\ClipFlow\downloads"
 Name: "{userappdata}\ClipFlow\rendered"
 Name: "{userappdata}\ClipFlow\logs"
 Name: "{userappdata}\ClipFlow\music"
+Name: "{userappdata}\ClipFlow\vpn_configs"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\logo\app-logo.ico"
