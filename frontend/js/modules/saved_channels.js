@@ -1054,11 +1054,22 @@ async function openChannelSettingsModal(channelId) {
 
         const chDlInput = document.getElementById('settingDownloadDir');
         const chRdInput = document.getElementById('settingRenderDir');
+        const isDefaultOrEmptyDl = (d) => {
+            if (!d) return true;
+            const s = String(d).trim().toLowerCase();
+            return s === 'data/downloads' || s === 'data\\downloads' || s.endsWith('\\data\\downloads') || s.endsWith('/data/downloads');
+        };
+        const isDefaultOrEmptyRd = (d) => {
+            if (!d) return true;
+            const s = String(d).trim().toLowerCase();
+            return s === 'data/rendered' || s === 'data\\rendered' || s.endsWith('\\data\\rendered') || s.endsWith('/data/rendered');
+        };
+
         if (chDlInput) {
-            chDlInput.value = (channel.download_dir && typeof isAbsolutePath === 'function' && isAbsolutePath(channel.download_dir)) ? channel.download_dir : defaultDl;
+            chDlInput.value = isDefaultOrEmptyDl(channel.download_dir) ? '' : channel.download_dir;
         }
         if (chRdInput) {
-            chRdInput.value = (channel.render_dir && typeof isAbsolutePath === 'function' && isAbsolutePath(channel.render_dir)) ? channel.render_dir : defaultRd;
+            chRdInput.value = isDefaultOrEmptyRd(channel.render_dir) ? '' : channel.render_dir;
         }
         setChecked('settingIsActive', channel.is_active === 1);
         setChecked('settingAutoDownload', channel.auto_download === 1);

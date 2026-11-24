@@ -12,6 +12,19 @@ if (Test-Path "dist\ClipFlow\ClipFlow.exe") {
     Write-Host "Signed dist\ClipFlow\ClipFlow.exe successfully."
 }
 
+if (Test-Path "build") {
+    Write-Host "Cleaning up build directory to free disk space..."
+    Remove-Item -Path "build" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+if (Test-Path "D:\") {
+    $tempDir = "D:\temp_build"
+    if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
+    $env:TEMP = $tempDir
+    $env:TMP = $tempDir
+    Write-Host "Set compilation temp directory to $tempDir"
+}
+
 Write-Host "Compiling Inno Setup installer..."
 & "C:\Users\datng\AppData\Local\Programs\Inno Setup 6\ISCC.exe" installer.iss
 if ($LASTEXITCODE -ne 0) {

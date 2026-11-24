@@ -139,6 +139,7 @@ def is_valid_hhmm(t_str: str) -> bool:
 class SearchKeywordRequest(BaseModel):
     keyword: str
     max_results: int = 50
+    country: Optional[str] = "all"
 
 class UnsaveChannelRequest(BaseModel):
     channel_id: str
@@ -1425,7 +1426,8 @@ def search_youtube_channels(req: SearchKeywordRequest):
         raise HTTPException(status_code=400, detail="Vui lòng nhập từ khóa tìm kiếm YouTube!")
     if req.max_results < 1 or req.max_results > 200:
         raise HTTPException(status_code=400, detail="Số lượng kênh tìm kiếm phải từ 1 đến 200!")
-    results = yt_scanner.search_channels_by_keyword(kw, req.max_results)
+    country_code = (req.country or "all").strip().upper()
+    results = yt_scanner.search_channels_by_keyword(kw, req.max_results, country=country_code)
 
     # Đánh dấu các kênh đã lưu trong DB
     try:
@@ -1808,10 +1810,10 @@ def list_saved_channels():
         r["campaigns"] = matched_camps
         r["campaign_names"] = [mc["name"] for mc in matched_camps]
         r["campaign_name"] = ", ".join(r["campaign_names"]) if r["campaign_names"] else ""
-        if not r.get("download_dir") or r.get("download_dir") == "data/downloads":
-            r["download_dir"] = str(DOWNLOADS_DIR)
-        if not r.get("render_dir") or r.get("render_dir") == "data/rendered":
-            r["render_dir"] = str(RENDERED_DIR)
+        if r.get("download_dir") in ("data/downloads", str(DOWNLOADS_DIR)):
+            r["download_dir"] = ""
+        if r.get("render_dir") in ("data/rendered", str(RENDERED_DIR)):
+            r["render_dir"] = ""
     return rows
 
 @app.get("/api/youtube/channels/{channel_id}")
@@ -2556,10 +2558,10 @@ def list_campaigns():
             gpm_list = [r["gpm_profile_id"]]
         r["gpm_profile_ids_list"] = gpm_list
         r["gpm_count"] = len(gpm_list)
-        if not r.get("download_dir") or r.get("download_dir") == "data/downloads":
-            r["download_dir"] = str(DOWNLOADS_DIR)
-        if not r.get("render_dir") or r.get("render_dir") == "data/rendered":
-            r["render_dir"] = str(RENDERED_DIR)
+        if r.get("download_dir") in ("data/downloads", str(DOWNLOADS_DIR)):
+            r["download_dir"] = ""
+        if r.get("render_dir") in ("data/rendered", str(RENDERED_DIR)):
+            r["render_dir"] = ""
     return rows
 
 def sanitize_campaign_schedule(raw_str: Optional[str]) -> str:

@@ -638,11 +638,12 @@ class YouTubeScanner:
                 return cmd["token"]
         return None
 
-    def _discover_via_html(self, keyword: str, max_results: int) -> Dict[str, Dict[str, Any]]:
+    def _discover_via_html(self, keyword: str, max_results: int, country: str = "all") -> Dict[str, Dict[str, Any]]:
         found: Dict[str, Dict[str, Any]] = {}
+        gl = country.upper() if country and country.upper() != "ALL" else "US"
         url = (
             "https://www.youtube.com/results"
-            f"?search_query={urllib.parse.quote(keyword)}&sp=EgIQAg%3D%3D&hl=en&gl=US"
+            f"?search_query={urllib.parse.quote(keyword)}&sp=EgIQAg%3D%3D&hl=en&gl={gl}"
         )
         status, raw = _http_request(url, timeout=10)
         if status != 200 or not raw:
@@ -705,7 +706,7 @@ class YouTubeScanner:
 
         return found
 
-    def _discover_via_ytdlp(self, keyword: str, max_results: int) -> Dict[str, Dict[str, Any]]:
+    def _discover_via_ytdlp(self, keyword: str, max_results: int, country: str = "all") -> Dict[str, Dict[str, Any]]:
         found: Dict[str, Dict[str, Any]] = {}
         hits: Dict[str, int] = {}
         opts = {**self.ydl_opts, "extract_flat": "in_playlist"}
@@ -745,7 +746,7 @@ class YouTubeScanner:
             out[cid] = found[cid]
         return out
 
-    def _discover_via_api(self, keyword: str, max_results: int) -> Dict[str, Dict[str, Any]]:
+    def _discover_via_api(self, keyword: str, max_results: int, country: str = "all") -> Dict[str, Dict[str, Any]]:
         """Official search.list (100 units / page). Last resort only."""
         found: Dict[str, Dict[str, Any]] = {}
         key = self.key_pool.get_active_key()
@@ -760,6 +761,8 @@ class YouTubeScanner:
                 "part": "snippet", "type": "channel", "q": keyword,
                 "maxResults": 50, "key": key,
             }
+            if country and country.upper() != "ALL":
+                params["regionCode"] = country.upper()
             if page_token:
                 params["pageToken"] = page_token
             status, body = _http_request(
@@ -799,19 +802,21 @@ class YouTubeScanner:
                 break
         return found
 
-    def _discover(self, keyword: str, max_results: int) -> Dict[str, Dict[str, Any]]:
+    def _discover(self, keyword: str, max_results: int, country: str = "all") -> Dict[str, Dict[str, Any]]:
         for name, fn in (
             ("A: HTML scrape", self._discover_via_html),
             ("B: yt-dlp search", self._discover_via_ytdlp),
             ("C: official API", self._discover_via_api),
         ):
             try:
+                found = fn(keyword, max_results, country=country)
+            except TypeError:
                 found = fn(keyword, max_results)
             except Exception as e:
                 log_event("ERROR", f"Chiến lược {name} lỗi: {e}")
                 found = {}
             if found:
-                log_event("INFO", f"Discovery '{keyword}': {len(found)} kênh qua chiến lược {name}")
+                log_event("INFO", f"Discovery '{keyword}' [Vùng: {country}]: {len(found)} kênh qua chiến lược {name}")
                 return found
             log_event("WARNING", f"Chiến lược {name} không trả về kênh nào, thử phương án tiếp theo")
         return {}
@@ -1403,12 +1408,13 @@ class YouTubeScanner:
     # Main entry point
     # ------------------------------------------------------------------ #
     def search_channels_by_keyword(
-        self, keyword: str, max_results: int = 50, use_cache: bool = True
+        self, keyword: str, max_results: int = 50, use_cache: bool = True, country: str = "all"
     ) -> List[Dict[str, Any]]:
-        log_event("INFO", f"Bắt đầu quét kênh YouTube cho từ khóa: '{keyword}' (Tối đa {max_results} kênh)")
+        country_tag = f" [Quốc gia: {country.upper()}]" if country and country.upper() != "ALL" else ""
+        log_event("INFO", f"Bắt đầu quét kênh YouTube cho từ khóa: '{keyword}'{country_tag} (Tối đa {max_results} kênh)")
 
         # 1. Discover
-        found = self._discover(keyword, max_results)
+        found = self._discover(keyword, max_results, country=country)
         if not found:
             log_event(
                 "ERROR",

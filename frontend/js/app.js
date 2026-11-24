@@ -187,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     startTopbarClock();
     initLanguageVoiceAutoSync();
     ensureAudioCategoriesLoaded();
+    populateCountryFilterOptions([]);
     if (typeof loadActiveBrowser === 'function') loadActiveBrowser();
     if (window.themeManager && typeof window.themeManager.init === 'function') window.themeManager.init();
     if (window.i18n && typeof window.i18n.applyTranslations === 'function' && window.i18n.getLanguage && window.i18n.getLanguage() !== 'vi') {
@@ -211,6 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.querySelector('.col-picker-container');
         if (container && !container.contains(e.target)) {
             closeColumnDropdown();
+        }
+        if (!e.target.closest('.country-picker-container')) {
+            closeCountryDropdown();
         }
         if (!e.target.closest('.action-dropdown-wrap')) {
             closeAllActionMenus();
@@ -1176,6 +1180,132 @@ let filterCustomViews = null;
 let filterCustomSubs = null;
 let filterCustomCadence = null;
 
+// Preset 100+ Quốc gia phổ biến cho YouTube Shorts & Content Creator
+const POPULAR_COUNTRIES = [
+    // Top Content Markets
+    { code: 'US', name: 'Mỹ (United States)', flag: '🇺🇸' },
+    { code: 'GB', name: 'Vương Quốc Anh (UK)', flag: '🇬🇧' },
+    { code: 'VN', name: 'Việt Nam', flag: '🇻🇳' },
+    { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+    { code: 'AU', name: 'Úc (Australia)', flag: '🇦🇺' },
+    { code: 'DE', name: 'Đức (Germany)', flag: '🇩🇪' },
+    { code: 'FR', name: 'Pháp (France)', flag: '🇫🇷' },
+    { code: 'JP', name: 'Nhật Bản (Japan)', flag: '🇯🇵' },
+    { code: 'KR', name: 'Hàn Quốc (South Korea)', flag: '🇰🇷' },
+    { code: 'IN', name: 'Ấn Độ (India)', flag: '🇮🇳' },
+    { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
+    { code: 'ID', name: 'Indonesia', flag: '🇮🇩' },
+    { code: 'TH', name: 'Thái Lan (Thailand)', flag: '🇹🇭' },
+    { code: 'PH', name: 'Philippines', flag: '🇵🇭' },
+    { code: 'MY', name: 'Malaysia', flag: '🇲🇾' },
+    { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+    { code: 'IT', name: 'Ý (Italy)', flag: '🇮🇹' },
+    { code: 'ES', name: 'Tây Ban Nha (Spain)', flag: '🇪🇸' },
+    { code: 'NL', name: 'Hà Lan (Netherlands)', flag: '🇳🇱' },
+    { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
+    { code: 'RU', name: 'Nga (Russia)', flag: '🇷🇺' },
+    { code: 'TR', name: 'Thổ Nhĩ Kỳ (Turkey)', flag: '🇹🇷' },
+    { code: 'SA', name: 'Ả Rập Xê Út (Saudi Arabia)', flag: '🇸🇦' },
+    { code: 'AE', name: 'UAE (Các Tiểu vương quốc)', flag: '🇦🇪' },
+    { code: 'SE', name: 'Thụy Điển (Sweden)', flag: '🇸🇪' },
+    { code: 'NO', name: 'Na Uy (Norway)', flag: '🇳🇴' },
+    { code: 'DK', name: 'Đan Mạch (Denmark)', flag: '🇩🇰' },
+    { code: 'FI', name: 'Phần Lan (Finland)', flag: '🇫🇮' },
+    { code: 'PL', name: 'Ba Lan (Poland)', flag: '🇵🇱' },
+    { code: 'CH', name: 'Thụy Sĩ (Switzerland)', flag: '🇨🇭' },
+    { code: 'AT', name: 'Áo (Austria)', flag: '🇦🇹' },
+    { code: 'BE', name: 'Bỉ (Belgium)', flag: '🇧🇪' },
+    { code: 'PT', name: 'Bồ Đào Nha (Portugal)', flag: '🇵🇹' },
+    { code: 'IE', name: 'Ireland', flag: '🇮🇪' },
+    { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
+    { code: 'AR', name: 'Argentina', flag: '🇦🇷' },
+    { code: 'CO', name: 'Colombia', flag: '🇨🇴' },
+    { code: 'CL', name: 'Chile', flag: '🇨🇱' },
+    { code: 'PE', name: 'Peru', flag: '🇵🇪' },
+    { code: 'ZA', name: 'Nam Phi (South Africa)', flag: '🇿🇦' },
+    { code: 'EG', name: 'Ai Cập (Egypt)', flag: '🇪🇬' },
+    { code: 'NG', name: 'Nigeria', flag: '🇳🇬' },
+    { code: 'PK', name: 'Pakistan', flag: '🇵🇰' },
+    { code: 'BD', name: 'Bangladesh', flag: '🇧🇩' },
+    { code: 'TW', name: 'Đài Loan (Taiwan)', flag: '🇹🇼' },
+    { code: 'HK', name: 'Hồng Kông (Hong Kong)', flag: '🇭🇰' },
+    { code: 'IL', name: 'Israel', flag: '🇮🇱' },
+    { code: 'CZ', name: 'Cộng hòa Séc (Czechia)', flag: '🇨🇿' },
+    { code: 'RO', name: 'Romania', flag: '🇷🇴' },
+    { code: 'HU', name: 'Hungary', flag: '🇭🇺' },
+    { code: 'GR', name: 'Hy Lạp (Greece)', flag: '🇬🇷' },
+    { code: 'UA', name: 'Ukraine', flag: '🇺🇦' },
+    { code: 'CN', name: 'Trung Quốc (China)', flag: '🇨🇳' },
+    // Europe
+    { code: 'BG', name: 'Bulgaria', flag: '🇧🇬' },
+    { code: 'HR', name: 'Croatia', flag: '🇭🇷' },
+    { code: 'RS', name: 'Serbia', flag: '🇷🇸' },
+    { code: 'SK', name: 'Slovakia', flag: '🇸🇰' },
+    { code: 'SI', name: 'Slovenia', flag: '🇸🇮' },
+    { code: 'LT', name: 'Lithuania', flag: '🇱🇹' },
+    { code: 'LV', name: 'Latvia', flag: '🇱🇻' },
+    { code: 'EE', name: 'Estonia', flag: '🇪🇪' },
+    { code: 'IS', name: 'Iceland', flag: '🇮🇸' },
+    { code: 'LU', name: 'Luxembourg', flag: '🇱🇺' },
+    { code: 'CY', name: 'Síp (Cyprus)', flag: '🇨🇾' },
+    { code: 'MT', name: 'Malta', flag: '🇲🇹' },
+    { code: 'AL', name: 'Albania', flag: '🇦🇱' },
+    { code: 'BA', name: 'Bosnia & Herzegovina', flag: '🇧🇦' },
+    { code: 'MK', name: 'Bắc Macedonia', flag: '🇲🇰' },
+    { code: 'MD', name: 'Moldova', flag: '🇲🇩' },
+    { code: 'GE', name: 'Georgia', flag: '🇬🇪' },
+    { code: 'AM', name: 'Armenia', flag: '🇦🇲' },
+    { code: 'AZ', name: 'Azerbaijan', flag: '🇦🇿' },
+    // Americas
+    { code: 'VE', name: 'Venezuela', flag: '🇻🇪' },
+    { code: 'EC', name: 'Ecuador', flag: '🇪🇨' },
+    { code: 'GT', name: 'Guatemala', flag: '🇬🇹' },
+    { code: 'DO', name: 'Cộng hòa Dominica', flag: '🇩🇴' },
+    { code: 'CR', name: 'Costa Rica', flag: '🇨🇷' },
+    { code: 'PA', name: 'Panama', flag: '🇵🇦' },
+    { code: 'UY', name: 'Uruguay', flag: '🇺🇾' },
+    { code: 'PY', name: 'Paraguay', flag: '🇵🇾' },
+    { code: 'BO', name: 'Bolivia', flag: '🇧🇴' },
+    { code: 'PR', name: 'Puerto Rico', flag: '🇵🇷' },
+    { code: 'JM', name: 'Jamaica', flag: '🇯🇲' },
+    { code: 'TT', name: 'Trinidad & Tobago', flag: '🇹🇹' },
+    { code: 'HN', name: 'Honduras', flag: '🇭🇳' },
+    { code: 'SV', name: 'El Salvador', flag: '🇸🇻' },
+    { code: 'NI', name: 'Nicaragua', flag: '🇳🇮' },
+    // Asia & Oceania
+    { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰' },
+    { code: 'NP', name: 'Nepal', flag: '🇳🇵' },
+    { code: 'MM', name: 'Myanmar', flag: '🇲🇲' },
+    { code: 'KH', name: 'Campuchia (Cambodia)', flag: '🇰🇭' },
+    { code: 'LA', name: 'Lào (Laos)', flag: '🇱🇦' },
+    { code: 'MN', name: 'Mông Cổ (Mongolia)', flag: '🇲🇳' },
+    { code: 'KZ', name: 'Kazakhstan', flag: '🇰🇿' },
+    { code: 'UZ', name: 'Uzbekistan', flag: '🇺🇿' },
+    // Middle East & North Africa
+    { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+    { code: 'KW', name: 'Kuwait', flag: '🇰🇼' },
+    { code: 'OM', name: 'Oman', flag: '🇴🇲' },
+    { code: 'BH', name: 'Bahrain', flag: '🇧🇭' },
+    { code: 'JO', name: 'Jordan', flag: '🇯🇴' },
+    { code: 'LB', name: 'Lebanon', flag: '🇱🇧' },
+    { code: 'IQ', name: 'Iraq', flag: '🇮🇶' },
+    { code: 'MA', name: 'Ma-rốc (Morocco)', flag: '🇲🇦' },
+    { code: 'DZ', name: 'Algeria', flag: '🇩🇿' },
+    { code: 'TN', name: 'Tunisia', flag: '🇹🇳' },
+    // Africa
+    { code: 'KE', name: 'Kenya', flag: '🇰🇪' },
+    { code: 'GH', name: 'Ghana', flag: '🇬🇭' },
+    { code: 'TZ', name: 'Tanzania', flag: '🇹🇿' },
+    { code: 'ET', name: 'Ethiopia', flag: '🇪🇹' },
+    { code: 'UG', name: 'Uganda', flag: '🇺🇬' },
+    { code: 'SN', name: 'Senegal', flag: '🇸🇳' },
+    { code: 'CI', name: 'Bờ Biển Ngà (Côte d\'Ivoire)', flag: '🇨🇮' },
+    { code: 'CM', name: 'Cameroon', flag: '🇨🇲' }
+];
+
+const COUNTRY_MAP = {};
+POPULAR_COUNTRIES.forEach(c => { COUNTRY_MAP[c.code] = c; });
+
 // ======================== Column Picker Management ========================
 function toggleColumnDropdown(e) {
     if (e) e.stopPropagation();
@@ -1333,30 +1463,126 @@ async function downloadCsv(filename, rows) {
 function populateCountryFilterOptions(channels) {
     const sel = document.getElementById('ytFilterCountrySelect');
     if (!sel) return;
-    const currentVal = filterCountry;
+    const currentVal = (filterCountry || 'all').toUpperCase();
 
+    // Tally channels found in the scan
     const counts = {};
-    channels.forEach(c => {
-        const country = (c.country || 'N/A').toUpperCase();
-        counts[country] = (counts[country] || 0) + 1;
-    });
+    if (Array.isArray(channels) && channels.length > 0) {
+        channels.forEach(c => {
+            const country = (c.country || 'N/A').toUpperCase();
+            if (country && country !== 'N/A') {
+                counts[country] = (counts[country] || 0) + 1;
+            }
+        });
+    }
 
-    const sortedCountries = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const foundCodes = Object.keys(counts).filter(c => counts[c] > 0);
+    foundCodes.sort((a, b) => counts[b] - counts[a]);
 
-    let options = '<option value="all">Tất cả quốc gia</option>';
-    sortedCountries.forEach(code => {
-        const flagMap = { 'US': '🇺🇸', 'VN': '🇻🇳', 'GB': '🇬🇧', 'CA': '🇨🇦', 'AU': '🇦🇺', 'DE': '🇩🇪', 'FR': '🇫🇷', 'JP': '🇯🇵', 'KR': '🇰🇷', 'IN': '🇮🇳' };
-        const flag = flagMap[code] || '🌐';
-        options += `<option value="${code}">${flag} ${code} (${counts[code]} kênh)</option>`;
+    let options = '<option value="all">🌐 Tất cả quốc gia</option>';
+
+    // If channels have been scanned, show the top section of countries found
+    if (foundCodes.length > 0) {
+        options += `<optgroup label="📊 Kết quả vừa quét (${foundCodes.length} quốc gia có kênh)">`;
+        foundCodes.forEach(code => {
+            const preset = COUNTRY_MAP[code];
+            const flag = preset ? preset.flag : '🌐';
+            const name = preset ? preset.name : code;
+            options += `<option value="${code}">${flag} ${name} (${counts[code]} kênh)</option>`;
+        });
+        options += '</optgroup>';
+    }
+
+    // Full preset list of ~100 popular countries
+    options += `<optgroup label="🌍 Danh sách quốc gia (${POPULAR_COUNTRIES.length} nước)">`;
+    POPULAR_COUNTRIES.forEach(item => {
+        const countSuffix = counts[item.code] ? ` [${counts[item.code]} kênh]` : '';
+        options += `<option value="${item.code}">${item.flag} ${item.name}${countSuffix}</option>`;
     });
+    options += '</optgroup>';
 
     sel.innerHTML = options;
-    if (counts[currentVal]) {
-        sel.value = currentVal;
+
+    if (currentVal && currentVal !== 'ALL') {
+        const hasMatch = Array.from(sel.options).some(o => o.value.toUpperCase() === currentVal);
+        if (hasMatch) {
+            sel.value = currentVal;
+            filterCountry = currentVal;
+        } else {
+            sel.value = 'all';
+            filterCountry = 'all';
+        }
     } else {
-        filterCountry = 'all';
         sel.value = 'all';
+        filterCountry = 'all';
     }
+
+    // Render Sleek Scrollable Dropdown List with Limited Max-Height
+    const listEl = document.getElementById('countryPickerList');
+    if (listEl) {
+        let listHtml = '';
+        const isAllActive = filterCountry === 'all' || !filterCountry;
+        listHtml += `<div class="country-picker-item ${isAllActive ? 'active' : ''}" data-code="all" data-search="tat ca all quoc gia" onclick="selectCountryPickerItem('all', '🌐 Tất cả quốc gia')">
+            <span>🌐 Tất cả quốc gia</span>
+        </div>`;
+
+        if (foundCodes.length > 0) {
+            listHtml += `<div class="country-picker-group-title">📊 Kết quả quét (${foundCodes.length} quốc gia)</div>`;
+            foundCodes.forEach(code => {
+                const preset = COUNTRY_MAP[code];
+                const flag = preset ? preset.flag : '🌐';
+                const name = preset ? preset.name : code;
+                const isActive = filterCountry && filterCountry.toUpperCase() === code;
+                listHtml += `<div class="country-picker-item ${isActive ? 'active' : ''}" data-code="${code}" data-search="${code} ${name}" onclick="selectCountryPickerItem('${code}', '${flag} ${name}')">
+                    <span>${flag} ${name}</span>
+                    <span class="item-badge">${counts[code]} kênh</span>
+                </div>`;
+            });
+        }
+
+        listHtml += `<div class="country-picker-group-title">🌍 Danh sách quốc gia (${POPULAR_COUNTRIES.length} nước)</div>`;
+        POPULAR_COUNTRIES.forEach(item => {
+            const isActive = filterCountry && filterCountry.toUpperCase() === item.code;
+            const badge = counts[item.code] ? `<span class="item-badge">${counts[item.code]} kênh</span>` : '';
+            listHtml += `<div class="country-picker-item ${isActive ? 'active' : ''}" data-code="${item.code}" data-search="${item.code} ${item.name}" onclick="selectCountryPickerItem('${item.code}', '${item.flag} ${item.name}')">
+                <span>${item.flag} ${item.name}</span>
+                ${badge}
+            </div>`;
+        });
+        listEl.innerHTML = listHtml;
+    }
+
+    // Update label text
+    const labelSpan = document.getElementById('countryDropdownSelectedText');
+    if (labelSpan) {
+        if (!filterCountry || filterCountry === 'all') {
+            labelSpan.textContent = '🌐 Tất cả quốc gia';
+        } else {
+            const preset = COUNTRY_MAP[filterCountry.toUpperCase()];
+            labelSpan.textContent = preset ? `${preset.flag} ${preset.name}` : `🌐 ${filterCountry}`;
+        }
+    }
+}
+
+function toggleCountryDropdown(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('countryPickerMenu');
+    if (!menu) return;
+    const isShowing = menu.style.display !== 'none';
+    closeColumnDropdown();
+    menu.style.display = isShowing ? 'none' : 'block';
+}
+
+function closeCountryDropdown() {
+    const menu = document.getElementById('countryPickerMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+function selectCountryPickerItem(code, label) {
+    const sel = document.getElementById('ytFilterCountrySelect');
+    if (sel) sel.value = code;
+    handleFilterCountryChange(code, label);
+    closeCountryDropdown();
 }
 
 async function searchYouTubeChannels() {
@@ -1391,10 +1617,12 @@ async function searchYouTubeChannels() {
     `;
 
     try {
+        const currentCountrySelect = document.getElementById('ytFilterCountrySelect');
+        const activeCountry = currentCountrySelect ? currentCountrySelect.value : (filterCountry || 'all');
         const res = await fetch('/api/youtube/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keyword, max_results: maxResults })
+            body: JSON.stringify({ keyword, max_results: maxResults, country: activeCountry || 'all' })
         });
         const data = await res.json();
 
@@ -1416,42 +1644,61 @@ async function searchYouTubeChannels() {
             is_saved: Boolean(ch.is_saved)
         }));
 
-        currentSortField = 'default';
-        currentSortDirection = 'asc';
-        filterActiveOnly = false;
-        filterSaved = 'all';
-        filterCountry = 'all';
-        filterMinViews = 0;
-        filterMinSubs = 0;
-        filterCadence = 'all';
-        filterKeyword = '';
-        filterCustomViews = null;
-        filterCustomSubs = null;
-        filterCustomCadence = null;
-
-        populateCountryFilterOptions(rawYtChannels);
-
+        // Bảo lưu các tiêu chí bộ lọc & sắp xếp mà người dùng đã chọn sẵn trên thanh công cụ
         const sortSelect = document.getElementById('ytSortSelect');
-        if (sortSelect) sortSelect.value = 'default';
-        const filterSavedSel = document.getElementById('ytFilterSavedSelect');
-        if (filterSavedSel) filterSavedSel.value = 'all';
-        const filterCheck = document.getElementById('ytFilterActiveOnly');
-        if (filterCheck) filterCheck.checked = false;
-        const filterViewsSel = document.getElementById('ytFilterViewsSelect');
-        if (filterViewsSel) filterViewsSel.value = '0';
-        const filterSubsSel = document.getElementById('ytFilterSubsSelect');
-        if (filterSubsSel) filterSubsSel.value = '0';
-        const filterCadenceSel = document.getElementById('ytFilterCadenceSelect');
-        if (filterCadenceSel) filterCadenceSel.value = 'all';
-        const filterKwInput = document.getElementById('ytFilterKeyword');
-        if (filterKwInput) filterKwInput.value = '';
+        if (sortSelect && sortSelect.value) currentSortField = sortSelect.value;
 
-        const customViewsInp = document.getElementById('ytCustomViewsInput');
-        if (customViewsInp) { customViewsInp.value = ''; customViewsInp.style.display = 'none'; }
-        const customSubsInp = document.getElementById('ytCustomSubsInput');
-        if (customSubsInp) { customSubsInp.value = ''; customSubsInp.style.display = 'none'; }
-        const customCadenceInp = document.getElementById('ytCustomCadenceInput');
-        if (customCadenceInp) { customCadenceInp.value = ''; customCadenceInp.style.display = 'none'; }
+        const filterCheck = document.getElementById('ytFilterActiveOnly');
+        if (filterCheck) filterActiveOnly = filterCheck.checked;
+
+        const filterSavedSel = document.getElementById('ytFilterSavedSelect');
+        if (filterSavedSel && filterSavedSel.value) filterSaved = filterSavedSel.value;
+
+        const filterViewsSel = document.getElementById('ytFilterViewsSelect');
+        if (filterViewsSel && filterViewsSel.value) {
+            if (filterViewsSel.value === 'custom') {
+                const customViewsInp = document.getElementById('ytCustomViewsInput');
+                filterMinViews = (customViewsInp && customViewsInp.value) ? parseInt(customViewsInp.value, 10) || 0 : 0;
+            } else {
+                filterMinViews = parseInt(filterViewsSel.value, 10) || 0;
+            }
+        }
+
+        const filterSubsSel = document.getElementById('ytFilterSubsSelect');
+        if (filterSubsSel && filterSubsSel.value) {
+            if (filterSubsSel.value === 'custom') {
+                const customSubsInp = document.getElementById('ytCustomSubsInput');
+                filterMinSubs = (customSubsInp && customSubsInp.value) ? parseInt(customSubsInp.value, 10) || 0 : 0;
+            } else {
+                filterMinSubs = parseInt(filterSubsSel.value, 10) || 0;
+            }
+        }
+
+        const filterCadenceSel = document.getElementById('ytFilterCadenceSelect');
+        if (filterCadenceSel && filterCadenceSel.value) {
+            if (filterCadenceSel.value === 'custom') {
+                const customCadenceInp = document.getElementById('ytCustomCadenceInput');
+                filterCustomCadence = (customCadenceInp && customCadenceInp.value) ? parseFloat(customCadenceInp.value) || null : null;
+                filterCadence = 'custom';
+            } else {
+                filterCadence = filterCadenceSel.value;
+            }
+        }
+
+        const filterKwInput = document.getElementById('ytFilterKeyword');
+        if (filterKwInput) filterKeyword = filterKwInput.value.trim();
+
+        // Cập nhật danh sách quốc gia nhưng bảo lưu lựa chọn hiện tại
+        const countrySelect = document.getElementById('ytFilterCountrySelect');
+        const prevCountry = countrySelect ? countrySelect.value : (filterCountry || 'all');
+        populateCountryFilterOptions(rawYtChannels);
+        if (countrySelect && prevCountry && prevCountry !== 'all') {
+            const hasOption = Array.from(countrySelect.options).some(o => o.value.toUpperCase() === prevCountry.toUpperCase());
+            if (hasOption) {
+                countrySelect.value = prevCountry;
+                filterCountry = prevCountry;
+            }
+        }
 
         updateSortDirectionBtn();
         renderYtChannelsTable();
@@ -1466,8 +1713,31 @@ async function searchYouTubeChannels() {
     }
 }
 
-function handleFilterCountryChange(val) {
+function handleFilterCountryChange(val, label) {
     filterCountry = val;
+    const sel = document.getElementById('ytFilterCountrySelect');
+    if (sel && sel.value !== val) sel.value = val;
+
+    const labelSpan = document.getElementById('countryDropdownSelectedText');
+    if (labelSpan) {
+        if (label) {
+            labelSpan.textContent = label;
+        } else if (val === 'all' || !val) {
+            labelSpan.textContent = '🌐 Tất cả quốc gia';
+        } else {
+            const preset = COUNTRY_MAP[val.toUpperCase()];
+            labelSpan.textContent = preset ? `${preset.flag} ${preset.name}` : `🌐 ${val}`;
+        }
+    }
+
+    // Highlight active in custom dropdown list
+    const listEl = document.getElementById('countryPickerList');
+    if (listEl) {
+        listEl.querySelectorAll('.country-picker-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.code === val);
+        });
+    }
+
     renderYtChannelsTable();
 }
 
@@ -1560,6 +1830,14 @@ function resetYtFilters() {
     if (elSort) elSort.value = 'default';
     const elCountry = document.getElementById('ytFilterCountrySelect');
     if (elCountry) elCountry.value = 'all';
+    const labelSpan = document.getElementById('countryDropdownSelectedText');
+    if (labelSpan) labelSpan.textContent = '🌐 Tất cả quốc gia';
+    const listEl = document.getElementById('countryPickerList');
+    if (listEl) {
+        listEl.querySelectorAll('.country-picker-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.code === 'all');
+        });
+    }
     const elViews = document.getElementById('ytFilterViewsSelect');
     if (elViews) elViews.value = '0';
     const elSubs = document.getElementById('ytFilterSubsSelect');
@@ -1588,45 +1866,60 @@ function resetYtFilters() {
 function getFilteredYtChannels() {
     let list = [...rawYtChannels];
 
-    // 1. Lọc theo checkbox Đang hoạt động
+    // 1. Lọc theo checkbox Đang hoạt động (hỗ trợ cả 1, true, '1')
     if (filterActiveOnly) {
-        list = list.filter(c => c.is_active === 1);
+        list = list.filter(c => Boolean(c.is_active) && c.is_active !== 0 && c.is_active !== '0');
     }
 
     // 2. Lọc theo trạng thái Đã lưu / Chưa lưu
     if (filterSaved === 'saved') {
-        list = list.filter(c => c.is_saved);
+        list = list.filter(c => Boolean(c.is_saved));
     } else if (filterSaved === 'unsaved') {
         list = list.filter(c => !c.is_saved);
     }
 
     // 3. Lọc theo Quốc gia
-    if (filterCountry !== 'all') {
-        list = list.filter(c => (c.country || 'N/A').toUpperCase() === filterCountry.toUpperCase());
+    if (filterCountry && filterCountry.toLowerCase() !== 'all') {
+        list = list.filter(c => (c.country || 'N/A').trim().toUpperCase() === filterCountry.trim().toUpperCase());
     }
 
-    // 4. Lọc theo Views tối thiểu
+    // 4. Lọc theo Views tối thiểu (hỗ trợ cả avg_views, avg_views_recent, hoặc chia từ total views)
     if (filterMinViews > 0) {
-        list = list.filter(c => (c.avg_views || 0) >= filterMinViews);
+        list = list.filter(c => {
+            const views = (c.avg_views || 0) || (c.avg_views_recent || 0) || (c.video_count > 0 ? Math.round((c.total_view_count || 0) / c.video_count) : 0);
+            return views >= filterMinViews;
+        });
     }
 
     // 5. Lọc theo Subs tối thiểu
     if (filterMinSubs > 0) {
-        list = list.filter(c => (c.subscriber_count || 0) >= filterMinSubs);
+        list = list.filter(c => (parseInt(c.subscriber_count, 10) || 0) >= filterMinSubs);
     }
 
     // 6. Lọc theo Tần suất
     if (filterCadence === 'daily') {
-        list = list.filter(c => c.upload_cadence_days > 0 && c.upload_cadence_days <= 1.0);
+        list = list.filter(c => {
+            const days = parseFloat(c.upload_cadence_days);
+            return !isNaN(days) && days > 0 && days <= 1.0;
+        });
     } else if (filterCadence === 'frequent') {
-        list = list.filter(c => c.upload_cadence_days > 0 && c.upload_cadence_days <= 3.0);
+        list = list.filter(c => {
+            const days = parseFloat(c.upload_cadence_days);
+            return !isNaN(days) && days > 0 && days <= 3.0;
+        });
     } else if (filterCadence === 'weekly') {
-        list = list.filter(c => c.upload_cadence_days > 0 && c.upload_cadence_days <= 7.0);
+        list = list.filter(c => {
+            const days = parseFloat(c.upload_cadence_days);
+            return !isNaN(days) && days > 0 && days <= 7.0;
+        });
     } else if (filterCadence === 'custom' && filterCustomCadence !== null) {
-        list = list.filter(c => c.upload_cadence_days > 0 && c.upload_cadence_days <= filterCustomCadence);
+        list = list.filter(c => {
+            const days = parseFloat(c.upload_cadence_days);
+            return !isNaN(days) && days > 0 && days <= filterCustomCadence;
+        });
     }
 
-    // 7. Lọc theo từ khóa tên kênh / ID / handle
+    // 7. Lọc theo từ khóa tên kênh / ID / handle / country
     if (filterKeyword) {
         const kw = filterKeyword.toLowerCase().trim();
         list = list.filter(c =>
@@ -3072,7 +3365,7 @@ async function syncGPMProfiles(btn) {
 
     const sel = document.getElementById('selectActiveBrowser');
     const browserName = sel && sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text.replace(/^[^a-zA-Z0-9]+/, '').split(' ')[0] : 'Trình Duyệt';
-    
+
     // Show top toast progress
     showToast(`🔄 Đang kết nối và đồng bộ profiles từ ${browserName}...`, 'info');
 
@@ -3169,6 +3462,10 @@ window.switchSourceSubTab = switchSourceSubTab;
 window.switchTab = switchTab;
 window.toggleColVisibility = toggleColVisibility;
 window.toggleColumnDropdown = toggleColumnDropdown;
+window.toggleCountryDropdown = toggleCountryDropdown;
+window.closeCountryDropdown = closeCountryDropdown;
+window.selectCountryPickerItem = selectCountryPickerItem;
+window.filterCountryDropdownList = filterCountryDropdownList;
 window.toggleSidebar = toggleSidebar;
 window.toggleSortDirection = toggleSortDirection;
 window.updateVoiceDropdownOptions = updateVoiceDropdownOptions;

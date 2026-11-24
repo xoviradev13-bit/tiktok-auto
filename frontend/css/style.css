@@ -7554,3 +7554,141 @@ tr.sub-channel-row.facebook-page td:first-child {
         background-position: -200% 0;
     }
 }
+
+/* ==========================================================================
+   Sleek Country Picker Dropdown (Restricted Max-Height & Scrollable)
+   ========================================================================== */
+.country-picker-container {
+    position: relative;
+    display: inline-block;
+}
+
+.country-picker-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    min-width: 175px !important;
+    max-width: 220px !important;
+    cursor: pointer;
+    user-select: none;
+    text-align: left;
+    background-image: none !important;
+    padding-right: 12px !important;
+}
+
+.country-picker-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 275px;
+    max-height: 220px;
+    background: #141a28;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.75);
+    border-radius: 10px;
+    z-index: 1050;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+}
+
+.country-picker-menu::-webkit-scrollbar {
+    width: 5px;
+}
+
+.country-picker-menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.country-picker-list {
+    max-height: none;
+    padding: 0;
+}
+
+.country-picker-group-title {
+    padding: 6px 12px 3px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.country-picker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.country-picker-item:hover {
+    background: rgba(0, 242, 254, 0.12);
+    color: #fff;
+}
+
+.country-picker-item.active {
+    background: rgba(0, 242, 254, 0.2);
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.country-picker-item .item-badge {
+    font-size: 11px;
+    color: var(--accent-cyan);
+    background: rgba(0, 242, 254, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* Light Mode Overrides for Country Picker */
+body.light-mode .country-picker-btn {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body.light-mode #countryDropdownSelectedText {
+    color: #0f172a !important;
+}
+
+body.light-mode .country-picker-menu {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12) !important;
+    color: #0f172a !important;
+}
+
+body.light-mode .country-picker-menu::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2) !important;
+}
+
+body.light-mode .country-picker-group-title {
+    color: #0284c7 !important;
+    background: #f8fafc !important;
+}
+
+body.light-mode .country-picker-item {
+    color: #0f172a !important;
+}
+
+body.light-mode .country-picker-item:hover {
+    background: #f1f5f9 !important;
+    color: #0284c7 !important;
+}
+
+body.light-mode .country-picker-item.active {
+    background: #e0f2fe !important;
+    color: #0369a1 !important;
+    font-weight: 700 !important;
+}
+
+body.light-mode .country-picker-item .item-badge {
+    color: #0369a1 !important;
+    background: #e0f2fe !important;
+    border: 1px solid #bae6fd !important;
+}

@@ -226,7 +226,7 @@
                     <label><i class="fa-solid fa-folder-arrow-down"></i> Thư Mục Lưu Video Tải Về:</label>
                     <div style="display:flex; gap:6px; align-items:center;" class="mt-1">
                         <input type="text" id="settingDownloadDir" class="input-field"
-                            placeholder="Mặc định: data/downloads" style="flex:1;">
+                            placeholder="Để trống = Kế thừa từ chiến dịch" style="flex:1;">
                         <button type="button" class="btn btn-secondary btn-sm"
                             onclick="browseFolderForInput('settingDownloadDir')"
                             data-tooltip="Chọn thư mục trên máy tính"
@@ -234,21 +234,21 @@
                             <i class="fa-solid fa-folder-open text-cyan"></i> Chọn Thư Mục
                         </button>
                     </div>
-                    <small class="form-hint">Đường dẫn thư mục lưu file MP4 gốc trên máy tính.</small>
+                    <small class="form-hint">Đường dẫn thư mục lưu file MP4 gốc (Để trống để tự động kế thừa từ chiến dịch).</small>
                 </div>
 
                 <div class="form-group">
                     <label><i class="fa-solid fa-wand-magic-sparkles"></i> Thư Mục Lưu Video Render:</label>
                     <div style="display:flex; gap:6px; align-items:center;" class="mt-1">
                         <input type="text" id="settingRenderDir" class="input-field"
-                            placeholder="Mặc định: data/rendered" style="flex:1;">
+                            placeholder="Để trống = Kế thừa từ chiến dịch" style="flex:1;">
                         <button type="button" class="btn btn-secondary btn-sm"
                             onclick="browseFolderForInput('settingRenderDir')" data-tooltip="Chọn thư mục trên máy tính"
                             style="height:42px; padding:0 12px; white-space:nowrap; display:flex; align-items:center; gap:6px;">
                             <i class="fa-solid fa-folder-open text-cyan"></i> Chọn Thư Mục
                         </button>
                     </div>
-                    <small class="form-hint">Đường dẫn thư mục lưu video đã render chuẩn hóa.</small>
+                    <small class="form-hint">Đường dẫn thư mục lưu video đã render (Để trống để tự động kế thừa từ chiến dịch).</small>
                 </div>
 
                 <div class="form-group full-width"

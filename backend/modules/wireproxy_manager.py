@@ -20,6 +20,8 @@ import shutil
 import tarfile
 import urllib.request
 import subprocess
+import threading
+import concurrent.futures
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from backend.config import VPN_CONFIGS_DIR, WIREPROXY_EXE, DATA_DIR, LOGS_DIR
@@ -80,8 +82,10 @@ FLAG_EMOJIS: Dict[str, str] = {
 
 class WireproxyManager:
     def __init__(self):
+        self._lock = threading.Lock()
         self.processes: Dict[str, subprocess.Popen] = {}
         self.proxies: Dict[str, Dict[str, Any]] = {}  # proxy_id -> meta
+        self.allocated_ports: Dict[str, int] = {}     # proxy_id -> assigned port
         self.country_map: Dict[str, List[str]] = {}   # country_code -> [proxy_id, ...]
         self.round_robin_counters: Dict[str, int] = {}
         self.is_initialized = False
@@ -230,11 +234,13 @@ class WireproxyManager:
 
     def allocate_port_for_proxy(self, proxy_id: str, country: str) -> int:
         """Cấp phát cổng SOCKS5 duy nhất cho từng địa điểm"""
-        # Nếu proxy này đã từng được cấp cổng, giữ nguyên
+        if proxy_id in self.allocated_ports:
+            return self.allocated_ports[proxy_id]
         if proxy_id in self.proxies and "port" in self.proxies[proxy_id]:
+            self.allocated_ports[proxy_id] = self.proxies[proxy_id]["port"]
             return self.proxies[proxy_id]["port"]
 
-        used_ports = set()
+        used_ports = set(self.allocated_ports.values())
         for meta in self.proxies.values():
             if "port" in meta:
                 used_ports.add(meta["port"])
@@ -244,6 +250,7 @@ class WireproxyManager:
         while cand in used_ports:
             cand += 1
 
+        self.allocated_ports[proxy_id] = cand
         return cand
 
     def prepare_runtime_config(self, source_conf: Path, proxy_id: str, port: int) -> Path:
@@ -323,14 +330,15 @@ class WireproxyManager:
             log_event("ERROR", "wireproxy.exe chưa sẵn sàng!")
             return False
 
-        info = self.parse_config_info(conf_path)
-        proxy_id = info["proxy_id"]
-        country = info["country"]
-        port = self.allocate_port_for_proxy(proxy_id, country)
+        with self._lock:
+            info = self.parse_config_info(conf_path)
+            proxy_id = info["proxy_id"]
+            country = info["country"]
+            port = self.allocate_port_for_proxy(proxy_id, country)
 
-        # Dừng tiến trình cũ nếu đang chạy và giải phóng cổng
-        self.stop_proxy(proxy_id)
-        self.free_port(port)
+            # Dừng tiến trình cũ nếu đang chạy và giải phóng cổng
+            self.stop_proxy(proxy_id)
+            self.free_port(port)
 
         runtime_conf = self.prepare_runtime_config(conf_path, proxy_id, port)
         log_path = LOGS_DIR / f"wireproxy_{proxy_id}.log"
@@ -348,7 +356,8 @@ class WireproxyManager:
                 stderr=subprocess.STDOUT,
                 creationflags=creation_flags
             )
-            self.processes[proxy_id] = proc
+            with self._lock:
+                self.processes[proxy_id] = proc
 
             # Chờ cổng mở (tối đa 4 giây)
             for _ in range(8):
@@ -366,12 +375,12 @@ class WireproxyManager:
                         "status": "running",
                         "started_at": time.time()
                     }
-                    self.proxies[proxy_id] = meta
-
-                    if country not in self.country_map:
-                        self.country_map[country] = []
-                    if proxy_id not in self.country_map[country]:
-                        self.country_map[country].append(proxy_id)
+                    with self._lock:
+                        self.proxies[proxy_id] = meta
+                        if country not in self.country_map:
+                            self.country_map[country] = []
+                        if proxy_id not in self.country_map[country]:
+                            self.country_map[country].append(proxy_id)
 
                     log_event("INFO", f"✅ Khởi động WireGuard Proxy [{info['label']}] tại socks5://127.0.0.1:{port} (PID: {proc.pid})")
                     return True
@@ -405,8 +414,9 @@ class WireproxyManager:
         # 1. Dừng tiến trình
         self.stop_proxy(proxy_id)
 
-        # 2. Xoá khỏi proxies dict
+        # 2. Xoá khỏi proxies dict & allocated_ports
         self.proxies.pop(proxy_id, None)
+        self.allocated_ports.pop(proxy_id, None)
 
         # 3. Xoá khỏi country_map
         for c, pids in list(self.country_map.items()):
@@ -507,7 +517,7 @@ class WireproxyManager:
         }
 
     def start_all(self) -> Dict[str, Any]:
-        """Quét toàn bộ thư mục vpn_configs và khởi động tất cả file địa điểm, đồng thời gỡ bỏ các file đã bị xoá"""
+        """Quét toàn bộ thư mục vpn_configs và khởi động tất cả file địa điểm đồng thời (concurrent), đồng thời gỡ bỏ các file đã bị xoá"""
         if not VPN_CONFIGS_DIR.exists():
             VPN_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -520,16 +530,20 @@ class WireproxyManager:
             return {"status": "no_configs", "count": 0, "active_count": 0, "proxies": {}}
 
         started_count = 0
+        to_start = []
         for conf_file in conf_files:
             info = self.parse_config_info(conf_file)
             pid = info["proxy_id"]
             if pid in self.proxies and self.is_port_open(self.proxies[pid]["port"]) and pid in self.processes:
                 started_count += 1
-                continue
+            else:
+                to_start.append(conf_file)
 
-            success = self.start_proxy(conf_file)
-            if success:
-                started_count += 1
+        if to_start:
+            workers = min(16, len(to_start))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                results = list(executor.map(self.start_proxy, to_start))
+                started_count += sum(1 for r in results if r)
 
         self.is_initialized = True
         log_event("INFO", f"🚀 Đã kích hoạt {started_count}/{len(conf_files)} cổng WireGuard SOCKS5 Proxy cho dàn tài khoản.")

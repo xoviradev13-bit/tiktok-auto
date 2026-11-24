@@ -1240,11 +1240,15 @@ async function openNewCampaignModal() {
 
         const { usedChannelIds, usedProfileIds } = getUsedCampaignResources();
 
-        modalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()));
-        renderCampaignChannelsCheckboxes(modalAvailableSavedChannels);
+        // Bảo lưu các kênh và profile mà người dùng đã tick chọn trong lúc chờ tải dữ liệu ngầm
+        const currentCheckedChannelIds = Array.from(document.querySelectorAll('#campaignChannelsList .campaign-ch-check:checked')).map(b => b.value);
+        const currentCheckedGpmIds = Array.from(document.querySelectorAll('#campaignGpmList .campaign-gpm-check:checked')).map(b => b.value);
 
-        modalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => !usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim())));
-        renderCampaignGpmCheckboxes(modalAvailableGpmProfiles);
+        modalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()) || currentCheckedChannelIds.includes(String(ch.channel_id).trim()));
+        renderCampaignChannelsCheckboxes(modalAvailableSavedChannels, currentCheckedChannelIds.length ? currentCheckedChannelIds : null);
+
+        modalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => (!usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim()))) || currentCheckedGpmIds.includes(String(p.id)));
+        renderCampaignGpmCheckboxes(modalAvailableGpmProfiles, currentCheckedGpmIds.length ? currentCheckedGpmIds : null);
 
         await populateCampaignGroupFilters('new');
 
@@ -1293,6 +1297,13 @@ function renderCampaignChannelsCheckboxes(channels, selectedIds = null) {
         return;
     }
 
+    if (selectedIds === null) {
+        const currentlyChecked = Array.from(chListEl.querySelectorAll('.campaign-ch-check:checked')).map(el => el.value);
+        if (currentlyChecked.length > 0) {
+            selectedIds = currentlyChecked;
+        }
+    }
+
     const selSet = selectedIds ? new Set(selectedIds.map(String)) : null;
 
     const sorted = [...channels].sort((a, b) => {
@@ -1304,7 +1315,7 @@ function renderCampaignChannelsCheckboxes(channels, selectedIds = null) {
     });
 
     chListEl.innerHTML = sorted.map((ch, idx) => {
-        const isChecked = selSet ? selSet.has(String(ch.channel_id)) : (idx < 3);
+        const isChecked = selSet ? selSet.has(String(ch.channel_id)) : false;
         const grpBadge = ch.group_name
             ? `<span class="badge" title="Nhóm: ${escapeHtml(ch.group_name)}" style="font-size:9.5px; background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3); padding:1px 6px; border-radius:4px; flex-shrink:0; max-width:130px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;"><i class="${escapeHtml(ch.group_icon || 'fa-solid fa-folder')}" style="flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ch.group_name)}</span></span>`
             : '';
@@ -1346,12 +1357,18 @@ function renderCampaignGpmCheckboxes(profiles, selectedIds = null) {
         return;
     }
 
+    if (selectedIds === null) {
+        const currentlyChecked = Array.from(gpmListEl.querySelectorAll('.campaign-gpm-check:checked')).map(el => el.value);
+        if (currentlyChecked.length > 0) {
+            selectedIds = currentlyChecked;
+        }
+    }
+
     const selSet = selectedIds ? new Set(selectedIds.map(String)) : null;
 
-    // Pre-check tối đa 3 nick TikTok phù hợp
+    // Không tự động pre-check tài khoản khi tạo chiến dịch mới
     const activePlatforms = new Set(['tiktok']);
 
-    let matchingCheckedCount = 0;
     const itemsHtml = [];
 
     const sorted = [...profiles].sort((a, b) => {
@@ -1395,10 +1412,7 @@ function renderCampaignGpmCheckboxes(profiles, selectedIds = null) {
                 const chTitle = ch.channel_name || ch.channel_url || p.name;
                 const chSub = ch.channel_url || '';
                 const isMatchingPlat = activePlatforms.has(plat);
-                const shouldPreCheck = selSet
-                    ? selSet.has(String(p.id))
-                    : (isMatchingPlat && matchingCheckedCount < 3);
-                if (!selSet && shouldPreCheck) matchingCheckedCount++;
+                const shouldPreCheck = selSet ? selSet.has(String(p.id)) : false;
 
                 const bType = (p.browser_type || 'gpm').toLowerCase();
                 const bBadge = bType === 'genlogin'
@@ -1443,10 +1457,7 @@ function renderCampaignGpmCheckboxes(profiles, selectedIds = null) {
             }
 
             const isMatchingPlat = activePlatforms.has(plat);
-            const shouldPreCheck = selSet
-                ? selSet.has(String(p.id))
-                : (isMatchingPlat && matchingCheckedCount < 3);
-            if (!selSet && shouldPreCheck) matchingCheckedCount++;
+            const shouldPreCheck = selSet ? selSet.has(String(p.id)) : false;
 
             const bType = (p.browser_type || 'gpm').toLowerCase();
             const bBadge = bType === 'genlogin'
@@ -2183,11 +2194,17 @@ async function openEditCampaignModal(id) {
         }
 
         const { usedChannelIds, usedProfileIds } = getUsedCampaignResources(c.id);
-        editModalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()));
-        editModalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => !usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim())));
 
-        renderEditCampaignChannelsCheckboxes(editModalAvailableSavedChannels, c.channel_ids_list || []);
-        renderEditCampaignGpmCheckboxes(editModalAvailableGpmProfiles, c.gpm_profile_ids_list || []);
+        const curEditCheckedCh = Array.from(document.querySelectorAll('#editCampaignChannelsList .edit-campaign-ch-check:checked')).map(b => b.value);
+        const curEditCheckedGpm = Array.from(document.querySelectorAll('#editCampaignGpmList .edit-campaign-gpm-check:checked')).map(b => b.value);
+        const editChToSelect = curEditCheckedCh.length ? curEditCheckedCh : (c.channel_ids_list || []);
+        const editGpmToSelect = curEditCheckedGpm.length ? curEditCheckedGpm : (c.gpm_profile_ids_list || []);
+
+        editModalAvailableSavedChannels = (modalAllSavedChannels || []).filter(ch => !usedChannelIds.has(String(ch.channel_id).trim()) || editChToSelect.includes(String(ch.channel_id).trim()));
+        editModalAvailableGpmProfiles = (modalAllGpmProfiles || []).filter(p => (!usedProfileIds.has(String(p.id).trim()) && (!p.gpm_id || !usedProfileIds.has(String(p.gpm_id).trim()))) || editGpmToSelect.includes(String(p.id)));
+
+        renderEditCampaignChannelsCheckboxes(editModalAvailableSavedChannels, editChToSelect);
+        renderEditCampaignGpmCheckboxes(editModalAvailableGpmProfiles, editGpmToSelect);
 
         await populateCampaignGroupFilters('edit');
 

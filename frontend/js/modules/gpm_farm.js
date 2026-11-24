@@ -215,9 +215,8 @@ async function exportGpmProfilesCsv() {
 
     // Filter Country
     if (filterCountry !== 'ALL') {
-        const pCountry = (p.country || '').toUpperCase();
         if (filterCountry === 'NONE') {
-            if (pCountry && pCountry !== 'NONE') list = list.filter(p => !p.country || p.country.toUpperCase() === 'NONE');
+            list = list.filter(p => !p.country || p.country.toUpperCase() === 'NONE');
         } else {
             list = list.filter(p => (p.country || '').toUpperCase() === filterCountry);
         }
@@ -2826,7 +2825,7 @@ async function loadWireguardStatus() {
     if (!tableBody) return;
 
     try {
-        const res = await fetch('/api/vpn/wireproxy/status');
+        const res = await fetch('/api/vpn/wireproxy/status?_t=' + Date.now());
         const data = await res.json();
         const proxies = data.active_proxies || {};
         const configFiles = data.config_files || [];
@@ -2836,16 +2835,28 @@ async function loadWireguardStatus() {
             summarySpan.innerHTML = `<span style="color:#22c55e;">${countries.length} cổng đang hoạt động</span> (${configFiles.length} file .conf)`;
         }
 
-        if (countries.length === 0 && configFiles.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
-                        <i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
-                        Chưa có file WireGuard <code>.conf</code> nào trong <code>data/vpn_configs/</code>.<br>
-                        Bấm <strong>"Mở Thư Mục Config"</strong> và thả các file tải từ Proton VPN vào đây!
-                    </td>
-                </tr>
-            `;
+        if (countries.length === 0) {
+            if (configFiles.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            <i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
+                            Chưa có file WireGuard <code>.conf</code> nào trong thư mục <code>data/vpn_configs/</code>.<br>
+                            Bấm <strong>"Mở Thư Mục Config"</strong> và thả các file tải từ Proton VPN vào đây!
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                            <i class="fa-solid fa-folder-open text-warning" style="font-size:24px; margin-bottom:8px; display:block;"></i>
+                            Tìm thấy <strong>${configFiles.length} file .conf</strong> nhưng các cổng proxy chưa được kích hoạt.<br>
+                            Bấm nút <strong style="color:var(--accent-cyan);"><i class="fa-solid fa-arrows-rotate"></i> "Quét Lại"</strong> ở phía trên để kích hoạt tất cả các cổng!
+                        </td>
+                    </tr>
+                `;
+            }
             return;
         }
 
@@ -2927,7 +2938,27 @@ async function openWireguardFolderOnWindows() {
     }
 }
 
-async function rescanWireguardConfigs() {
+async function rescanWireguardConfigs(btn) {
+    const button = btn || document.querySelector('#wireguardStatusModal button[onclick*="rescanWireguardConfigs"]');
+    const origHtml = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang quét...';
+    }
+
+    const tableBody = document.getElementById('wireguardProxyTableBody');
+    if (tableBody) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 32px 16px; color: var(--accent-cyan);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 26px; margin-bottom: 12px; display: block;"></i>
+                    <strong style="font-size: 13.5px;">Đang quét cấu hình WireGuard &amp; kích hoạt các cổng SOCKS5...</strong><br>
+                    <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: inline-block;">Vui lòng đợi giây lát, hệ thống đang đồng bộ và mở cổng proxy</span>
+                </td>
+            </tr>
+        `;
+    }
+
     showToast('🔄 Đang quét lại các file .conf và khởi động proxy...', 'info');
     try {
         const res = await fetch('/api/vpn/wireproxy/rescan', { method: 'POST' });
@@ -2936,6 +2967,14 @@ async function rescanWireguardConfigs() {
         await loadWireguardStatus();
     } catch (err) {
         showToast('Lỗi quét cấu hình: ' + err.message, 'error');
+        if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px; color:#ef4444;">Lỗi quét: ${err.message}</td></tr>`;
+        }
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = origHtml || '<i class="fa-solid fa-arrows-rotate"></i> Quét Lại';
+        }
     }
 }
 
