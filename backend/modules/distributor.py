@@ -284,7 +284,35 @@ class ContentDistributor:
                 """, (*linked, f"{today_prefix}%"))
                 completed_map[p["id"]] = cursor.fetchone()[0]
 
-            if mode == "random":
+            if mode == "parallel_slots":
+                # Chế độ "Lấp Đầy Khung Giờ Song Song" (Mỗi nick có Proxy IP riêng):
+                # Tìm profile có slot đăng khả dụng sớm nhất trong ngày
+                schedule_str = campaign.get("post_schedule") or "07:00, 11:45, 17:30, 20:30"
+                random_delay = campaign.get("random_delay_minutes", 10)
+                camp_min = campaign.get("min_post_interval_minutes")
+                min_interval = int(camp_min) if (camp_min and int(camp_min) > 0) else self.get_global_min_interval(cursor=cursor)
+
+                candidate_eval = []
+                for p in profiles:
+                    # Bỏ qua nếu nick đã đạt daily_limit của hôm nay
+                    if completed_map.get(p["id"], 0) >= daily_limit:
+                        continue
+                    next_time_str = self._calculate_next_post_time(
+                        schedule_str,
+                        random_delay,
+                        profile_id=p["id"],
+                        cursor=cursor,
+                        min_interval_minutes=min_interval,
+                        earliest_allowed_time=None,
+                        enforce_farm_stagger=False
+                    )
+                    candidate_eval.append((next_time_str, counts_map.get(p["id"], 0), p))
+
+                if candidate_eval:
+                    # Ưu tiên: 1) Slot sớm nhất, 2) Nick có ít clip hôm nay nhất
+                    candidate_eval.sort(key=lambda x: (x[0], x[1]))
+                    chosen_profile = candidate_eval[0][2]
+            elif mode == "random":
                 random.shuffle(profiles)
                 for p in profiles:
                     if completed_map.get(p["id"], 0) < daily_limit:
@@ -348,7 +376,8 @@ class ContentDistributor:
             profile_id=chosen_profile["id"], 
             cursor=cursor,
             min_interval_minutes=min_interval,
-            earliest_allowed_time=earliest_allowed
+            earliest_allowed_time=earliest_allowed,
+            enforce_farm_stagger=(mode != "parallel_slots")
         )
 
         # Áp dụng Gap 2: Account Persona Styling & Hashtag Permutation
@@ -400,7 +429,8 @@ class ContentDistributor:
         profile_id: int = None, 
         cursor = None,
         min_interval_minutes: int = 60,
-        earliest_allowed_time: Optional[datetime] = None
+        earliest_allowed_time: Optional[datetime] = None,
+        enforce_farm_stagger: bool = True
     ) -> str:
         """
         Tìm slot giờ đăng tiếp theo gần nhất từ danh sách post_schedule.
@@ -408,7 +438,12 @@ class ContentDistributor:
         Đồng thời nếu có earliest_allowed_time (từ Part trước), slot bắt buộc phải >= earliest_allowed_time.
         Kiểm tra cả các video đang chờ duyệt/xử lý và các video đã đăng thành công trong 48 giờ qua.
         """
-        slots = [s.strip() for s in schedule_str.split(",") if s.strip()]
+        if isinstance(schedule_str, list):
+            slots = [str(s).strip() for s in schedule_str if str(s).strip()]
+        elif isinstance(schedule_str, str):
+            slots = [s.strip() for s in schedule_str.split(",") if s.strip()]
+        else:
+            slots = []
         now = datetime.now()
         candidates = []
         if min_interval_minutes is None:
@@ -442,9 +477,12 @@ class ContentDistributor:
 
         # Kiểm tra lịch sử và lịch trình của profile để tránh trùng hoặc quá gần giờ đăng
         existing_times = []
+        farm_scheduled_times = []
+        min_farm_stagger_seconds = 12 * 60  # Giãn cách tối thiểu 12 phút giữa 2 tài khoản bất kỳ trong farm
+
         if profile_id:
+            local_conn = None
             try:
-                local_conn = None
                 if not cursor:
                     local_conn = get_connection()
                     cur = local_conn.cursor()
@@ -482,36 +520,36 @@ class ContentDistributor:
                         except Exception:
                             pass
 
+                # 3. Gap 2: Farm-Level Anti-Clustering Guard (Giãn cách toàn Farm)
+                # Chỉ áp dụng nếu enforce_farm_stagger=True (các chế độ khác parallel_slots)
+                if enforce_farm_stagger:
+                    cur.execute("""
+                        SELECT scheduled_time FROM upload_tasks
+                        WHERE gpm_profile_id NOT IN ({ph}) AND status IN ('queued', 'processing')
+                          AND scheduled_time >= ?
+                    """.replace("{ph}", ph), (*linked_ids, now.strftime("%Y-%m-%d %H:%M:%S")))
+                    for row in cur.fetchall():
+                        if row[0]:
+                            try:
+                                farm_scheduled_times.append(datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S"))
+                            except Exception:
+                                pass
+
+            except Exception:
+                pass
+            finally:
                 if local_conn:
-                    local_conn.close()
-            except Exception:
-                pass
+                    try:
+                        local_conn.close()
+                    except Exception:
+                        pass
 
-        # 3. Gap 2: Farm-Level Anti-Clustering Guard (Giãn cách toàn Farm)
-        farm_scheduled_times = []
-        min_farm_stagger_seconds = 12 * 60  # Giãn cách tối thiểu 12 phút giữa 2 tài khoản bất kỳ trong farm
-        if profile_id:
-            try:
-                cur.execute("""
-                    SELECT scheduled_time FROM upload_tasks
-                    WHERE gpm_profile_id != ? AND status IN ('queued', 'processing')
-                      AND scheduled_time >= ?
-                """, (profile_id, now.strftime("%Y-%m-%d %H:%M:%S")))
-                for row in cur.fetchall():
-                    if row[0]:
-                        try:
-                            farm_scheduled_times.append(datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S"))
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-        # Tìm slot đầu tiên thỏa mãn CẢ HAI điều kiện:
+        # Tìm slot đầu tiên thỏa mãn:
         # a) Cách xa bài của chính tài khoản này >= min_interval_seconds
-        # b) Cách xa bài của các tài khoản khác trong Farm >= min_farm_stagger_seconds
+        # b) Nếu enforce_farm_stagger: Cách xa bài của các tài khoản khác trong Farm >= min_farm_stagger_seconds
         for cand in candidates:
             account_safe = not any(abs((cand - ext).total_seconds()) < min_interval_seconds for ext in existing_times)
-            farm_safe = not any(abs((cand - fext).total_seconds()) < min_farm_stagger_seconds for fext in farm_scheduled_times)
+            farm_safe = not enforce_farm_stagger or not any(abs((cand - fext).total_seconds()) < min_farm_stagger_seconds for fext in farm_scheduled_times)
             if account_safe and farm_safe:
                 return cand.strftime("%Y-%m-%d %H:%M:%S")
 

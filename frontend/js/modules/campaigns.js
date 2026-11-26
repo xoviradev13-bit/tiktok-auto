@@ -412,11 +412,13 @@ function renderCampaignCard(c) {
     const chTitle = chCount > 1 ? `${chCount} Kênh YouTube Nguồn` : (c.channel_name || 'Kênh nguồn');
     const gpmTitle = gpmCount > 1 ? `${gpmCount} Dàn Account` : (c.gpm_profile_name ? '@' + (c.tiktok_username || c.gpm_profile_name) : 'Nick');
 
-    const distBadge = c.distribution_mode === 'round_robin'
-        ? '<span class="badge badge-cyan" title="Chống trùng: chia vòng tròn clip"><i class="fa-solid fa-arrows-spin"></i> Round-Robin (Không trùng)</span>'
-        : (c.distribution_mode === 'equal_random'
-            ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
-            : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>');
+    const distBadge = c.distribution_mode === 'parallel_slots'
+        ? '<span class="badge badge-green" title="Lấp đầy các khung giờ song song cho toàn bộ nick có Proxy riêng"><i class="fa-solid fa-bolt"></i> Song Song Giờ Vàng (Proxy Riêng)</span>'
+        : (c.distribution_mode === 'round_robin'
+            ? '<span class="badge badge-cyan" title="Chống trùng: chia vòng tròn clip"><i class="fa-solid fa-arrows-spin"></i> Round-Robin (Không trùng)</span>'
+            : (c.distribution_mode === 'equal_random'
+                ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
+                : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>'));
 
     let freqBadge = '';
     let freqText = 'Mỗi ngày';
@@ -1101,6 +1103,9 @@ async function openNewCampaignModal() {
     if (campVisSrc) campVisSrc.value = 'ai';
     const campStkWrap = document.getElementById('campaignStockWrap');
     if (campStkWrap) campStkWrap.style.display = 'none';
+
+    const campDistMode = document.getElementById('campaignDistributionMode');
+    if (campDistMode) campDistMode.value = 'parallel_slots';
 
     // Reset sort states & buttons
     campaignChannelsSortAsc = true;
@@ -1942,7 +1947,7 @@ async function handleCreateCampaignSubmit(e) {
         channel_ids: selectedChannelIds,
         gpm_profile_id: selectedGpmIds[0],
         gpm_profile_ids: selectedGpmIds,
-        distribution_mode: document.getElementById('campaignDistributionMode')?.value || 'round_robin',
+        distribution_mode: document.getElementById('campaignDistributionMode')?.value || 'parallel_slots',
         download_dir: document.getElementById('campaignDownloadDir')?.value.trim() || 'data/downloads',
         render_dir: document.getElementById('campaignRenderDir')?.value.trim() || 'data/rendered',
         aspect_ratio: campAspectRatio,
@@ -2980,6 +2985,152 @@ function closeCampaignLogsModal() {
     }
 }
 
+let cachedActiveCampaignVideos = [];
+
+function populateCampaignVideoFilterOptions(videos) {
+    const chSel = document.getElementById('filterCampVideoChannel');
+    const accSel = document.getElementById('filterCampVideoAccount');
+    if (!chSel || !accSel) return;
+
+    const curCh = chSel.value || 'all';
+    const curAcc = accSel.value || 'all';
+
+    // Unique Channels & Accounts
+    const channelsMap = {};
+    const accountsMap = {};
+
+    (videos || []).forEach(v => {
+        const chName = (v.channel_name || '').trim();
+        if (chName) {
+            channelsMap[chName] = (channelsMap[chName] || 0) + 1;
+        }
+        const acc = (v.tiktok_username || v.gpm_name || '').trim();
+        if (acc) {
+            const cleanAcc = acc.startsWith('@') ? acc : '@' + acc;
+            accountsMap[cleanAcc] = (accountsMap[cleanAcc] || 0) + 1;
+        }
+    });
+
+    let chOpts = '<option value="all">📺 Tất cả kênh nguồn</option>';
+    Object.keys(channelsMap).sort().forEach(ch => {
+        chOpts += `<option value="${escapeHtml(ch)}">📺 ${escapeHtml(ch)} (${channelsMap[ch]})</option>`;
+    });
+    chSel.innerHTML = chOpts;
+    if (curCh && chSel.querySelector(`option[value="${curCh}"]`)) chSel.value = curCh;
+
+    let accOpts = '<option value="all">👤 Tất cả nick TikTok</option>';
+    Object.keys(accountsMap).sort().forEach(acc => {
+        accOpts += `<option value="${escapeHtml(acc)}">👤 ${escapeHtml(acc)} (${accountsMap[acc]})</option>`;
+    });
+    accSel.innerHTML = accOpts;
+    if (curAcc && accSel.querySelector(`option[value="${curAcc}"]`)) accSel.value = curAcc;
+}
+
+function applyCampaignVideoFilters() {
+    renderCampaignVideosList();
+}
+
+function renderCampaignVideosList() {
+    const vListEl = document.getElementById('campaignVideosList');
+    if (!vListEl) return;
+
+    const chSel = document.getElementById('filterCampVideoChannel');
+    const accSel = document.getElementById('filterCampVideoAccount');
+    const selectedChannel = chSel ? chSel.value : 'all';
+    const selectedAccount = accSel ? accSel.value : 'all';
+
+    let filtered = [...cachedActiveCampaignVideos];
+    if (selectedChannel !== 'all') {
+        filtered = filtered.filter(v => (v.channel_name || '').trim() === selectedChannel);
+    }
+    if (selectedAccount !== 'all') {
+        filtered = filtered.filter(v => {
+            const acc = (v.tiktok_username || v.gpm_name || '').trim();
+            const cleanAcc = acc.startsWith('@') ? acc : '@' + acc;
+            return cleanAcc === selectedAccount;
+        });
+    }
+
+    const badge = document.getElementById('campVideosCountBadge');
+    if (badge) {
+        badge.textContent = `${filtered.length}/${cachedActiveCampaignVideos.length}`;
+    }
+
+    if (!filtered.length) {
+        vListEl.innerHTML = `
+            <div style="text-align:center; padding:32px 20px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px dashed rgba(255,255,255,0.1);">
+                <i class="fa-solid fa-filter-circle-xmark text-cyan" style="font-size:30px; opacity:0.6; margin-bottom:10px; display:block;"></i>
+                <div style="font-size:13.5px; font-weight:700; color:var(--text-primary);">Không có video nào khớp với bộ lọc đã chọn</div>
+                <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="resetCampaignVideoFilters()">
+                    <i class="fa-solid fa-rotate-left"></i> Đặt lại bộ lọc
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    vListEl.innerHTML = filtered.map(v => {
+        const dlBadge = v.download_path
+            ? `<span class="badge badge-blue" style="font-size:10.5px;" title="${escapeHtml(v.download_path)}"><i class="fa-solid fa-cloud-arrow-down"></i> Đã tải MP4 gốc</span>`
+            : '<span class="badge badge-secondary" style="font-size:10.5px;"><i class="fa-solid fa-clock"></i> Chờ tải</span>';
+
+        const rdBadge = v.rendered_path
+            ? `<span class="badge badge-purple" style="font-size:10.5px;" title="${escapeHtml(v.rendered_path)}"><i class="fa-solid fa-wand-magic-sparkles"></i> Đã Render 9:16</span>`
+            : (v.status === 'rendering' ? '<span class="badge badge-purple" style="font-size:10.5px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang render</span>' : '<span class="badge badge-secondary" style="font-size:10.5px;">Chưa render</span>');
+
+        const tiktokNick = v.tiktok_username || v.gpm_name;
+        const gpmBadge = tiktokNick
+            ? `<span class="badge badge-gold" style="font-size:11px;"><i class="fa-brands fa-tiktok"></i> ${escapeHtml(tiktokNick.startsWith('@') ? tiktokNick : '@' + tiktokNick)}</span>`
+            : '<span class="badge badge-secondary" style="font-size:10.5px;">Đang xếp lịch</span>';
+
+        let upBadge = '';
+        if (v.upload_status === 'completed') {
+            upBadge = `<span class="badge badge-success" style="font-size:10.5px;"><i class="fa-solid fa-circle-check"></i> Đã đăng (${escapeHtml(v.uploaded_at ? v.uploaded_at.substring(11, 16) : 'xong')})</span>`;
+        } else if (v.upload_status === 'failed') {
+            upBadge = '<span class="badge badge-danger" style="font-size:10.5px;"><i class="fa-solid fa-circle-xmark"></i> Lỗi đăng bài</span>';
+        } else if (v.scheduled_time) {
+            upBadge = `<span class="badge badge-cyan" style="font-size:10.5px;"><i class="fa-regular fa-clock"></i> Giờ hẹn: ${escapeHtml(v.scheduled_time)}</span>`;
+        } else if (v.rendered_path) {
+            upBadge = '<span class="badge badge-warning" style="font-size:10.5px;"><i class="fa-solid fa-hourglass-start"></i> Chờ đến khung giờ đăng</span>';
+        } else {
+            upBadge = '<span class="badge badge-secondary" style="font-size:10.5px;">Chờ render xong</span>';
+        }
+
+        return `
+            <div class="camp-video-card" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(0,242,254,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'">
+                <div style="flex:1 1 260px; min-width:0; max-width:320px; overflow:hidden;">
+                    <div style="display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--text-muted); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        <span style="color:#ff0000; flex-shrink:0;"><i class="fa-brands fa-youtube"></i></span>
+                        <strong style="color:var(--accent-blue); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.channel_name || 'YouTube')}</strong>
+                        <span style="flex-shrink:0;">• ${escapeHtml(v.created_at ? v.created_at.substring(0, 16) : '')}</span>
+                        ${v.duration ? `<span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); flex-shrink:0;">${v.duration}s</span>` : ''}
+                    </div>
+                    <h5 class="camp-video-title" style="margin:0; font-size:13px; font-weight:600; line-height:1.4; max-width:320px; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;" title="${escapeHtml(v.title || 'Video #' + v.id)}">${escapeHtml(v.title || 'Video #' + v.id)}</h5>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start; min-width:130px;">
+                    ${dlBadge}
+                    ${rdBadge}
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end; min-width:160px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:11px; color:var(--text-muted);">Nick nhận:</span>
+                        ${gpmBadge}
+                    </div>
+                    ${upBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function resetCampaignVideoFilters() {
+    const chSel = document.getElementById('filterCampVideoChannel');
+    if (chSel) chSel.value = 'all';
+    const accSel = document.getElementById('filterCampVideoAccount');
+    if (accSel) accSel.value = 'all';
+    renderCampaignVideosList();
+}
+
 async function refreshCurrentCampaignLogs() {
     if (!activeLogCampaignId) return;
     const feedEl = document.getElementById('campaignLogsFeed');
@@ -3044,78 +3195,10 @@ async function refreshCurrentCampaignLogs() {
         const lCountBadge = document.getElementById('campLogsCountBadge');
         if (lCountBadge) lCountBadge.textContent = logs.length;
 
-        // 1. Render Video Pipeline Flow (Channel -> Downloaded -> Rendered -> TikTok account)
-        const vListEl = document.getElementById('campaignVideosList');
-        if (vListEl) {
-            const vids = data.videos || [];
-            if (!vids.length) {
-                vListEl.innerHTML = `
-                    <div style="text-align:center; padding:32px 20px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px dashed rgba(255,255,255,0.1);">
-                        <i class="fa-solid fa-cloud-arrow-down text-cyan" style="font-size:32px; opacity:0.6; margin-bottom:10px; display:block;"></i>
-                        <div style="font-size:14px; font-weight:700; color:#fff;">Chưa phát hiện video nào từ các kênh nguồn này</div>
-                        <div style="font-size:12px; color:var(--text-muted); margin-top:4px; max-width:480px; margin-left:auto; margin-right:auto;">
-                            Hệ thống sẽ tự động quét RSS mỗi 15 phút, tải video MP4 gốc, render dọc 9:16 và phân phối lên dàn Account theo lịch.
-                        </div>
-                        <button type="button" class="btn btn-sm btn-accent mt-3" onclick="triggerCampaignTestRun()" style="background:linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color:#05131e; font-weight:700;">
-                            <i class="fa-solid fa-bolt"></i> Bấm Quét & Tải Thử Ngay
-                        </button>
-                    </div>
-                `;
-            } else {
-                vListEl.innerHTML = vids.map(v => {
-                    const dlBadge = v.download_path
-                        ? `<span class="badge badge-blue" style="font-size:10.5px;" title="${escapeHtml(v.download_path)}"><i class="fa-solid fa-cloud-arrow-down"></i> Đã tải MP4 gốc</span>`
-                        : '<span class="badge badge-secondary" style="font-size:10.5px;"><i class="fa-solid fa-clock"></i> Chờ tải</span>';
-
-                    const rdBadge = v.rendered_path
-                        ? `<span class="badge badge-purple" style="font-size:10.5px;" title="${escapeHtml(v.rendered_path)}"><i class="fa-solid fa-wand-magic-sparkles"></i> Đã Render 9:16</span>`
-                        : (v.status === 'rendering' ? '<span class="badge badge-purple" style="font-size:10.5px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang render</span>' : '<span class="badge badge-secondary" style="font-size:10.5px;">Chưa render</span>');
-
-                    const tiktokNick = v.tiktok_username || v.gpm_name;
-                    const gpmBadge = tiktokNick
-                        ? `<span class="badge badge-gold" style="font-size:11px;"><i class="fa-brands fa-tiktok"></i> ${escapeHtml(tiktokNick.startsWith('@') ? tiktokNick : '@' + tiktokNick)}</span>`
-                        : '<span class="badge badge-secondary" style="font-size:10.5px;">Đang xếp lịch Round-Robin</span>';
-
-                    let upBadge = '';
-                    if (v.upload_status === 'completed') {
-                        upBadge = `<span class="badge badge-success" style="font-size:10.5px;"><i class="fa-solid fa-circle-check"></i> Đã đăng (${escapeHtml(v.uploaded_at ? v.uploaded_at.substring(11, 16) : 'xong')})</span>`;
-                    } else if (v.upload_status === 'failed') {
-                        upBadge = '<span class="badge badge-danger" style="font-size:10.5px;"><i class="fa-solid fa-circle-xmark"></i> Lỗi đăng bài</span>';
-                    } else if (v.scheduled_time) {
-                        upBadge = `<span class="badge badge-cyan" style="font-size:10.5px;"><i class="fa-regular fa-clock"></i> Giờ hẹn: ${escapeHtml(v.scheduled_time)}</span>`;
-                    } else if (v.rendered_path) {
-                        upBadge = '<span class="badge badge-warning" style="font-size:10.5px;"><i class="fa-solid fa-hourglass-start"></i> Chờ đến khung giờ đăng</span>';
-                    } else {
-                        upBadge = '<span class="badge badge-secondary" style="font-size:10.5px;">Chờ render xong</span>';
-                    }
-
-                    return `
-                        <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(0,242,254,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'">
-                            <div style="flex:1 1 260px; min-width:0; max-width:320px; overflow:hidden;">
-                                <div style="display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--text-muted); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                    <span style="color:#ff0000; flex-shrink:0;"><i class="fa-brands fa-youtube"></i></span>
-                                    <strong style="color:var(--accent-blue); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(v.channel_name || 'YouTube')}</strong>
-                                    <span style="flex-shrink:0;">• ${escapeHtml(v.created_at ? v.created_at.substring(0, 16) : '')}</span>
-                                    ${v.duration ? `<span class="badge" style="font-size:10px; background:rgba(255,255,255,0.06); flex-shrink:0;">${v.duration}s</span>` : ''}
-                                </div>
-                                <h5 class="camp-video-title" style="margin:0; font-size:13px; color:#fff; font-weight:600; line-height:1.4; max-width:320px; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;" title="${escapeHtml(v.title || 'Video #' + v.id)}">${escapeHtml(v.title || 'Video #' + v.id)}</h5>
-                            </div>
-                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start; min-width:130px;">
-                                ${dlBadge}
-                                ${rdBadge}
-                            </div>
-                            <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end; min-width:160px;">
-                                <div style="display:flex; align-items:center; gap:6px;">
-                                    <span style="font-size:11px; color:var(--text-muted);">Nick nhận:</span>
-                                    ${gpmBadge}
-                                </div>
-                                ${upBadge}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-        }
+        // 1. Save and Render Video Pipeline Flow with Filters
+        cachedActiveCampaignVideos = data.videos || [];
+        populateCampaignVideoFilterOptions(cachedActiveCampaignVideos);
+        renderCampaignVideosList();
 
         // 2. Render Activity Logs
         const actionBadges = {
@@ -3128,10 +3211,10 @@ async function refreshCurrentCampaignLogs() {
         };
 
         const levelColors = {
-            'SUCCESS': '#10b981',
-            'ERROR': '#ef4444',
-            'WARNING': '#f59e0b',
-            'INFO': '#00f2fe'
+            'SUCCESS': '#059669',
+            'ERROR': '#dc2626',
+            'WARNING': '#d97706',
+            'INFO': '#0284c7'
         };
 
         if (feedEl) {
@@ -3142,15 +3225,15 @@ async function refreshCurrentCampaignLogs() {
                     const actBadge = actionBadges[l.action] || actionBadges['system'];
                     const lvlColor = levelColors[l.level] || 'var(--text-secondary)';
                     return `
-                        <div style="display:flex; align-items:flex-start; gap:10px; padding:6px 10px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:12px; transition:background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                            <span style="color:var(--text-muted); font-size:11px; white-space:nowrap; padding-top:2px; font-family:monospace;">
+                        <div class="camp-log-row">
+                            <span class="camp-log-time">
                                 ${escapeHtml(l.created_at || '')}
                             </span>
                             <div style="flex-shrink:0;">${actBadge}</div>
-                            <div style="flex:1; word-break:break-word; color:#e2e8f0; line-height:1.4;">
-                                <span style="color:${lvlColor}; font-weight:700; margin-right:4px;">[${escapeHtml(l.level || 'INFO')}]</span>
-                                ${escapeHtml(l.message || '')}
-                                ${l.details ? `<div style="color:var(--text-muted); font-size:11px; margin-top:3px; font-family:monospace; background:rgba(0,0,0,0.3); padding:3px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.04);">${escapeHtml(l.details)}</div>` : ''}
+                            <div class="camp-log-msg">
+                                <span class="camp-log-level" style="color:${lvlColor}; font-weight:700; margin-right:4px;">[${escapeHtml(l.level || 'INFO')}]</span>
+                                <span>${escapeHtml(l.message || '')}</span>
+                                ${l.details ? `<div class="camp-log-details">${escapeHtml(l.details)}</div>` : ''}
                             </div>
                         </div>
                     `;
@@ -3168,15 +3251,18 @@ function switchCampaignDetailTab(tab) {
     const lContainer = document.getElementById('campaignLogsContainer');
     const vBtn = document.getElementById('btnCampTabVideos');
     const lBtn = document.getElementById('btnCampTabLogs');
+    const filterBar = document.getElementById('campVideosFilterBar');
 
     if (tab === 'videos') {
         if (vContainer) vContainer.style.display = 'flex';
         if (lContainer) lContainer.style.display = 'none';
+        if (filterBar) filterBar.style.display = 'flex';
         if (vBtn) { vBtn.className = 'btn btn-sm btn-primary'; }
         if (lBtn) { lBtn.className = 'btn btn-sm btn-secondary'; }
     } else {
         if (vContainer) vContainer.style.display = 'none';
         if (lContainer) lContainer.style.display = 'flex';
+        if (filterBar) filterBar.style.display = 'none';
         if (vBtn) { vBtn.className = 'btn btn-sm btn-secondary'; }
         if (lBtn) { lBtn.className = 'btn btn-sm btn-primary'; }
     }
@@ -3421,3 +3507,5 @@ function syncCampaignDuplicateCheckboxes(mode = 'new') {
     }
 }
 window.syncCampaignDuplicateCheckboxes = syncCampaignDuplicateCheckboxes;
+window.applyCampaignVideoFilters = applyCampaignVideoFilters;
+window.resetCampaignVideoFilters = resetCampaignVideoFilters;

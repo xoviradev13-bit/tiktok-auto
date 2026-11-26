@@ -95,6 +95,12 @@
                                                         <i class="fa-solid fa-chevron-down" style="font-size: 10px; margin-left: 6px; opacity: 0.7;"></i>
                                                     </button>
                                                     <div class="country-picker-menu" id="countryPickerMenu" style="display: none;" onclick="event.stopPropagation()">
+                                                        <div class="country-picker-search-box">
+                                                            <div class="country-picker-search-wrap">
+                                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                                <input type="text" class="country-picker-search-input" id="countryPickerSearchInput" placeholder="Tìm quốc gia (tên, mã)..." oninput="filterCountryDropdownList(this.value)">
+                                                            </div>
+                                                        </div>
                                                         <div id="countryPickerList" class="country-picker-list">
                                                             <!-- Populated dynamically via JS -->
                                                         </div>
@@ -482,17 +488,28 @@
 
                                             <!-- Filter Country -->
                                             <div class="sort-control">
-                                                <label for="savedFilterCountrySelect"><i
+                                                <label for="btnSavedCountryDropdown"><i
                                                         class="fa-solid fa-earth-americas"></i> Quốc gia:</label>
-                                                <select id="savedFilterCountrySelect" class="custom-select sort-select"
-                                                    onchange="handleSavedFilterCountryChange(this.value)">
-                                                    <option value="all">Tất cả quốc gia</option>
-                                                    <option value="US">🇺🇸 Hoa Kỳ (US)</option>
-                                                    <option value="GB">🇬🇧 Vương Quốc Anh (GB)</option>
-                                                    <option value="CA">🇨🇦 Canada (CA)</option>
-                                                    <option value="AU">🇦🇺 Úc (AU)</option>
-                                                    <option value="VN">🇻🇳 Việt Nam (VN)</option>
-                                                </select>
+                                                <div class="country-picker-container">
+                                                    <button type="button" class="custom-select sort-select country-picker-btn" id="btnSavedCountryDropdown" onclick="toggleSavedCountryDropdown(event)">
+                                                        <span id="savedCountryDropdownSelectedText" class="table-text-truncate" style="max-width: 135px; text-align: left;">🌐 Tất cả quốc gia</span>
+                                                        <i class="fa-solid fa-chevron-down" style="font-size: 10px; margin-left: 6px; opacity: 0.7;"></i>
+                                                    </button>
+                                                    <div class="country-picker-menu" id="savedCountryPickerMenu" style="display: none;" onclick="event.stopPropagation()">
+                                                        <div class="country-picker-search-box">
+                                                            <div class="country-picker-search-wrap">
+                                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                                <input type="text" class="country-picker-search-input" id="savedCountryPickerSearchInput" placeholder="Tìm quốc gia (tên, mã)..." oninput="filterSavedCountryDropdownList(this.value)">
+                                                            </div>
+                                                        </div>
+                                                        <div id="savedCountryPickerList" class="country-picker-list">
+                                                            <!-- Populated dynamically via JS -->
+                                                        </div>
+                                                    </div>
+                                                    <select id="savedFilterCountrySelect" style="display: none;" onchange="handleSavedFilterCountryChange(this.value)">
+                                                        <option value="all">Tất cả quốc gia</option>
+                                                    </select>
+                                                </div>
                                             </div>
 
                                             <!-- Filter Min Views -->

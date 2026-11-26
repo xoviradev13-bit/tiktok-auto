@@ -41,6 +41,7 @@ async function loadSavedChannels(btn) {
         const badgeCount = document.getElementById('badgeSavedCount');
         if (badgeCount) badgeCount.textContent = `${total} Kênh Đang Theo Dõi`;
 
+        populateSavedCountryFilterOptions(cachedSavedChannels);
         renderSavedChannelsTable();
     } catch (err) {
         console.error('Lỗi khi tải kênh đã lưu:', err);
@@ -98,12 +99,191 @@ function handleSavedHeaderSort(field) {
         const sel = document.getElementById('savedSortSelect');
         if (sel) sel.value = field;
         updateSavedSortDirectionBtn();
+        populateSavedCountryFilterOptions(cachedSavedChannels);
         renderSavedChannelsTable();
     }
 }
 
-function handleSavedFilterCountryChange(val) {
+function populateSavedCountryFilterOptions(channels) {
+    const listEl = document.getElementById('savedCountryPickerList');
+    const sel = document.getElementById('savedFilterCountrySelect');
+    if (!listEl && !sel) return;
+
+    const currentVal = (savedFilterCountry || 'all').toUpperCase();
+
+    // Tally channels by country
+    const counts = {};
+    if (Array.isArray(channels) && channels.length > 0) {
+        channels.forEach(c => {
+            const country = (c.country || 'N/A').toUpperCase();
+            if (country && country !== 'N/A') {
+                counts[country] = (counts[country] || 0) + 1;
+            }
+        });
+    }
+
+    const foundCodes = Object.keys(counts).filter(c => counts[c] > 0);
+    foundCodes.sort((a, b) => counts[b] - counts[a]);
+
+    // Populate native select for fallback
+    if (sel) {
+        let options = '<option value="all">🌐 Tất cả quốc gia</option>';
+        if (foundCodes.length > 0) {
+            options += `<optgroup label="📊 Kênh Đang Giám Sát (${foundCodes.length} quốc gia)">`;
+            foundCodes.forEach(code => {
+                const preset = (typeof COUNTRY_MAP !== 'undefined') ? COUNTRY_MAP[code] : null;
+                const flag = preset ? preset.flag : '🌐';
+                const name = preset ? preset.name : code;
+                options += `<option value="${code}">${flag} ${name} (${counts[code]} kênh)</option>`;
+            });
+            options += '</optgroup>';
+        }
+        if (typeof POPULAR_COUNTRIES !== 'undefined') {
+            options += `<optgroup label="🌍 Danh sách quốc gia (${POPULAR_COUNTRIES.length} nước)">`;
+            POPULAR_COUNTRIES.forEach(item => {
+                const countSuffix = counts[item.code] ? ` [${counts[item.code]} kênh]` : '';
+                options += `<option value="${item.code}">${item.flag} ${item.name}${countSuffix}</option>`;
+            });
+            options += '</optgroup>';
+        }
+        sel.innerHTML = options;
+        if (currentVal && currentVal !== 'ALL') {
+            sel.value = currentVal;
+        } else {
+            sel.value = 'all';
+        }
+    }
+
+    // Populate Custom Dropdown List
+    if (listEl) {
+        let listHtml = '';
+        const isAllActive = savedFilterCountry === 'all' || !savedFilterCountry;
+        listHtml += `<div class="country-picker-item ${isAllActive ? 'active' : ''}" data-code="all" data-search="tat ca all quoc gia" onclick="selectSavedCountryPickerItem('all', '🌐 Tất cả quốc gia')">
+            <span>🌐 Tất cả quốc gia</span>
+        </div>`;
+
+        if (foundCodes.length > 0) {
+            listHtml += `<div class="country-picker-group-title">📊 Kênh Trong Danh Sách (${foundCodes.length} quốc gia)</div>`;
+            foundCodes.forEach(code => {
+                const preset = (typeof COUNTRY_MAP !== 'undefined') ? COUNTRY_MAP[code] : null;
+                const flag = preset ? preset.flag : '🌐';
+                const name = preset ? preset.name : code;
+                const isActive = savedFilterCountry && savedFilterCountry.toUpperCase() === code;
+                listHtml += `<div class="country-picker-item ${isActive ? 'active' : ''}" data-code="${code}" data-search="${code} ${name}" onclick="selectSavedCountryPickerItem('${code}', '${flag} ${name}')">
+                    <span>${flag} ${name}</span>
+                    <span class="item-badge">${counts[code]} kênh</span>
+                </div>`;
+            });
+        }
+
+        if (typeof POPULAR_COUNTRIES !== 'undefined') {
+            listHtml += `<div class="country-picker-group-title">🌍 Danh sách quốc gia (${POPULAR_COUNTRIES.length} nước)</div>`;
+            POPULAR_COUNTRIES.forEach(item => {
+                const isActive = savedFilterCountry && savedFilterCountry.toUpperCase() === item.code;
+                const badge = counts[item.code] ? `<span class="item-badge">${counts[item.code]} kênh</span>` : '';
+                listHtml += `<div class="country-picker-item ${isActive ? 'active' : ''}" data-code="${item.code}" data-search="${item.code} ${item.name}" onclick="selectSavedCountryPickerItem('${item.code}', '${item.flag} ${item.name}')">
+                    <span>${item.flag} ${item.name}</span>
+                    ${badge}
+                </div>`;
+            });
+        }
+        listEl.innerHTML = listHtml;
+    }
+
+    // Update label text
+    const labelSpan = document.getElementById('savedCountryDropdownSelectedText');
+    if (labelSpan) {
+        if (!savedFilterCountry || savedFilterCountry === 'all') {
+            labelSpan.textContent = '🌐 Tất cả quốc gia';
+        } else {
+            const preset = (typeof COUNTRY_MAP !== 'undefined') ? COUNTRY_MAP[savedFilterCountry.toUpperCase()] : null;
+            labelSpan.textContent = preset ? `${preset.flag} ${preset.name}` : `🌐 ${savedFilterCountry}`;
+        }
+    }
+}
+
+function toggleSavedCountryDropdown(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('savedCountryPickerMenu');
+    if (!menu) return;
+    const isShowing = menu.style.display !== 'none';
+    if (typeof closeCountryDropdown === 'function') closeCountryDropdown();
+    menu.style.display = isShowing ? 'none' : 'block';
+    if (!isShowing) {
+        const searchInp = document.getElementById('savedCountryPickerSearchInput');
+        if (searchInp) {
+            searchInp.value = '';
+            filterSavedCountryDropdownList('');
+            setTimeout(() => searchInp.focus(), 50);
+        }
+    }
+}
+
+function filterSavedCountryDropdownList(query) {
+    const listEl = document.getElementById('savedCountryPickerList');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase().trim();
+    const items = listEl.querySelectorAll('.country-picker-item');
+    items.forEach(el => {
+        const text = (el.dataset.search || el.textContent || '').toLowerCase();
+        if (!q || text.includes(q)) {
+            el.style.display = 'flex';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+
+    const titles = listEl.querySelectorAll('.country-picker-group-title');
+    titles.forEach(title => {
+        let next = title.nextElementSibling;
+        let hasVisible = false;
+        while (next && !next.classList.contains('country-picker-group-title')) {
+            if (next.classList.contains('country-picker-item') && next.style.display !== 'none') {
+                hasVisible = true;
+                break;
+            }
+            next = next.nextElementSibling;
+        }
+        title.style.display = hasVisible ? 'block' : 'none';
+    });
+}
+
+function closeSavedCountryDropdown() {
+    const menu = document.getElementById('savedCountryPickerMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+function selectSavedCountryPickerItem(code, label) {
+    const sel = document.getElementById('savedFilterCountrySelect');
+    if (sel) sel.value = code;
+    handleSavedFilterCountryChange(code, label);
+    closeSavedCountryDropdown();
+}
+
+function handleSavedFilterCountryChange(val, label) {
     savedFilterCountry = val;
+    const sel = document.getElementById('savedFilterCountrySelect');
+    if (sel && sel.value !== val) sel.value = val;
+
+    const labelSpan = document.getElementById('savedCountryDropdownSelectedText');
+    if (labelSpan) {
+        if (label) {
+            labelSpan.textContent = label;
+        } else if (val === 'all' || !val) {
+            labelSpan.textContent = '🌐 Tất cả quốc gia';
+        } else {
+            const preset = (typeof COUNTRY_MAP !== 'undefined') ? COUNTRY_MAP[val.toUpperCase()] : null;
+            labelSpan.textContent = preset ? `${preset.flag} ${preset.name}` : `🌐 ${val}`;
+        }
+    }
+
+    const listEl = document.getElementById('savedCountryPickerList');
+    if (listEl) {
+        listEl.querySelectorAll('.country-picker-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.code === val);
+        });
+    }
+
     renderSavedChannelsTable();
 }
 
@@ -137,6 +317,14 @@ function resetSavedFilters() {
     if (selGroup) selGroup.value = 'all';
     const selCountry = document.getElementById('savedFilterCountrySelect');
     if (selCountry) selCountry.value = 'all';
+    const labelSpan = document.getElementById('savedCountryDropdownSelectedText');
+    if (labelSpan) labelSpan.textContent = '🌐 Tất cả quốc gia';
+    const listEl = document.getElementById('savedCountryPickerList');
+    if (listEl) {
+        listEl.querySelectorAll('.country-picker-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.code === 'all');
+        });
+    }
     const selViews = document.getElementById('savedFilterViewsSelect');
     if (selViews) selViews.value = '0';
     const selSubs = document.getElementById('savedFilterSubsSelect');
@@ -156,6 +344,7 @@ let _savedSearchDebounceTimer = null;
 function debouncedRenderSavedChannelsTable() {
     if (_savedSearchDebounceTimer) clearTimeout(_savedSearchDebounceTimer);
     _savedSearchDebounceTimer = setTimeout(() => {
+        populateSavedCountryFilterOptions(cachedSavedChannels);
         renderSavedChannelsTable();
     }, 150);
 }
@@ -429,7 +618,7 @@ function renderSavedChannelsTable() {
         const chUrl = c.url || (cid ? `https://www.youtube.com/channel/${cid}` : '#');
 
         const thumbImg = c.thumbnail_url
-            ? `<img src="${c.thumbnail_url}" alt="" class="channel-avatar-clickable" onclick="openChannelDetailModal('${escapeHtml(cid)}')" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:1px solid rgba(255,255,255,0.1); flex-shrink:0;" title="Bấm xem chi tiết kênh">`
+            ? `<img src="${c.thumbnail_url}" alt="" referrerpolicy="no-referrer" class="channel-avatar-clickable" onclick="openChannelDetailModal('${escapeHtml(cid)}')" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:1px solid rgba(255,255,255,0.1); flex-shrink:0;" title="Bấm xem chi tiết kênh"><div class="channel-avatar-clickable" onclick="openChannelDetailModal('${escapeHtml(cid)}')" style="display:none; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.06); align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0;" title="Bấm xem chi tiết kênh"><i class="fa-brands fa-youtube"></i></div>`
             : `<div class="channel-avatar-clickable" onclick="openChannelDetailModal('${escapeHtml(cid)}')" style="width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0;" title="Bấm xem chi tiết kênh"><i class="fa-brands fa-youtube"></i></div>`;
 
         const subsFormatted = c.subscriber_count ? formatNumber(c.subscriber_count) : '<span class="text-muted">Ẩn</span>';
@@ -614,7 +803,8 @@ async function toggleChannelStatusInline(channelId, checkbox) {
                 ch.is_active = data.is_active;
                 ch.auto_download = data.is_active;
             }
-            renderSavedChannelsTable();
+            populateSavedCountryFilterOptions(cachedSavedChannels);
+        renderSavedChannelsTable();
             const activeCount = cachedSavedChannels.filter(c => c.is_active === 1).length;
             const elActive = document.getElementById('savedCountActive');
             if (elActive) elActive.textContent = activeCount;
@@ -656,7 +846,8 @@ async function refreshChannelStatsFromMenu(channelId, btn) {
                     openChannelDetailModal(activeDetailChannel);
                 }
             }
-            renderSavedChannelsTable();
+            populateSavedCountryFilterOptions(cachedSavedChannels);
+        renderSavedChannelsTable();
         } else {
             showToast('Lỗi cập nhật: ' + (data.detail || data.message || 'Không thể làm mới chỉ số'), true);
         }
@@ -699,7 +890,8 @@ async function refreshActiveChannelStats(btn) {
                     cachedSavedChannels[idx] = { ...cachedSavedChannels[idx], ...data.channel };
                 }
                 openChannelDetailModal(activeDetailChannel);
-                renderSavedChannelsTable();
+                populateSavedCountryFilterOptions(cachedSavedChannels);
+        renderSavedChannelsTable();
             }
         } else {
             showToast('Lỗi cập nhật: ' + (data.detail || data.message || 'Không thể làm mới chỉ số'), true);
@@ -1481,6 +1673,11 @@ async function deleteChannelFromModal(btn) {
 }
 
 // Module Window Exposures
+window.toggleSavedCountryDropdown = toggleSavedCountryDropdown;
+window.closeSavedCountryDropdown = closeSavedCountryDropdown;
+window.selectSavedCountryPickerItem = selectSavedCountryPickerItem;
+window.filterSavedCountryDropdownList = filterSavedCountryDropdownList;
+window.populateSavedCountryFilterOptions = populateSavedCountryFilterOptions;
 window.clearChannelHistoryFromModal = clearChannelHistoryFromModal;
 window.clearChannelVideoHistory = clearChannelVideoHistory;
 window.closeChannelSettingsModal = closeChannelSettingsModal;

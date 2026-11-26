@@ -394,7 +394,7 @@ class RefreshChannelStatsRequest(BaseModel):
     channel_id: str
 
 class SaveApiKeysRequest(BaseModel):
-    youtube_api_keys: Optional[str] = ""       # comma-separated list
+    youtube_api_keys: Optional[str] = None       # comma-separated list
     deepseek_api_key: Optional[str] = ""
     gemini_api_key: Optional[str] = ""
     gemini_base_url: Optional[str] = ""
@@ -855,7 +855,8 @@ def sync_gpm_profiles():
                     pass
                 return False
 
-            max_workers = 6
+            # Tối ưu đa luồng linh hoạt: từ 16 đến 32 luồng để quét cực nhanh cho hàng trăm / hàng nghìn profiles
+            max_workers = min(32, max(8, len(active_gpm_ids) // 10))
             with ThreadPoolExecutor(max_workers=max_workers) as ex:
                 results = list(ex.map(sync_single_cookie, list(active_gpm_ids)))
                 tt_synced = sum(1 for r in results if r)
@@ -3348,11 +3349,34 @@ def toggle_campaign(campaign_id: int):
 def delete_campaign(campaign_id: int):
     conn = get_connection()
     cursor = conn.cursor()
+    # 1. Lấy thông tin kênh của chiến dịch để dọn sạch các upload_tasks đang chờ (queued)
+    cursor.execute("SELECT channel_id, channel_ids FROM campaigns WHERE id = ?", (campaign_id,))
+    row = cursor.fetchone()
+    if row:
+        ch_ids = []
+        if row["channel_id"]:
+            ch_ids.append(row["channel_id"])
+        if row["channel_ids"]:
+            try:
+                ch_ids.extend(json.loads(row["channel_ids"]))
+            except Exception:
+                pass
+        if ch_ids:
+            ph = ",".join("?" for _ in ch_ids)
+            # Hủy các task upload đang queued thuộc các kênh của chiến dịch bị xóa này
+            cursor.execute(f"""
+                UPDATE upload_tasks 
+                SET status = 'cancelled', error_message = 'Hủy bỏ: Chiến dịch liên kết đã bị xóa'
+                WHERE status = 'queued' AND video_id IN (
+                    SELECT id FROM videos WHERE channel_id IN ({ph})
+                )
+            """, tuple(ch_ids))
+
     cursor.execute("DELETE FROM campaigns WHERE id = ?", (campaign_id,))
     cursor.execute("DELETE FROM campaign_logs WHERE campaign_id = ?", (campaign_id,))
     conn.commit()
     conn.close()
-    log_event("INFO", f"Đã xóa chiến dịch ID {campaign_id}")
+    log_event("INFO", f"Đã xóa chiến dịch ID {campaign_id} và hủy các task đang chờ liên quan.")
     return {"status": "success"}
 
 
@@ -5139,7 +5163,8 @@ def save_api_keys(req: SaveApiKeysRequest):
     except Exception as e:
         log_event("WARNING", f"Lỗi lưu cấu hình vào DB: {e}")
 
-    yt_scanner.reload_keys(updates.get("YOUTUBE_API_KEYS", ""))
+    if "YOUTUBE_API_KEYS" in updates:
+        yt_scanner.reload_keys(updates["YOUTUBE_API_KEYS"])
     if "TELEGRAM_BOT_TOKEN" in updates:
         notifier.bot_token = updates["TELEGRAM_BOT_TOKEN"]
 
@@ -5730,8 +5755,9 @@ def on_startup():
         for k, v in db_settings.items():
             if v and (k not in os.environ or not os.environ[k]):
                 os.environ[k] = v
-        if "YOUTUBE_API_KEYS" in db_settings:
-            yt_scanner.reload_keys(db_settings["YOUTUBE_API_KEYS"])
+        yt_raw = db_settings.get("YOUTUBE_API_KEYS") or db_settings.get("YOUTUBE_API_KEY")
+        if yt_raw is not None:
+            yt_scanner.reload_keys(yt_raw)
         log_event("INFO", f"Đã phục hồi {len(db_settings)} cấu hình từ cơ sở dữ liệu SQLite.")
     except Exception as e:
         log_event("WARNING", f"Lỗi phục hồi cấu hình từ DB settings: {e}")

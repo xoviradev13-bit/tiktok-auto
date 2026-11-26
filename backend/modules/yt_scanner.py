@@ -47,6 +47,7 @@ import random
 import re
 import shlex
 import statistics
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -70,6 +71,7 @@ class YouTubeKeyPool:
     chạm giới hạn Quota (10k units/ngày) hoặc gặp lỗi 403/429.
     """
     def __init__(self, raw_keys: Optional[str] = None):
+        self._lock = threading.RLock()
         self._keys: List[str] = []
         self._disabled_until: Dict[str, float] = {}
         self._current_idx: int = 0
@@ -77,73 +79,80 @@ class YouTubeKeyPool:
             self.set_keys(raw_keys)
 
     def set_keys(self, raw: str):
-        if not raw:
-            self._keys = []
-            return
-        parts = [k.strip() for k in re.split(r"[,;\n\s]+", raw) if k.strip()]
-        seen = set()
-        new_keys = []
-        for k in parts:
-            if k not in seen:
-                seen.add(k)
-                new_keys.append(k)
-        self._keys = new_keys
-        if self._current_idx >= len(self._keys):
-            self._current_idx = 0
+        with self._lock:
+            if not raw:
+                self._keys = []
+                self._current_idx = 0
+                return
+            parts = [k.strip() for k in re.split(r"[,;\n\s]+", raw) if k.strip()]
+            seen = set()
+            new_keys = []
+            for k in parts:
+                if k not in seen:
+                    seen.add(k)
+                    new_keys.append(k)
+            self._keys = new_keys
+            if self._current_idx >= len(self._keys):
+                self._current_idx = 0
 
     @property
     def total_keys(self) -> int:
-        return len(self._keys)
+        with self._lock:
+            return len(self._keys)
 
     @property
     def keys(self) -> List[str]:
-        return list(self._keys)
+        with self._lock:
+            return list(self._keys)
 
     def get_keys_status(self) -> List[Dict[str, Any]]:
-        now = time.time()
-        res = []
-        for idx, k in enumerate(self._keys):
-            cooldown = self._disabled_until.get(k, 0.0)
-            is_active = cooldown <= now
-            masked = k[:6] + "..." + k[-4:] if len(k) > 10 else k
-            res.append({
-                "index": idx,
-                "key_masked": masked,
-                "full_key": k,
-                "is_active": is_active,
-                "cooldown_remaining_sec": max(0, int(cooldown - now)),
-                "is_current": (idx == self._current_idx),
-            })
-        return res
+        with self._lock:
+            now = time.time()
+            res = []
+            for idx, k in enumerate(self._keys):
+                cooldown = self._disabled_until.get(k, 0.0)
+                is_active = cooldown <= now
+                masked = k[:6] + "..." + k[-4:] if len(k) > 10 else k
+                res.append({
+                    "index": idx,
+                    "key_masked": masked,
+                    "full_key": k,
+                    "is_active": is_active,
+                    "cooldown_remaining_sec": max(0, int(cooldown - now)),
+                    "is_current": (idx == self._current_idx),
+                })
+            return res
 
     def get_active_key(self) -> Optional[str]:
-        if not self._keys:
+        with self._lock:
+            if not self._keys:
+                return None
+            now = time.time()
+            for i in range(len(self._keys)):
+                idx = (self._current_idx + i) % len(self._keys)
+                key = self._keys[idx]
+                if self._disabled_until.get(key, 0.0) <= now:
+                    self._current_idx = idx
+                    return key
             return None
-        now = time.time()
-        for i in range(len(self._keys)):
-            idx = (self._current_idx + i) % len(self._keys)
-            key = self._keys[idx]
-            if self._disabled_until.get(key, 0.0) <= now:
-                self._current_idx = idx
-                return key
-        return None
 
     def mark_key_exhausted(self, key: str, reason: str = "quotaExceeded", cooldown_hours: float = 12.0) -> Optional[str]:
-        now = time.time()
-        self._disabled_until[key] = now + (cooldown_hours * 3600)
-        masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "KEY"
-        log_event("WARNING", f"YouTube API Key ({masked}) bị lỗi/hết quota: '{reason}'. Tạm dừng {cooldown_hours}h.")
-        
-        # Advance index to next key
-        if len(self._keys) > 1:
-            self._current_idx = (self._current_idx + 1) % len(self._keys)
-        next_key = self.get_active_key()
-        if next_key and next_key != key:
-            next_masked = next_key[:6] + "..." + next_key[-4:] if len(next_key) > 10 else "KEY"
-            log_event("INFO", f"🔄 Đã tự động xoay sang YouTube API Key dự phòng: {next_masked}")
-        elif not next_key:
-            log_event("WARNING", "⚠️ Toàn bộ danh sách YouTube API Key đều đã hết quota. Hệ thống chuyển sang cào dữ liệu miễn phí (Scrape/yt-dlp).")
-        return next_key
+        with self._lock:
+            now = time.time()
+            self._disabled_until[key] = now + (cooldown_hours * 3600)
+            masked = key[:6] + "..." + key[-4:] if len(key) > 10 else "KEY"
+            log_event("WARNING", f"YouTube API Key ({masked}) bị lỗi/hết quota: '{reason}'. Tạm dừng {cooldown_hours}h.")
+
+            # Advance index to next key
+            if len(self._keys) > 1:
+                self._current_idx = (self._current_idx + 1) % len(self._keys)
+            next_key = self.get_active_key()
+            if next_key and next_key != key:
+                next_masked = next_key[:6] + "..." + next_key[-4:] if len(next_key) > 10 else "KEY"
+                log_event("INFO", f"🔄 Đã tự động xoay sang YouTube API Key dự phòng: {next_masked}")
+            elif not next_key:
+                log_event("WARNING", "⚠️ Toàn bộ danh sách YouTube API Key đều đã hết quota. Hệ thống chuyển sang cào dữ liệu miễn phí (Scrape/yt-dlp).")
+            return next_key
 
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", _CONFIG_YT_KEY).strip()
@@ -413,11 +422,12 @@ def _parse_topic_categories(urls: Any) -> List[str]:
 
 
 def _parse_api_channel(it: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten one channels.list item (snippet+statistics+branding+topics)."""
+    """Flatten one channels.list item (snippet+statistics+branding+topics+contentDetails)."""
     sn = it.get("snippet") or {}
     st = it.get("statistics") or {}
     br = (it.get("brandingSettings") or {}).get("channel") or {}
     tp = it.get("topicDetails") or {}
+    cd = (it.get("contentDetails") or {}).get("relatedPlaylists") or {}
 
     hidden = bool(st.get("hiddenSubscriberCount"))
     thumbs = sn.get("thumbnails") or {}
@@ -441,6 +451,7 @@ def _parse_api_channel(it: Dict[str, Any]) -> Dict[str, Any]:
         "keywords": _parse_keywords(br.get("keywords", "")),
         "topic_categories": _parse_topic_categories(tp.get("topicCategories")),
         "api_title": sn.get("title", "") or "",
+        "uploads_playlist_id": cd.get("uploads", "") or "",
     }
 
 
@@ -521,23 +532,32 @@ def _parse_channel_renderer(ch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def _cadence_description(cadence_days: float, video_count: int) -> str:
+def _cadence_description(
+    cadence_days: float,
+    video_count: int,
+    days_since: Optional[int] = None,
+    videos_7d: Optional[int] = None,
+    videos_7d_capped: bool = False,
+) -> str:
+    if days_since is not None and days_since > 30:
+        return f"Ngừng đăng ({days_since} ngày trước)"
+    if videos_7d == 0 or (videos_7d is None and cadence_days > 7.0):
+        return "0 vid/ngày (0 vid/7d)"
     if cadence_days < 0:
         if video_count == 1:
             return "Mới có 1 video"
         if video_count == 0:
             return "Chưa có video"
         return "Chưa đủ dữ liệu chu kỳ"
-    if cadence_days < 0.05:
-        hours = max(0.1, round(cadence_days * 24.0, 1))
-        return f"~{hours}h / video (Siêu dày)"
-    if cadence_days < 0.85:
-        hours = round(cadence_days * 24.0, 1)
-        v_per_day = max(1, int(round(24.0 / max(0.1, hours))))
-        return f"{v_per_day} vid/ngày (~{hours}h/vid)"
-    if cadence_days <= 1.25:
-        return "1 ngày / video (Hàng ngày)"
-    return f"Khoảng {round(cadence_days, 1)} ngày / video"
+
+    vids_per_day = round(1.0 / cadence_days, 1) if cadence_days > 0 else 0.0
+    if videos_7d is not None:
+        if videos_7d_capped:
+            return f"~{vids_per_day} vid/ngày ({videos_7d}+ vid/7d)"
+        return f"{vids_per_day} vid/ngày ({videos_7d} vid/7d)"
+
+    approx_7d = round(7.0 / cadence_days, 1) if cadence_days > 0 else 0.0
+    return f"{vids_per_day} vid/ngày (~{approx_7d} vid/7d)"
 
 
 def _db_value(ch: Dict[str, Any], col: str) -> Any:
@@ -827,15 +847,31 @@ class YouTubeScanner:
     def _handle_api_error_pool(self, status: int, body: bytes, where: str, current_key: str) -> Optional[str]:
         """Xử lý lỗi API với key_pool: mark key lỗi và trả về key tiếp theo (hoặc None nếu hết pool)."""
         reason = ""
+        detail_reason = ""
         try:
-            reason = json.loads(body)["error"]["errors"][0]["reason"]
+            err_obj = json.loads(body).get("error", {})
+            errors = err_obj.get("errors") or []
+            if errors and isinstance(errors, list):
+                reason = errors[0].get("reason", "")
+            for det in (err_obj.get("details") or []):
+                if isinstance(det, dict) and det.get("reason"):
+                    detail_reason = det["reason"]
+                    break
         except Exception:
             pass
-        quota_errors = ("quotaExceeded", "keyInvalid", "accessNotConfigured", "dailyLimitExceeded", "forbidden")
-        if status in (400, 403, 429) and reason in quota_errors:
-            return self.key_pool.mark_key_exhausted(current_key, reason, cooldown_hours=12.0)
+
+        effective_reason = detail_reason or reason or f"HTTP_{status}"
+        rotatable_reasons = {
+            "quotaExceeded", "dailyLimitExceeded", "dailyLimitExceededUnreg",
+            "rateLimitExceeded", "userRateLimitExceeded",
+            "keyInvalid", "API_KEY_INVALID", "keyExpired", "badRequest",
+            "accessNotConfigured", "ipRefererBlocked", "forbidden", "projectDisabled",
+        }
+        if status in (401, 403, 429) or (status == 400 and (reason in rotatable_reasons or detail_reason in rotatable_reasons)):
+            cooldown = 0.25 if "rateLimit" in effective_reason else 12.0
+            return self.key_pool.mark_key_exhausted(current_key, effective_reason, cooldown_hours=cooldown)
         else:
-            log_event("WARNING", f"API {where} HTTP {status} {reason}")
+            log_event("WARNING", f"API {where} HTTP {status} {effective_reason}")
             return None
 
     def _fetch_stats_api(self, channel_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -858,7 +894,7 @@ class YouTubeScanner:
                 break
             batch = channel_ids[i:i + 50]
             params = {
-                "part": "snippet,statistics,brandingSettings,topicDetails",
+                "part": "snippet,statistics,brandingSettings,topicDetails,contentDetails",
                 "id": ",".join(batch),
                 "key": key,
             }
@@ -883,6 +919,95 @@ class YouTubeScanner:
                     log_event("WARNING", f"API channels.list: lỗi parse {it.get('id')}: {e}")
             i += 50
         return out
+
+    def _fetch_recent_uploads_api(
+        self, channel_id: str, uploads_playlist_id: Optional[str] = None, max_videos: int = 50
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch up to 50 recent uploads via playlistItems.list (1 quota unit)
+        to compute exact 7-day cadence when RSS hits its 15-video cap.
+        """
+        pid = (uploads_playlist_id or "").strip()
+        if not pid and channel_id and channel_id.startswith("UC") and len(channel_id) == 24:
+            pid = "UU" + channel_id[2:]
+        if not pid:
+            return None
+
+        attempts = max(1, self.key_pool.total_keys)
+        body = b""
+        ok = False
+        for _ in range(attempts):
+            key = self.key_pool.get_active_key()
+            if not key:
+                return None
+            params = {
+                "part": "snippet",
+                "playlistId": pid,
+                "maxResults": min(50, max(1, max_videos)),
+                "key": key,
+            }
+            status, body = _http_request(
+                "https://www.googleapis.com/youtube/v3/playlistItems?" + urllib.parse.urlencode(params),
+                retries=1,
+            )
+            if status == 200:
+                ok = True
+                break
+            next_key = self._handle_api_error_pool(status, body, "playlistItems.list", key)
+            if not next_key:
+                return None
+
+        if not ok:
+            return None
+
+        try:
+            items = json.loads(body).get("items", [])
+        except ValueError:
+            return None
+
+        dates: List[datetime] = []
+        titles: List[Tuple[datetime, str]] = []
+        for it in items:
+            sn = it.get("snippet") or {}
+            dt = _parse_iso(sn.get("publishedAt"))
+            if dt:
+                dates.append(dt)
+                vt = (sn.get("title") or "").strip()
+                if vt:
+                    titles.append((dt, vt))
+
+        if not dates:
+            return None
+
+        dates.sort(reverse=True)
+        titles.sort(key=lambda t: t[0], reverse=True)
+        now_utc = datetime.now(timezone.utc)
+        last_date = dates[0]
+        days_since = max(0, (now_utc - last_date).days)
+        since_last_days = max(0.0, (now_utc - last_date).total_seconds() / 86400.0)
+        videos_7d = sum(1 for d in dates if (now_utc - d).total_seconds() <= 7 * 86400.0)
+        capped = (videos_7d >= 50 and len(dates) >= 50)
+
+        if capped:
+            span_days = max(0.1, (now_utc - dates[-1]).total_seconds() / 86400.0)
+            cadence = round(span_days / len(dates), 2)
+        elif videos_7d > 0:
+            cadence = round(7.0 / videos_7d, 2)
+        elif len(dates) >= 2:
+            total_span_days = max(since_last_days, (now_utc - dates[-1]).total_seconds() / 86400.0)
+            cadence = round(max(7.1, total_span_days / len(dates)), 2)
+        else:
+            cadence = round(max(7.1, since_last_days), 2) if since_last_days > 0 else -1.0
+
+        return {
+            "last_upload_date": last_date.strftime("%Y-%m-%d"),
+            "days_since_last_upload": days_since,
+            "upload_cadence_days": cadence,
+            "videos_7d": videos_7d,
+            "videos_7d_capped": capped,
+            "is_active": 1 if days_since <= 30 else 0,
+            "recent_titles": [t for _, t in titles[:15]],
+        }
 
     # ------------------------------------------------------------------ #
     # RSS (free, no quota): last upload, cadence, recent performance, titles
@@ -932,11 +1057,24 @@ class YouTubeScanner:
 
         dates.sort(reverse=True)
         titles.sort(key=lambda t: t[0], reverse=True)
+        now_utc = datetime.now(timezone.utc)
         last_date = dates[0]
-        days_since = max(0, (datetime.now(timezone.utc) - last_date).days)
+        days_since = max(0, (now_utc - last_date).days)
+        since_last_days = max(0.0, (now_utc - last_date).total_seconds() / 86400.0)
+        videos_7d = sum(1 for d in dates if (now_utc - d).total_seconds() <= 7 * 86400.0)
 
-        gaps = [(dates[i] - dates[i + 1]).total_seconds() / 86400.0 for i in range(len(dates) - 1)]
-        cadence = round(sum(gaps) / len(gaps), 2) if gaps else -1.0
+        # Calculate 7-day average cadence (days per video); if RSS hits its 15-video cap inside <7 days,
+        # use the actual observed span of those 15 videos so 4+/day channels aren't capped at 2.1/day.
+        if videos_7d >= 15 and len(dates) >= 15:
+            span_days = max(0.1, (now_utc - dates[-1]).total_seconds() / 86400.0)
+            cadence = round(span_days / len(dates), 2)
+        elif videos_7d > 0:
+            cadence = round(7.0 / videos_7d, 2)
+        elif len(dates) >= 2:
+            total_span_days = max(since_last_days, (now_utc - dates[-1]).total_seconds() / 86400.0)
+            cadence = round(max(7.1, total_span_days / len(dates)), 2)
+        else:
+            cadence = round(max(7.1, since_last_days), 2) if since_last_days > 0 else -1.0
 
         return {
             "feed_title": feed_title,
@@ -945,6 +1083,8 @@ class YouTubeScanner:
             "last_upload_date": last_date.strftime("%Y-%m-%d"),
             "days_since_last_upload": days_since,
             "upload_cadence_days": cadence,
+            "videos_7d": videos_7d,
+            "videos_7d_capped": (videos_7d >= 15 and len(dates) >= 15),
             "is_active": 1 if days_since <= 30 else 0,
             "avg_views": int(sum(views) / len(views)) if views else 0,
             "median_views": int(statistics.median(views)) if views else 0,
@@ -1017,39 +1157,56 @@ class YouTubeScanner:
 
     def _ytdlp_channel_stats(self, channel_url: str) -> Dict[str, Any]:
         """Slow fallback: extracts subscribers, video_count, total_views, avatar, description."""
-        try:
-            url = channel_url.rstrip("/")
-            if not url.endswith("/videos"):
-                url += "/videos"
-            opts = {**self.ydl_opts, "playlistend": 1}
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-            if info:
-                subs = info.get("channel_follower_count") or info.get("subscriber_count") or 0
-                vids = info.get("playlist_count") or 0
-                views = info.get("view_count") or 0
-                desc = info.get("description") or ""
-                uploader_id = info.get("uploader_id") or ""
-                handle = uploader_id if uploader_id.startswith("@") else ""
-                thumbs = info.get("thumbnails") or []
-                thumb_url = ""
-                if isinstance(thumbs, list) and thumbs:
-                    for t in reversed(thumbs):
-                        u = t.get("url", "")
-                        if u and ("avatar" in t.get("id", "") or "avatar" in u or not thumb_url):
-                            thumb_url = u
-                            if "avatar" in t.get("id", ""):
-                                break
-                return {
-                    "subscriber_count": int(subs),
-                    "video_count": int(vids),
-                    "total_view_count": int(views),
-                    "thumbnail_url": thumb_url,
-                    "handle": handle,
-                    "description": desc,
-                }
-        except Exception as e:
-            log_event("WARNING", f"yt-dlp stats lỗi cho {channel_url}: {e}")
+        class _QuietYdlLogger:
+            def debug(self, msg): pass
+            def warning(self, msg): pass
+            def error(self, msg): pass
+
+        base_url = channel_url.rstrip("/")
+        if base_url.endswith("/videos"):
+            base_url = base_url[:-7]
+        opts = {**self.ydl_opts, "playlistend": 1, "logger": _QuietYdlLogger()}
+
+        info = None
+        last_err: Optional[Exception] = None
+        for target_url in (f"{base_url}/videos", base_url):
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(target_url, download=False)
+                if info:
+                    break
+            except Exception as e:
+                last_err = e
+                if "does not have a videos tab" in str(e).lower():
+                    continue
+                break
+
+        if info:
+            subs = info.get("channel_follower_count") or info.get("subscriber_count") or 0
+            vids = info.get("playlist_count") or 0
+            views = info.get("view_count") or 0
+            desc = info.get("description") or ""
+            uploader_id = info.get("uploader_id") or ""
+            handle = uploader_id if uploader_id.startswith("@") else ""
+            thumbs = info.get("thumbnails") or []
+            thumb_url = ""
+            if isinstance(thumbs, list) and thumbs:
+                for t in reversed(thumbs):
+                    u = t.get("url", "")
+                    if u and ("avatar" in t.get("id", "") or "avatar" in u or not thumb_url):
+                        thumb_url = u
+                        if "avatar" in t.get("id", ""):
+                            break
+            return {
+                "subscriber_count": int(subs),
+                "video_count": int(vids),
+                "total_view_count": int(views),
+                "thumbnail_url": thumb_url,
+                "handle": handle,
+                "description": desc,
+            }
+        if last_err and "does not have a videos tab" not in str(last_err).lower():
+            log_event("WARNING", f"yt-dlp stats lỗi cho {channel_url}: {last_err}")
         return {}
 
     def analyze_channel_cadence(self, channel_url: str, basic_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -1074,6 +1231,8 @@ class YouTubeScanner:
         is_active = 0
         rss_ok = False
         rss_video_count = 0
+        videos_7d = None
+        videos_7d_capped = False
         avg_views_recent = 0
         median_views_recent = 0
         top_recent_views = 0
@@ -1090,12 +1249,28 @@ class YouTubeScanner:
                 cadence = rss["upload_cadence_days"]
                 is_active = rss["is_active"]
                 rss_video_count = rss["recent_video_count"]
+                videos_7d = rss.get("videos_7d")
+                videos_7d_capped = bool(rss.get("videos_7d_capped"))
                 avg_views_recent = rss["avg_views"]
                 median_views_recent = rss["median_views"]
                 top_recent_views = rss["top_views"]
                 recent_titles = rss["recent_titles"]
                 if rss["avg_views"] > 0:
                     avg_views = rss["avg_views"]
+
+        # Hybrid API upgrade: if RSS hit its 15-video cap in 7 days (or RSS failed),
+        # query playlistItems.list (1 quota unit, up to 50 videos) for exact 7-day cadence.
+        if (videos_7d_capped or not rss_ok) and self.key_pool.get_active_key():
+            api_up = self._fetch_recent_uploads_api(channel_id, api.get("uploads_playlist_id"))
+            if api_up:
+                last_upload_date = api_up["last_upload_date"]
+                days_since = api_up["days_since_last_upload"]
+                cadence = api_up["upload_cadence_days"]
+                videos_7d = api_up["videos_7d"]
+                videos_7d_capped = api_up["videos_7d_capped"]
+                is_active = api_up["is_active"]
+                if not recent_titles and api_up.get("recent_titles"):
+                    recent_titles = api_up["recent_titles"]
 
         # Fast fallback when official API did not provide full metadata (subscribers, avatar, handle, or videos)
         if not api and (subscribers == 0 or not basic_info.get("thumbnail_url") or video_count == 0):
@@ -1114,8 +1289,8 @@ class YouTubeScanner:
                 if video_count == 0 and scraped.get("video_count"):
                     video_count = scraped["video_count"]
 
-        # Slow fallback only when we still have no subscriber number
-        if subscribers == 0 and not api.get("hidden_subs"):
+        # Slow fallback only when we still have no subscriber number (skip empty 0-video channels from API)
+        if subscribers == 0 and not api.get("hidden_subs") and not (api and video_count == 0):
             yt_res = self._ytdlp_channel_stats(channel_url)
             if yt_res:
                 if yt_res.get("subscriber_count"):
@@ -1169,7 +1344,9 @@ class YouTubeScanner:
             "last_upload_date": last_upload_date,
             "days_since_last_upload": days_since,
             "is_active": is_active,
-            "cadence_description": _cadence_description(cadence, video_count or rss_video_count),
+            "cadence_description": _cadence_description(
+                cadence, video_count or rss_video_count, days_since, videos_7d, videos_7d_capped
+            ),
             # performance
             "avg_views": avg_views,
             "avg_views_recent": avg_views_recent,
@@ -1245,6 +1422,8 @@ class YouTubeScanner:
             checked = _parse_iso(r.get("last_checked"))
             if not checked or (now - checked).total_seconds() > CACHE_TTL_HOURS * 3600:
                 continue  # never checked / stale / bad value -> re-analyse
+            if not (r.get("thumbnail_url") or "").strip():
+                continue  # missing avatar -> re-analyse to fetch thumbnail_url
 
             days_since = 999
             try:
@@ -1271,7 +1450,7 @@ class YouTubeScanner:
                 "last_upload_date": r.get("last_upload_date") or "N/A",
                 "days_since_last_upload": days_since,
                 "is_active": 1 if days_since <= 30 else 0,
-                "cadence_description": _cadence_description(cadence, row["video_count"]),
+                "cadence_description": _cadence_description(cadence, row["video_count"], days_since),
                 "stats_source": "cache",
                 "rss_ok": True,
             })

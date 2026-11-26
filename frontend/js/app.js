@@ -215,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!e.target.closest('.country-picker-container')) {
             closeCountryDropdown();
+            if (typeof closeSavedCountryDropdown === 'function') closeSavedCountryDropdown();
         }
         if (!e.target.closest('.action-dropdown-wrap')) {
             closeAllActionMenus();
@@ -1570,7 +1571,46 @@ function toggleCountryDropdown(e) {
     if (!menu) return;
     const isShowing = menu.style.display !== 'none';
     closeColumnDropdown();
+    if (typeof closeSavedCountryDropdown === 'function') closeSavedCountryDropdown();
     menu.style.display = isShowing ? 'none' : 'block';
+    if (!isShowing) {
+        const searchInp = document.getElementById('countryPickerSearchInput');
+        if (searchInp) {
+            searchInp.value = '';
+            filterCountryDropdownList('');
+            setTimeout(() => searchInp.focus(), 50);
+        }
+    }
+}
+
+function filterCountryDropdownList(query) {
+    const listEl = document.getElementById('countryPickerList');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase().trim();
+    const items = listEl.querySelectorAll('.country-picker-item');
+    items.forEach(el => {
+        const text = (el.dataset.search || el.textContent || '').toLowerCase();
+        if (!q || text.includes(q)) {
+            el.style.display = 'flex';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+
+    // Hide empty group titles
+    const titles = listEl.querySelectorAll('.country-picker-group-title');
+    titles.forEach(title => {
+        let next = title.nextElementSibling;
+        let hasVisible = false;
+        while (next && !next.classList.contains('country-picker-group-title')) {
+            if (next.classList.contains('country-picker-item') && next.style.display !== 'none') {
+                hasVisible = true;
+                break;
+            }
+            next = next.nextElementSibling;
+        }
+        title.style.display = hasVisible ? 'block' : 'none';
+    });
 }
 
 function closeCountryDropdown() {
@@ -2055,7 +2095,7 @@ function renderYtChannelsTable() {
         const cid = c.channel_id || '';
         const channelUrl = c.url || (cid ? `https://www.youtube.com/channel/${cid}` : '#');
         const thumbImg = c.thumbnail_url
-            ? `<img src="${c.thumbnail_url}" alt="" class="channel-avatar-clickable" onclick="openChannelDetailModal(${c.originalIndex})" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:1px solid rgba(255,255,255,0.1); flex-shrink:0;" title="Bấm xem chi tiết kênh">`
+            ? `<img src="${c.thumbnail_url}" alt="" referrerpolicy="no-referrer" class="channel-avatar-clickable" onclick="openChannelDetailModal(${c.originalIndex})" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:1px solid rgba(255,255,255,0.1); flex-shrink:0;" title="Bấm xem chi tiết kênh"><div class="channel-avatar-clickable" onclick="openChannelDetailModal(${c.originalIndex})" style="display:none; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.06); align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0;" title="Bấm xem chi tiết kênh"><i class="fa-brands fa-youtube"></i></div>`
             : `<div class="channel-avatar-clickable" onclick="openChannelDetailModal(${c.originalIndex})" style="width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0;" title="Bấm xem chi tiết kênh"><i class="fa-brands fa-youtube"></i></div>`;
 
         return `
@@ -2107,7 +2147,7 @@ function renderYtChannelsTable() {
                 <span class="text-muted" style="font-size:11px;">(${c.days_since_last_upload !== undefined && c.days_since_last_upload !== null ? c.days_since_last_upload : 0} ngày trước)</span>
             </td>
             <td data-col="col-cadence">
-                <span class="badge ${c.upload_cadence_days > 0 && c.upload_cadence_days <= 1 ? 'badge-success' : 'badge-info'}" style="font-size:11px;">
+                <span class="badge ${c.is_active && c.upload_cadence_days > 0 && c.upload_cadence_days <= 1 ? 'badge-success' : (c.is_active ? 'badge-info' : 'badge-warning')}" style="font-size:11px;">
                     ${escapeHtml(c.cadence_description || (c.upload_cadence_days > 0 ? c.upload_cadence_days + ' ngày/vid' : 'Chưa rõ'))}
                 </span>
             </td>
@@ -3108,7 +3148,7 @@ function renderSimilarChannels(target) {
 
     grid.innerHTML = topSimilar.map(c => {
         const thumb = c.thumbnail_url
-            ? `<img src="${c.thumbnail_url}" alt="" class="similar-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            ? `<img src="${c.thumbnail_url}" alt="" referrerpolicy="no-referrer" class="similar-avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                <div class="similar-avatar-fallback" style="display:none;"><i class="fa-brands fa-youtube"></i></div>`
             : `<div class="similar-avatar-fallback"><i class="fa-brands fa-youtube"></i></div>`;
         const r = c.views_per_sub_ratio || 0;
@@ -3378,12 +3418,13 @@ async function syncGPMProfiles(btn) {
     }
 
     _gpmSyncAbortController = new AbortController();
+    // Tăng timeout lên 180s (3 phút) để đáp ứng hàng trăm / hàng nghìn profiles khi đồng bộ
     const timeoutId = setTimeout(() => {
         if (_gpmSyncAbortController) {
             _gpmSyncAbortController.abort();
             _gpmSyncAbortController = null;
         }
-    }, 15000);
+    }, 180000);
 
     try {
         const res = await fetch('/api/gpm/sync', {
@@ -3419,7 +3460,7 @@ async function syncGPMProfiles(btn) {
         _gpmSyncAbortController = null;
         if (syncProgressContainer) syncProgressContainer.style.display = 'none';
         if (err.name === 'AbortError') {
-            showToast('Hết thời gian chờ kết nối trình duyệt (Timeout 15s). Vui lòng kiểm tra ứng dụng antidetect đã mở chưa.', true);
+            showToast('Hết thời gian chờ kết nối trình duyệt (Quá 3 phút). Vui lòng kiểm tra ứng dụng antidetect đã mở chưa.', true);
         } else {
             showToast('Không kết nối được trình duyệt: ' + err.message, true);
         }

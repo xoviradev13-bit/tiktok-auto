@@ -710,6 +710,53 @@ class BackgroundScheduler:
             cand_video_id = cand["video_id"]
             cand_part_num = cand["part_number"] or 1
 
+            # Edge Case Guard 1: Kiểm tra chiến dịch sở hữu video có đang bị tắt (is_active = 0) hoặc xóa không
+            try:
+                ch_id = cand.get("channel_id")
+                if ch_id:
+                    cursor.execute("""
+                        SELECT is_active FROM campaigns
+                        WHERE (channel_id = ? OR channel_ids LIKE ?)
+                        ORDER BY id DESC LIMIT 1
+                    """, (ch_id, f"%{ch_id}%"))
+                    camp_active_row = cursor.fetchone()
+                    # Nếu có chiến dịch liên kết và chiến dịch đang tắt -> Tạm hoãn task, không đăng bài
+                    if camp_active_row and camp_active_row["is_active"] == 0:
+                        continue
+            except Exception:
+                pass
+
+            # Edge Case Guard 2: Kiểm tra Profile có còn thuộc chiến dịch hay đã bị gỡ/đổi chiến dịch
+            try:
+                if ch_id:
+                    cursor.execute("""
+                        SELECT gpm_profile_id, gpm_profile_ids FROM campaigns
+                        WHERE (channel_id = ? OR channel_ids LIKE ?) AND is_active = 1
+                        ORDER BY id DESC LIMIT 1
+                    """, (ch_id, f"%{ch_id}%"))
+                    camp_profiles_row = cursor.fetchone()
+                    if camp_profiles_row:
+                        raw_gpms = camp_profiles_row["gpm_profile_ids"] or ""
+                        valid_pids = set()
+                        if camp_profiles_row["gpm_profile_id"]:
+                            valid_pids.add(int(camp_profiles_row["gpm_profile_id"]))
+                        if raw_gpms:
+                            try:
+                                for x in json.loads(raw_gpms):
+                                    valid_pids.add(int(x))
+                            except Exception:
+                                pass
+                        # Nếu danh sách profile của chiến dịch đã thay đổi và không còn nick này -> Tự động reassign hoặc hoãn
+                        if valid_pids and cand_profile_id not in valid_pids:
+                            # Reassign sang 1 profile hợp lệ đang còn trong chiến dịch
+                            new_pid = next(iter(valid_pids))
+                            cursor.execute("UPDATE upload_tasks SET gpm_profile_id = ? WHERE id = ?", (new_pid, cand["id"]))
+                            conn.commit()
+                            log_event("INFO", f"[UPLOAD WORKER] 🔄 Profile #{cand_profile_id} đã bị gỡ khỏi chiến dịch. Tự động chuyển Task #{cand['id']} sang profile #{new_pid}.")
+                            cand_profile_id = new_pid
+            except Exception:
+                pass
+
             # Bỏ qua nếu profile này đang được worker khác upload hoặc đang bận
             with self._active_upload_lock:
                 if gpm_id in self._active_uploading_profiles:

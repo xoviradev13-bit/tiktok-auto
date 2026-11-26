@@ -701,13 +701,20 @@
             </button>
         </div>
 
-        <div style="padding: 14px 22px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
-            <div class="table-search-box" style="flex: 1;">
+        <div style="padding: 12px 22px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="table-search-box" style="flex: 1; min-width: 180px;">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="searchAddCandidateKeyword" placeholder="Tìm tên kênh, channel ID..." oninput="filterAddCandidatesList()">
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(true)">Chọn hết</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(false)">Bỏ chọn</button>
+            <select id="filterAddCandidateGroupStatus" class="custom-select sort-select" style="min-width: 145px; height: 34px; font-size: 12px;" onchange="filterAddCandidatesList()">
+                <option value="all">Tất cả kênh</option>
+                <option value="ungrouped" selected>⚡ Chưa có nhóm</option>
+                <option value="grouped">🏷️ Đã gán nhóm khác</option>
+            </select>
+            <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(true)">Chọn hết</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(false)">Bỏ chọn</button>
+            </div>
         </div>
 
         <div style="padding: 10px 22px; flex: 1; overflow-y: auto; max-height: 380px;" id="addCandidatesListContainer">

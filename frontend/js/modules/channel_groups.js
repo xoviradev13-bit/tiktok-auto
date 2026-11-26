@@ -756,6 +756,8 @@ function openAddChannelsToGroupModal(groupId) {
 
     const searchInput = document.getElementById('searchAddCandidateKeyword');
     if (searchInput) searchInput.value = '';
+    const groupStatusFilter = document.getElementById('filterAddCandidateGroupStatus');
+    if (groupStatusFilter) groupStatusFilter.value = 'all';
 
     renderAddCandidatesList();
 
@@ -777,7 +779,16 @@ function renderAddCandidatesList() {
     if (!container) return;
 
     const kw = (document.getElementById('searchAddCandidateKeyword')?.value || '').trim().toLowerCase();
+    const groupStatus = document.getElementById('filterAddCandidateGroupStatus')?.value || 'all';
+
     const filtered = addCandidateChannels.filter(c => {
+        // Group status filter
+        const isGrouped = Boolean(c.group_id && c.group_id !== 0);
+        if (groupStatus === 'ungrouped' && isGrouped) return false;
+        if (groupStatus === 'grouped' && !isGrouped) return false;
+
+        // Keyword filter
+        if (!kw) return true;
         const title = (c.display_name || c.title || '').toLowerCase();
         const cid = (c.channel_id || '').toLowerCase();
         const handle = (c.handle || '').toLowerCase();

@@ -526,6 +526,12 @@
                                                         <i class="fa-solid fa-chevron-down" style="font-size: 10px; margin-left: 6px; opacity: 0.7;"></i>
                                                     </button>
                                                     <div class="country-picker-menu" id="countryPickerMenu" style="display: none;" onclick="event.stopPropagation()">
+                                                        <div class="country-picker-search-box">
+                                                            <div class="country-picker-search-wrap">
+                                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                                <input type="text" class="country-picker-search-input" id="countryPickerSearchInput" placeholder="Tìm quốc gia (tên, mã)..." oninput="filterCountryDropdownList(this.value)">
+                                                            </div>
+                                                        </div>
                                                         <div id="countryPickerList" class="country-picker-list">
                                                             <!-- Populated dynamically via JS -->
                                                         </div>
@@ -913,17 +919,28 @@
 
                                             <!-- Filter Country -->
                                             <div class="sort-control">
-                                                <label for="savedFilterCountrySelect"><i
+                                                <label for="btnSavedCountryDropdown"><i
                                                         class="fa-solid fa-earth-americas"></i> Quốc gia:</label>
-                                                <select id="savedFilterCountrySelect" class="custom-select sort-select"
-                                                    onchange="handleSavedFilterCountryChange(this.value)">
-                                                    <option value="all">Tất cả quốc gia</option>
-                                                    <option value="US">🇺🇸 Hoa Kỳ (US)</option>
-                                                    <option value="GB">🇬🇧 Vương Quốc Anh (GB)</option>
-                                                    <option value="CA">🇨🇦 Canada (CA)</option>
-                                                    <option value="AU">🇦🇺 Úc (AU)</option>
-                                                    <option value="VN">🇻🇳 Việt Nam (VN)</option>
-                                                </select>
+                                                <div class="country-picker-container">
+                                                    <button type="button" class="custom-select sort-select country-picker-btn" id="btnSavedCountryDropdown" onclick="toggleSavedCountryDropdown(event)">
+                                                        <span id="savedCountryDropdownSelectedText" class="table-text-truncate" style="max-width: 135px; text-align: left;">🌐 Tất cả quốc gia</span>
+                                                        <i class="fa-solid fa-chevron-down" style="font-size: 10px; margin-left: 6px; opacity: 0.7;"></i>
+                                                    </button>
+                                                    <div class="country-picker-menu" id="savedCountryPickerMenu" style="display: none;" onclick="event.stopPropagation()">
+                                                        <div class="country-picker-search-box">
+                                                            <div class="country-picker-search-wrap">
+                                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                                <input type="text" class="country-picker-search-input" id="savedCountryPickerSearchInput" placeholder="Tìm quốc gia (tên, mã)..." oninput="filterSavedCountryDropdownList(this.value)">
+                                                            </div>
+                                                        </div>
+                                                        <div id="savedCountryPickerList" class="country-picker-list">
+                                                            <!-- Populated dynamically via JS -->
+                                                        </div>
+                                                    </div>
+                                                    <select id="savedFilterCountrySelect" style="display: none;" onchange="handleSavedFilterCountryChange(this.value)">
+                                                        <option value="all">Tất cả quốc gia</option>
+                                                    </select>
+                                                </div>
                                             </div>
 
                                             <!-- Filter Min Views -->
@@ -4550,13 +4567,20 @@
             </button>
         </div>
 
-        <div style="padding: 14px 22px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
-            <div class="table-search-box" style="flex: 1;">
+        <div style="padding: 12px 22px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div class="table-search-box" style="flex: 1; min-width: 180px;">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="searchAddCandidateKeyword" placeholder="Tìm tên kênh, channel ID..." oninput="filterAddCandidatesList()">
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(true)">Chọn hết</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(false)">Bỏ chọn</button>
+            <select id="filterAddCandidateGroupStatus" class="custom-select sort-select" style="min-width: 145px; height: 34px; font-size: 12px;" onchange="filterAddCandidatesList()">
+                <option value="all">Tất cả kênh</option>
+                <option value="ungrouped" selected>⚡ Chưa có nhóm</option>
+                <option value="grouped">🏷️ Đã gán nhóm khác</option>
+            </select>
+            <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(true)">Chọn hết</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllCandidates(false)">Bỏ chọn</button>
+            </div>
         </div>
 
         <div style="padding: 10px 22px; flex: 1; overflow-y: auto; max-height: 380px;" id="addCandidatesListContainer">
@@ -5110,8 +5134,8 @@
                                 chế phân phối video vào các nick:</label>
                             <select id="campaignDistributionMode" class="custom-select"
                                 style="width:100%; height:38px;">
-                                <option value="round_robin" selected>Xoay Vòng Đều - Mỗi nick nhận đều 1 clip
-                                </option>
+                                <option value="parallel_slots" selected>⚡ Lấp Đầy Khung Giờ Song Song (Mỗi Nick 1 Proxy IP Riêng)</option>
+                                <option value="round_robin">Xoay Vòng Đều (Farm Stagger - An Toàn 1 IP)</option>
                                 <option value="single_best">Ưu Tiên Nick Điểm Uy Tín Cao Nhất</option>
                                 <option value="random">Ngẫu Nhiên</option>
                             </select>
@@ -5889,8 +5913,8 @@
                                 chế phân phối video vào các nick:</label>
                             <select id="editCampaignDistributionMode" class="custom-select"
                                 style="width:100%; height:38px;">
-                                <option value="round_robin" selected>Xoay Vòng Đều - Mỗi nick nhận đều 1 clip
-                                </option>
+                                <option value="round_robin" selected>Xoay Vòng Đều (Farm Stagger - An Toàn 1 IP)</option>
+                                <option value="parallel_slots">⚡ Lấp Đầy Khung Giờ Song Song (Mỗi Nick 1 Proxy IP Riêng)</option>
                                 <option value="single_best">Ưu Tiên Nick Điểm Uy Tín Cao Nhất</option>
                                 <option value="random">Ngẫu Nhiên</option>
                             </select>
@@ -6280,7 +6304,7 @@
 
             <!-- Sub-tabs: Video Pipeline Flow vs Activity Logs -->
             <div
-                style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px; margin-top:4px; margin-bottom:12px;">
+                style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px; margin-top:4px; margin-bottom:12px; gap:10px; flex-wrap:wrap;">
                 <div style="display:flex; gap:8px;">
                     <button type="button" class="btn btn-sm btn-primary" id="btnCampTabVideos"
                         onclick="switchCampaignDetailTab('videos')" style="border-radius:6px; padding:6px 14px;">
@@ -6292,6 +6316,16 @@
                         <i class="fa-solid fa-terminal"></i> Nhật Ký Sự Kiện Real-time (<span
                             id="campLogsCountBadge">0</span>)
                     </button>
+                </div>
+
+                <!-- Video View Filters (Channel & Account) -->
+                <div id="campVideosFilterBar" style="display:flex; align-items:center; gap:8px;">
+                    <select id="filterCampVideoChannel" class="custom-select sort-select" style="min-width:145px; height:32px; font-size:11.5px;" onchange="applyCampaignVideoFilters()">
+                        <option value="all">📺 Tất cả kênh nguồn</option>
+                    </select>
+                    <select id="filterCampVideoAccount" class="custom-select sort-select" style="min-width:145px; height:32px; font-size:11.5px;" onchange="applyCampaignVideoFilters()">
+                        <option value="all">👤 Tất cả nick TikTok</option>
+                    </select>
                 </div>
             </div>
 
