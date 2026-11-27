@@ -2785,9 +2785,19 @@ def create_campaign(req: CreateCampaignRequest):
     campaign_id = cursor.lastrowid
     # Persist last used download/render dirs in settings table for future campaigns
     if req.download_dir:
-        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_download_dir', ?)", (req.download_dir.strip(),))
+        clean_dl = req.download_dir.strip().replace("\\", "/")
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_download_dir', ?)", (clean_dl,))
+        try:
+            os.makedirs(clean_dl, exist_ok=True)
+        except Exception:
+            pass
     if req.render_dir:
-        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_render_dir', ?)", (req.render_dir.strip(),))
+        clean_rd = req.render_dir.strip().replace("\\", "/")
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_render_dir', ?)", (clean_rd,))
+        try:
+            os.makedirs(clean_rd, exist_ok=True)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
     log_campaign_event(campaign_id, "INFO", "system", f"Khởi tạo chiến dịch: '{req.name}' ({len(ch_ids)} kênh -> {len(gpm_ids)} nick GPM)")
@@ -3096,9 +3106,19 @@ def update_campaign(campaign_id: int, req: CreateCampaignRequest):
         campaign_id
     ))
     if req.download_dir:
-        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_download_dir', ?)", (req.download_dir.strip(),))
+        clean_dl = req.download_dir.strip().replace("\\", "/")
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_download_dir', ?)", (clean_dl,))
+        try:
+            os.makedirs(clean_dl, exist_ok=True)
+        except Exception:
+            pass
     if req.render_dir:
-        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_render_dir', ?)", (req.render_dir.strip(),))
+        clean_rd = req.render_dir.strip().replace("\\", "/")
+        cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_render_dir', ?)", (clean_rd,))
+        try:
+            os.makedirs(clean_rd, exist_ok=True)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
     log_campaign_event(campaign_id, "INFO", "system", f"Đã cập nhật chiến dịch: '{req.name}' ({len(ch_ids)} kênh -> {len(gpm_ids)} nick GPM)")

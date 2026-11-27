@@ -1358,6 +1358,7 @@ async function saveSchedulerSettings(btn, fromModal = true) {
     let intervalInput, uploadInput, maxVidsInput, delayInput, autoDl, autoRd, saveByFolder;
     let autoRetry = true, maxRetries = 2, retryDelay = 15, watchdog = true, stuckTimeout = 15, minAccountCooldown = 60, maxParallelUploads = 1;
     let rssConcurrentWorkers = 15, profileSyncConcurrentWorkers = 3;
+    let modalDlDir = undefined, modalRdDir = undefined;
 
     if (fromModal) {
         intervalInput = document.getElementById('modalSchedulerInterval');
@@ -1376,8 +1377,8 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         maxParallelUploads = Math.max(1, Math.min(20, parseInt(document.getElementById('modalMaxParallelUploads')?.value || 1, 10)));
         rssConcurrentWorkers = Math.max(1, Math.min(50, parseInt(document.getElementById('modalRssConcurrentWorkers')?.value || document.getElementById('settingRssConcurrentWorkers')?.value || 15, 10)));
         profileSyncConcurrentWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || document.getElementById('modalProfileSyncConcurrentWorkers')?.value || document.getElementById('settingProfileSyncConcurrentWorkers')?.value || 3, 10)));
-        const modalDlDir = document.getElementById('modalDefaultDownloadDir')?.value?.trim();
-        const modalRdDir = document.getElementById('modalDefaultRenderDir')?.value?.trim();
+        modalDlDir = document.getElementById('modalDefaultDownloadDir')?.value?.trim();
+        modalRdDir = document.getElementById('modalDefaultRenderDir')?.value?.trim();
     } else {
         intervalInput = document.getElementById('settingSchedulerInterval');
         uploadInput = document.getElementById('settingUploadInterval');
