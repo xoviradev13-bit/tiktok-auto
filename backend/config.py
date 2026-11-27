@@ -50,6 +50,17 @@ LOGS_DIR = DATA_DIR / "logs"
 MUSIC_DIR = DATA_DIR / "music"
 VPN_CONFIGS_DIR = DATA_DIR / "vpn_configs"
 
+# Thư mục lưu trữ video mặc định chuẩn AppData/Roaming/ClipFlow cho toàn bộ hệ thống
+_roaming_appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+CLIPFLOW_APPDATA_DIR = Path(_roaming_appdata) / "ClipFlow"
+DEFAULT_DOWNLOADS_DIR = CLIPFLOW_APPDATA_DIR / "downloads"
+DEFAULT_RENDERED_DIR = CLIPFLOW_APPDATA_DIR / "rendered"
+try:
+    DEFAULT_DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    DEFAULT_RENDERED_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
 def _find_wireproxy() -> Path:
     candidates = [
         BASE_DIR / "tools" / "wireproxy" / "wireproxy.exe",

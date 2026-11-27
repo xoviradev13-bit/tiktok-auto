@@ -1,18 +1,166 @@
 import os
 import sys
 import time
+import threading
 import requests
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from backend.config import GPM_API_BASE_URL
 from backend.database import log_event
 
 # Các cổng thường dùng của GPMLogin (trích từ agent.js)
 GPM_PORT_CANDIDATES = [9495, 9496, 19995, 19996, 19994, 8848]
 
+def to_gpm_proxy_format(raw_proxy: str) -> str:
+    """
+    Chuyển đổi URL proxy thành định dạng chuẩn mà GPMLogin Global API hỗ trợ (ip:port:user:pass).
+    GPMLogin chỉ kiểm tra thành công khi proxy được định dạng ip:port:user:pass,
+    nếu truyền http://user:pass@ip:port thì GPMLogin sẽ báo 'ProxyCheckFailed' và không mở được profile.
+    """
+    if not raw_proxy:
+        return ""
+    import re
+    p = raw_proxy.strip()
+
+    # http(s)://user:pass@ip:port
+    m_http_auth = re.match(r"^https?://([^:]+):([^@]+)@([^:]+):(\d+)/?$", p, re.IGNORECASE)
+    if m_http_auth:
+        u, pw, ip, port = m_http_auth.groups()
+        return f"{ip}:{port}:{u}:{pw}"
+
+    # socks5://user:pass@ip:port
+    m_socks_auth = re.match(r"^socks5://([^:]+):([^@]+)@([^:]+):(\d+)/?$", p, re.IGNORECASE)
+    if m_socks_auth:
+        u, pw, ip, port = m_socks_auth.groups()
+        return f"socks5://{ip}:{port}:{u}:{pw}"
+
+    # http(s)://ip:port
+    m_http = re.match(r"^https?://([^:]+):(\d+)/?$", p, re.IGNORECASE)
+    if m_http:
+        ip, port = m_http.groups()
+        return f"{ip}:{port}"
+
+    return p
+
+
+class GridWindowManager:
+    """
+    Quản lý tự động chia lưới (Auto-Grid) các cửa sổ trình duyệt khi chạy Visible Mode (không ẩn).
+    - Tự động nhận diện độ phân giải màn hình hiển thị (Work Area không bị Taskbar che khuất).
+    - Chia đều các vị trí (X, Y) và kích thước (Width, Height) cho từng profile theo ô (Grid Slot).
+    - Hỗ trợ nhiều profile chạy song song tự động xếp cạnh nhau ngay ngắn:
+        + Slot 0: Nửa trên bên trái (Top-Left)
+        + Slot 1: Nửa trên bên phải (Top-Right)
+        + Slot 2: Nửa dưới bên trái (Bottom-Left)
+        + Slot 3: Nửa dưới bên phải (Bottom-Right)
+        + Slot 4+: Chia lưới 3x2 hoặc cascade lệch nhẹ để không chồng đè.
+    - Tự động giải phóng slot khi profile đóng (stop_profile).
+    """
+    def __init__(self, cols: int = 2, rows: int = 2):
+        self._lock = threading.Lock()
+        self._active_slots: Dict[str, int] = {}  # profile_id -> slot_index (0, 1, 2, ...)
+        self.cols = cols
+        self.rows = rows
+        self._screen_bounds: Optional[Tuple[int, int, int, int]] = None
+
+    def get_screen_bounds(self) -> Tuple[int, int, int, int]:
+        """Lấy vùng làm việc (Work Area) của màn hình chính (trừ thanh Taskbar)"""
+        if self._screen_bounds:
+            return self._screen_bounds
+
+        left, top, width, height = 0, 0, 1536, 824
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                rect = wintypes.RECT()
+                # SPI_GETWORKAREA = 0x0030: Lấy toạ độ Desktop trừ đi thanh Taskbar
+                if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+                    left = int(rect.left)
+                    top = int(rect.top)
+                    width = int(rect.right - rect.left)
+                    height = int(rect.bottom - rect.top)
+            except Exception:
+                pass
+        self._screen_bounds = (left, top, width, height)
+        return self._screen_bounds
+
+    def allocate_slot(self, profile_id: str, slot_override: Optional[int] = None) -> Tuple[int, int, int, int]:
+        """
+        Cấp phát một ô hiển thị (slot) trên lưới cho profile.
+        Trả về (win_x, win_y, win_w, win_h)
+        """
+        with self._lock:
+            if slot_override is not None and slot_override >= 0:
+                slot = slot_override
+                self._active_slots[profile_id] = slot
+            elif profile_id in self._active_slots:
+                slot = self._active_slots[profile_id]
+            else:
+                # Tìm slot số nguyên nhỏ nhất (0, 1, 2...) chưa bị chiếm
+                occupied = set(self._active_slots.values())
+                slot = 0
+                while slot in occupied:
+                    slot += 1
+                self._active_slots[profile_id] = slot
+
+        return self.calculate_slot_bounds(slot)
+
+    def calculate_slot_bounds(self, slot: int) -> Tuple[int, int, int, int]:
+        """
+        Tính toán vị trí (X, Y) và kích thước (Width, Height) cho slot.
+        Đảm bảo các cửa sổ hiển thị song song không bị đè lên nhau.
+        """
+        left, top, total_w, total_h = self.get_screen_bounds()
+        
+        # Màn hình lớn (>= 2560px) hoặc khi có từ 5 slot trở lên: chia 3 cột
+        cols = self.cols
+        rows = self.rows
+        if total_w >= 2560 or slot >= 4:
+            cols = 3
+            rows = 2
+
+        max_slots_per_screen = cols * rows
+        screen_cycle = slot // max_slots_per_screen
+        pos_in_cycle = slot % max_slots_per_screen
+
+        col = pos_in_cycle % cols
+        row = pos_in_cycle // cols
+
+        slot_w = total_w // cols
+        slot_h = total_h // rows
+
+        # Nếu vượt quá số ô màn hình (cycle >= 1), tạo độ lệch nhẹ 30px để người dùng phân biệt
+        cascade_offset = screen_cycle * 30
+        win_x = left + (col * slot_w) + cascade_offset
+        win_y = top + (row * slot_h) + cascade_offset
+
+        return int(win_x), int(win_y), int(slot_w), int(slot_h)
+
+    def release_slot(self, profile_id: str):
+        """Giải phóng slot khi profile đóng"""
+        with self._lock:
+            if profile_id in self._active_slots:
+                del self._active_slots[profile_id]
+
+    def reset_all_slots(self):
+        """Reset toàn bộ danh sách slot"""
+        with self._lock:
+            self._active_slots.clear()
+
+    def get_active_slots_info(self) -> Dict[str, Any]:
+        """Xem thông tin các profile và slot tương ứng hiện tại"""
+        with self._lock:
+            return dict(self._active_slots)
+
+
+grid_window_manager = GridWindowManager()
+
+
 class GPMClient:
     def __init__(self, base_url: str = GPM_API_BASE_URL):
         self.base_url = base_url.rstrip("/")
         self.cached_working_base: Optional[str] = None
+        self.last_discovery_attempt: float = 0.0
 
     def discover_api_base(self) -> Optional[str]:
         """Tự động dò cổng và phiên bản API (v1 / v3) của GPMLogin giống agent.js"""
@@ -23,6 +171,11 @@ class GPMClient:
                     return self.cached_working_base
             except Exception:
                 self.cached_working_base = None
+
+        now = time.time()
+        if now - self.last_discovery_attempt < 8.0:
+            return None
+        self.last_discovery_attempt = now
 
         import socket
         for port in GPM_PORT_CANDIDATES:
@@ -272,6 +425,7 @@ class GPMClient:
         low_ram_mode: bool = False,
         mute_audio: bool = False,
         invisible: Optional[bool] = None,
+        grid_slot: Optional[int] = None,
     ) -> Optional[str]:
         """
         Khởi chạy profile trên GPMLogin
@@ -357,7 +511,16 @@ class GPMClient:
                     "--disable-renderer-backgrounding",
                 ])
                 url += "&win_pos=-3200,-3200&win_size=1280,800"
-            elif mute_audio:
+            else:
+                # Chế độ hiển thị: Tự động chia lưới (Auto-Grid) các cửa sổ trình duyệt song song
+                gx, gy, gw, gh = grid_window_manager.allocate_slot(profile_id, slot_override=grid_slot)
+                log_event("INFO", f"📐 [AUTO-GRID] Profile {profile_id} được xếp vào ô hiển thị: Vị trí ({gx}, {gy}), Kích thước {gw}x{gh}")
+                args_list.extend([
+                    f"--window-position={gx},{gy}",
+                    f"--window-size={gw},{gh}"
+                ])
+                url += f"&win_pos={gx},{gy}&win_size={gw},{gh}"
+            if mute_audio and not low_ram_mode and not invisible:
                 args_list.append("--mute-audio")
             if target_url:
                 args_list.append(target_url)
@@ -416,18 +579,26 @@ class GPMClient:
             return None
 
         try:
-            return _do_start(base)
+            addr = _do_start(base)
+            if not addr:
+                grid_window_manager.release_slot(profile_id)
+            return addr
         except requests.exceptions.ConnectionError as conn_err:
             log_event("WARNING", f"Mất kết nối tới GPMLogin API khi mở profile {profile_id}. Đang thử tự khởi động lại GPMLogin...")
             if self.ensure_gpm_running():
                 new_base = self.discover_api_base()
                 if new_base:
                     try:
-                        return _do_start(new_base)
+                        addr = _do_start(new_base)
+                        if not addr:
+                            grid_window_manager.release_slot(profile_id)
+                        return addr
                     except Exception as retry_err:
                         log_event("ERROR", f"Lỗi thử lại sau khi bật GPMLogin: {retry_err}")
+            grid_window_manager.release_slot(profile_id)
             return None
         except Exception as e:
+            grid_window_manager.release_slot(profile_id)
             log_event("ERROR", f"Ngoại lệ khi mở profile GPM {profile_id}: {str(e)}")
             return None
 
@@ -437,7 +608,9 @@ class GPMClient:
         1. Gọi endpoint chính xác của GPMLogin (/profiles/stop/{id}).
         2. Bỏ qua response fallback giả (404 trả về {"data": "GPMLogin Global API"}).
         3. Kiểm tra và dọn dẹp các tiến trình Chrome còn sót lại nếu có.
+        4. Giải phóng slot chia lưới màn hình (Auto-Grid).
         """
+        grid_window_manager.release_slot(profile_id)
         base = self.discover_api_base()
         stopped = False
         if base:
@@ -492,15 +665,17 @@ class GPMClient:
         """
         base = self.discover_api_base()
         if not base:
-            base = "http://127.0.0.1:9495/api/v1"
+            # GPMLogin không mở hoặc không phản hồi cổng API, bỏ qua HTTP request để tránh timeout
+            return False
 
         endpoints = [
             f"{base}/profiles/update/{profile_id}",
             f"{base}/profiles/{profile_id}",
         ]
+        gpm_proxy = to_gpm_proxy_format(raw_proxy)
         payload = {
-            "raw_proxy": raw_proxy or "",
-            "proxy": raw_proxy or ""
+            "raw_proxy": gpm_proxy,
+            "proxy": gpm_proxy
         }
 
         # 1. Thử qua POST JSON
@@ -510,14 +685,14 @@ class GPMClient:
                 if resp.status_code == 200:
                     json_data = resp.json()
                     if isinstance(json_data, dict) and (json_data.get("success") is True or json_data.get("status") == "success"):
-                        log_event("INFO", f"Đã cập nhật proxy '{raw_proxy or 'Direct'}' cho GPM profile {profile_id} (API POST)")
+                        log_event("INFO", f"Đã cập nhật proxy '{gpm_proxy or 'Direct'}' cho GPM profile {profile_id} (API POST)")
                         return True
             except Exception:
                 pass
 
         # 2. Thử qua GET Query Parameters (một số bản GPMLogin v3 chấp nhận GET)
         import urllib.parse
-        encoded_proxy = urllib.parse.quote(raw_proxy or "")
+        encoded_proxy = urllib.parse.quote(gpm_proxy or "")
         try:
             get_url = f"{base}/profiles/update/{profile_id}?raw_proxy={encoded_proxy}"
             resp = requests.get(get_url, timeout=6)

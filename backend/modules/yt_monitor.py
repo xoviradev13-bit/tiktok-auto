@@ -643,10 +643,10 @@ class YouTubeRSSMonitor:
     def get_effective_download_dir(self, channel_obj: Optional[dict], force_campaign_id: Optional[int] = None) -> Optional[str]:
         """
         Xác định thư mục download hiệu lực theo thứ tự ưu tiên:
-        Kênh (Channel) > Chiến dịch (Campaign) > Mặc định toàn cục (None -> DOWNLOADS_DIR).
+        Kênh (Channel) > Chiến dịch (Campaign) > Mặc định toàn cục (Settings DB / AppData).
         """
         ch_download_dir = (channel_obj.get("download_dir") or "").strip() if channel_obj else ""
-        if ch_download_dir:
+        if ch_download_dir and ch_download_dir not in ("data/downloads", "default"):
             return ch_download_dir
 
         ch_id = channel_obj.get("channel_id") if channel_obj else None
@@ -661,35 +661,63 @@ class YouTubeRSSMonitor:
                                    (f'%"{ch_id}"%', ch_id))
                 row = cursor.fetchone()
                 conn.close()
-                if row and row["download_dir"] and row["download_dir"].strip():
+                if row and row["download_dir"] and row["download_dir"].strip() and row["download_dir"].strip() not in ("data/downloads", "default"):
                     return row["download_dir"].strip()
             except Exception:
                 pass
 
-        return None
+        # Fallback về cấu hình mặc định toàn cục từ Settings DB (hoặc AppData/Roaming/ClipFlow/downloads)
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM settings WHERE key = 'default_download_dir'")
+            row_s = cursor.fetchone()
+            conn.close()
+            if row_s and row_s["value"] and row_s["value"].strip():
+                return row_s["value"].strip()
+        except Exception:
+            pass
+
+        from backend.config import DEFAULT_DOWNLOADS_DIR
+        return str(DEFAULT_DOWNLOADS_DIR).replace("\\", "/")
 
     def get_effective_render_settings(self, channel_obj: Optional[dict], camp: Optional[dict] = None) -> dict:
         """
         Lấy cài đặt render hiệu lực theo thứ tự ưu tiên chặt chẽ:
-        Kênh (Channel) > Chiến dịch (Campaign) > Toàn cục (Global).
+        Kênh (Channel) > Chiến dịch (Campaign) > Toàn cục (Global Settings / AppData).
         
         Bao gồm: render_dir, bgm_folder, bgm_volume
         """
         import os
-        from backend.config import RENDERED_DIR
+        from backend.config import DEFAULT_RENDERED_DIR, RENDERED_DIR
 
-        # === Global defaults ===
-        global_render_dir = str(RENDERED_DIR)
+        # === Global defaults (ưu tiên cài đặt người dùng trong Settings DB) ===
+        global_render_dir = str(DEFAULT_RENDERED_DIR).replace("\\", "/")
+        try:
+            conn_g = get_connection()
+            cursor_g = conn_g.cursor()
+            cursor_g.execute("SELECT value FROM settings WHERE key = 'default_render_dir'")
+            row_gr = cursor_g.fetchone()
+            conn_g.close()
+            if row_gr and row_gr["value"] and row_gr["value"].strip():
+                global_render_dir = row_gr["value"].strip().replace("\\", "/")
+        except Exception:
+            pass
+
         global_bgm_folder = ""
         global_bgm_volume = 0.15
 
         # === Campaign level ===
         camp_render_dir = (camp.get("render_dir") or "").strip() if camp else ""
+        if camp_render_dir in ("data/rendered", "default"):
+            camp_render_dir = ""
         camp_bgm_folder = (camp.get("bgm_folder") or "").strip() if camp else ""
         camp_bgm_volume = camp.get("bgm_volume") if camp else None
 
         # === Channel level (highest priority) ===
         ch_render_dir = (channel_obj.get("render_dir") or "").strip() if channel_obj else ""
+        if ch_render_dir in ("data/rendered", "default"):
+            ch_render_dir = ""
         ch_bgm_folder = (channel_obj.get("bgm_folder") or "").strip() if channel_obj else ""
         ch_bgm_volume = channel_obj.get("bgm_volume") if channel_obj else None
 

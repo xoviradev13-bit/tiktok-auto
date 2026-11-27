@@ -591,7 +591,6 @@ class BackgroundScheduler:
                     continue
 
                 with sync_playwright() as pw:
-                    browser = pw.chromium.connect_over_cdp(f"http://{remote_addr}")
                     cdp_target = remote_addr if (remote_addr.startswith("ws://") or remote_addr.startswith("http://")) else f"http://{remote_addr}"
                     browser = pw.chromium.connect_over_cdp(cdp_target)
                     contexts = browser.contexts

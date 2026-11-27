@@ -1,13 +1,97 @@
 // ==========================================
 // 4. GPMLOGIN PROFILES & TIKTOK TRACKER
 // ==========================================
-// ==========================================
-// 4. GPMLOGIN PROFILES & TIKTOK TRACKER
-// ==========================================
 let gpmSortField = 'followers_count';
 let gpmSortDirection = 'desc';
 let gpmCurrentPage = 1;
 let gpmPageSize = 20;
+
+// Trạng thái Proxy Pool & Đa chọn tài khoản (Checkbox across pages)
+let cachedProxyPool = [];
+let cachedProxyCountries = [];
+let cachedProxySummary = null;
+const selectedProfileIds = new Set();
+
+function getProfileIpKey(rawProxy) {
+    if (!rawProxy) return '';
+    const m = rawProxy.match(/(?:@|^|\/\/)([0-9a-zA-Z\.\-]+:\d+)/);
+    return m ? m[1] : rawProxy;
+}
+
+async function loadProxyPool() {
+    try {
+        const res = await fetch('/api/proxy/summary?_t=' + Date.now());
+        const data = await res.json();
+        cachedProxySummary = data;
+        cachedProxyPool = data.proxies || [];
+        cachedProxyCountries = data.countries || [];
+        populateDynamicCountryFilters();
+    } catch (err) {
+        console.error('Lỗi nạp danh sách proxy:', err);
+    }
+}
+
+function populateDynamicCountryFilters() {
+    const filterSelect = document.getElementById('filterGpmCountry');
+    if (!filterSelect) return;
+    const currentVal = filterSelect.value || 'ALL';
+
+    let html = `<option value="ALL">Tất cả quốc gia</option>`;
+    html += `<option value="NONE">🌐 Không dùng Proxy (Direct)</option>`;
+
+    if (cachedProxyCountries && cachedProxyCountries.length > 0) {
+        cachedProxyCountries.forEach(c => {
+            const flag = c.flag || '🌐';
+            const name = c.name || c.code;
+            const count = c.total || c.count || 0;
+            html += `<option value="${c.code}">${flag} ${name} (${c.code}) - ${count} IP</option>`;
+        });
+    }
+
+    filterSelect.innerHTML = html;
+    if (currentVal && filterSelect.querySelector(`option[value="${currentVal}"]`)) {
+        filterSelect.value = currentVal;
+    } else {
+        filterSelect.value = 'ALL';
+    }
+    populateDynamicIpFilters();
+}
+
+function populateDynamicIpFilters() {
+    const ipSelect = document.getElementById('filterGpmIp');
+    if (!ipSelect) return;
+    const currentVal = ipSelect.value || 'ALL';
+    const cTarget = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+
+    let html = `<option value="ALL">Tất cả IP</option>`;
+    html += `<option value="NONE">🌐 Direct (Không Proxy)</option>`;
+
+    let pool = cachedProxyPool || [];
+    if (cTarget !== 'ALL' && cTarget !== 'NONE') {
+        pool = pool.filter(p => (p.country || '').toUpperCase() === cTarget);
+    } else if (cTarget === 'NONE') {
+        pool = [];
+    }
+
+    pool.forEach(p => {
+        const countryName = p.country_name || p.country;
+        const city = p.city ? ` - ${p.city}` : '';
+        const blocked = p.status === 'blocked' ? ' [Bị Chặn]' : '';
+        html += `<option value="${p.key}">[${p.country}] ${p.key} (${countryName}${city})${blocked}</option>`;
+    });
+
+    ipSelect.innerHTML = html;
+    if (currentVal && ipSelect.querySelector(`option[value="${currentVal}"]`)) {
+        ipSelect.value = currentVal;
+    } else {
+        ipSelect.value = 'ALL';
+    }
+}
+
+function onFilterCountryChange() {
+    populateDynamicIpFilters();
+    renderGpmProfilesTable();
+}
 
 function getProfileGroupName(p) {
     if (!p) return '';
@@ -24,6 +108,7 @@ function getProfileGroupName(p) {
 
 async function loadGpmProfiles() {
     try {
+        await loadProxyPool();
         const res = await fetch('/api/gpm/profiles');
         const profiles = await res.json();
         cachedGpmProfiles = profiles;
@@ -182,6 +267,7 @@ async function exportGpmProfilesCsv() {
     const filterGroup = document.getElementById('filterGpmGroup')?.value || 'ALL';
     const filterCampaign = document.getElementById('filterGpmCampaign')?.value || 'ALL';
     const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+    const filterIp = document.getElementById('filterGpmIp')?.value || 'ALL';
     const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
     const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
     const filterFlop = document.getElementById('filterGpmFlop')?.value || 'ALL';
@@ -219,6 +305,18 @@ async function exportGpmProfilesCsv() {
             list = list.filter(p => !p.country || p.country.toUpperCase() === 'NONE');
         } else {
             list = list.filter(p => (p.country || '').toUpperCase() === filterCountry);
+        }
+    }
+
+    // Filter IP Proxy
+    if (filterIp && filterIp !== 'ALL') {
+        if (filterIp === 'NONE') {
+            list = list.filter(p => !p.raw_proxy || p.raw_proxy.trim() === '' || !p.country || p.country.toUpperCase() === 'NONE');
+        } else {
+            list = list.filter(p => {
+                const pKey = getProfileIpKey(p.raw_proxy);
+                return pKey === filterIp || (p.raw_proxy && p.raw_proxy.includes(filterIp));
+            });
         }
     }
 
@@ -385,6 +483,7 @@ function renderGpmProfilesTable() {
     const filterGroup = document.getElementById('filterGpmGroup')?.value || 'ALL';
     const filterCampaign = document.getElementById('filterGpmCampaign')?.value || 'ALL';
     const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+    const filterIp = document.getElementById('filterGpmIp')?.value || 'ALL';
     const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
     const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
     const filterFlop = document.getElementById('filterGpmFlop')?.value || 'ALL';
@@ -427,6 +526,16 @@ function renderGpmProfilesTable() {
                 if (pCountry && pCountry !== 'NONE') return false;
             } else {
                 if (pCountry !== filterCountry) return false;
+            }
+        }
+
+        // IP Proxy Filter
+        if (filterIp && filterIp !== 'ALL') {
+            const pKey = getProfileIpKey(p.raw_proxy);
+            if (filterIp === 'NONE') {
+                if (pKey || (p.raw_proxy && p.raw_proxy.trim() !== '') || (p.country && p.country.toUpperCase() !== 'NONE')) return false;
+            } else {
+                if (!pKey || (pKey !== filterIp && !(p.raw_proxy && p.raw_proxy.includes(filterIp)))) return false;
             }
         }
 
@@ -537,6 +646,8 @@ function renderGpmProfilesTable() {
             res = (a.notify_status || 'tracking').localeCompare(b.notify_status || 'tracking');
         } else if (gpmSortField === 'country') {
             res = (a.country || '').localeCompare(b.country || '');
+        } else if (gpmSortField === 'raw_proxy' || gpmSortField === 'proxy_ip') {
+            res = (a.raw_proxy || '').localeCompare(b.raw_proxy || '');
         } else if (gpmSortField === 'last_checked') {
             res = (a.last_checked || '').localeCompare(b.last_checked || '');
         }
@@ -556,7 +667,7 @@ function renderGpmProfilesTable() {
     }
 
     // Cập nhật icon sort trên header
-    ['name', 'group_name', 'tiktok_username', 'country', 'followers_count', 'total_views', 'campaign', 'eligible_10k', 'creator_program', 'flop_status', 'last_checked'].forEach(f => {
+    ['name', 'group_name', 'tiktok_username', 'raw_proxy', 'country', 'followers_count', 'total_views', 'campaign', 'eligible_10k', 'creator_program', 'flop_status', 'last_checked'].forEach(f => {
         const th = document.getElementById(`th-gpm-${f}`);
         if (!th) return;
         const icon = th.querySelector('.sort-icon');
@@ -580,6 +691,9 @@ function renderGpmProfilesTable() {
     const startIdx = (gpmCurrentPage - 1) * gpmPageSize;
     const endIdx = Math.min(startIdx + gpmPageSize, totalItems);
     const pagedList = list.slice(startIdx, endIdx);
+
+    // Cập nhật trạng thái Multi-page selection & Bulk Action Bar
+    updateBulkActionBar(list, pagedList);
 
     const infoEl = document.getElementById('gpmProfilesPaginationInfo');
     if (infoEl) {
@@ -613,7 +727,7 @@ function renderGpmProfilesTable() {
     }
 
     if (pagedList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open" style="font-size: 24px; opacity: 0.3; display: block; margin-bottom: 8px;"></i>Không tìm thấy profile nào phù hợp với bộ lọc.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open" style="font-size: 24px; opacity: 0.3; display: block; margin-bottom: 8px;"></i>Không tìm thấy profile nào phù hợp với bộ lọc.</td></tr>`;
     } else {
         tbody.innerHTML = pagedList.map(p => {
             const plat = (p.platform || 'tiktok').toLowerCase();
@@ -899,6 +1013,12 @@ function renderGpmProfilesTable() {
 
             const mainRowHtml = `
             <tr>
+                <td style="width: 44px; min-width: 44px; max-width: 44px; text-align: center; vertical-align: middle; padding: 10px 4px;">
+                    <input type="checkbox" class="gpm-profile-checkbox" data-gpm-id="${escapeHtml(p.gpm_id)}"
+                        ${selectedProfileIds.has(p.gpm_id) ? 'checked' : ''}
+                        onchange="toggleSelectProfile('${escapeHtml(p.gpm_id)}', this.checked)"
+                        style="cursor:pointer; width:16px; height:16px; accent-color: var(--accent-cyan, #38bdf8); vertical-align: middle;">
+                </td>
                 <td>
                     <div class="table-text-truncate" style="max-width: 220px; display:flex; align-items:center; gap:6px;" title="${escapeHtml(p.name)}">
                         ${hasMultiChannels ? `
@@ -923,45 +1043,68 @@ function renderGpmProfilesTable() {
                 <td>${usernameDisplay}</td>
                 <td>
                     ${(() => {
-                    const cCode = (p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE';
-                    const countryOpts = [
-                        { code: 'NONE', flag: '🌐', name: 'Không dùng Proxy (Direct)' },
-                        { code: 'US', flag: '🇺🇸', name: 'US - Hoa Kỳ' },
-                        { code: 'GB', flag: '🇬🇧', name: 'GB - Vương Quốc Anh' },
-                        { code: 'DE', flag: '🇩🇪', name: 'DE - Đức' },
-                        { code: 'FR', flag: '🇫🇷', name: 'FR - Pháp' },
-                        { code: 'JP', flag: '🇯🇵', name: 'JP - Nhật Bản' },
-                        { code: 'KR', flag: '🇰🇷', name: 'KR - Hàn Quốc' },
-                        { code: 'CA', flag: '🇨🇦', name: 'CA - Canada' },
-                        { code: 'AU', flag: '🇦🇺', name: 'AU - Úc' },
-                        { code: 'SG', flag: '🇸🇬', name: 'SG - Singapore' },
-                        { code: 'NL', flag: '🇳🇱', name: 'NL - Hà Lan' },
-                        { code: 'MX', flag: '🇲🇽', name: 'MX - Mexico' },
-                        { code: 'ID', flag: '🇮🇩', name: 'ID - Indonesia' },
-                        { code: 'MY', flag: '🇲🇾', name: 'MY - Malaysia' },
-                        { code: 'PH', flag: '🇵🇭', name: 'PH - Philippines' },
-                        { code: 'VN', flag: '🇻🇳', name: 'VN - Việt Nam' }
-                    ];
-                    const isNone = cCode === 'NONE';
-                    const selBg = isNone ? 'rgba(100, 116, 139, 0.15)' : 'rgba(56, 189, 248, 0.12)';
-                    const selBorder = isNone ? 'rgba(148, 163, 184, 0.35)' : 'rgba(56, 189, 248, 0.4)';
-                    const selColor = isNone ? '#94a3b8' : '#38bdf8';
-                    const activeProxy = p.raw_proxy || '';
-                    const proxyHint = activeProxy
-                        ? `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:10.5px; font-family:monospace; color:var(--accent-cyan); margin-top:3px; display:inline-flex; align-items:center; gap:4px; font-weight:600; max-width:165px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(activeProxy)}"><i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8; flex-shrink:0;"></i> <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(activeProxy.replace('socks5://', ''))}</span></div>`
-                        : `<div id="proxyBadge_${escapeHtml(p.gpm_id)}" style="font-size:10.5px; color:var(--text-muted); margin-top:3px; display:inline-flex; align-items:center; gap:4px; max-width:165px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6; flex-shrink:0;"></i> Direct IP</div>`;
+                    const curIpKey = getProfileIpKey(p.raw_proxy);
+                    const hasProxy = Boolean(curIpKey);
+                    const selBg = hasProxy ? 'rgba(56, 189, 248, 0.12)' : 'rgba(100, 116, 139, 0.15)';
+                    const selBorder = hasProxy ? 'rgba(56, 189, 248, 0.4)' : 'rgba(148, 163, 184, 0.35)';
+                    const selColor = hasProxy ? '#38bdf8' : '#94a3b8';
+
+                    let poolOpts = '';
+                    let matched = false;
+                    (cachedProxyPool || []).forEach(item => {
+                        const isSel = curIpKey && (curIpKey === item.key || (p.raw_proxy && p.raw_proxy.includes(item.key)));
+                        if (isSel) matched = true;
+                        const blockedBadge = item.status === 'blocked' ? ' [Bị Chặn]' : '';
+                        poolOpts += `<option value="${escapeHtml(item.key)}" ${isSel ? 'selected' : ''} style="background:#1e293b; color:${item.status === 'blocked' ? '#f87171' : '#fff'};">
+                            [${item.country}] ${escapeHtml(item.key)}${blockedBadge}
+                        </option>`;
+                    });
+
+                    let customOpt = '';
+                    if (curIpKey && !matched) {
+                        customOpt = `<option value="${escapeHtml(curIpKey)}" selected style="background:#1e293b; color:#fbbf24;">⚡ ${escapeHtml(curIpKey)} (Tùy Chỉnh)</option>`;
+                    }
+
                     return `
-                        <div style="display:flex; flex-direction:column; width:100%; max-width:170px; min-width:145px;">
-                            <select class="custom-select country-cell-select"
-                                id="cellCountry_${escapeHtml(p.gpm_id)}"
-                                onchange="onTableCountryChange('${escapeHtml(p.gpm_id)}', this.value)"
-                                title="Chọn quốc gia VPN cho profile này hoặc Không Dùng Proxy"
-                                style="height:28px; font-size:11.5px; font-weight:700; padding:2px 6px; border-radius:6px; background:${selBg}; border:1px solid ${selBorder}; color:${selColor}; cursor:pointer; width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
-                                ${countryOpts.map(opt => `<option value="${opt.code}" ${cCode === opt.code ? 'selected' : ''} style="background:#1e293b; color:#fff;">${opt.flag} ${opt.name}</option>`).join('')}
-                            </select>
-                            ${proxyHint}
-                        </div>
-                        `;
+                    <div style="display:flex; flex-direction:column; width:100%; max-width:180px; min-width:155px;">
+                        <select class="custom-select proxy-cell-select"
+                            id="cellProxyIp_${escapeHtml(p.gpm_id)}"
+                            onchange="onTableIpChange('${escapeHtml(p.gpm_id)}', this.value)"
+                            title="Chọn IP Proxy gán cho profile này"
+                            style="height:28px; font-size:11.5px; font-weight:700; padding:2px 6px; border-radius:6px; background:${selBg}; border:1px solid ${selBorder}; color:${selColor}; cursor:pointer; width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+                            <option value="" ${!hasProxy ? 'selected' : ''} style="background:#1e293b; color:#94a3b8;">🌐 Direct (Không Proxy)</option>
+                            ${customOpt}
+                            ${poolOpts}
+                        </select>
+                    </div>`;
+                })()}
+                </td>
+                <td>
+                    ${(() => {
+                    const cCode = (p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE';
+                    const isNone = cCode === 'NONE';
+                    let cName = 'Direct IP';
+                    if (!isNone) {
+                        const foundC = (cachedProxyCountries || []).find(c => c.code === cCode);
+                        if (foundC) {
+                            cName = foundC.name || cCode;
+                        } else {
+                            cName = cCode === 'ID' ? 'Indonesia' : (cCode === 'MX' ? 'Mexico' : cCode);
+                        }
+                    }
+                    const badgeBg = isNone ? 'rgba(100, 116, 139, 0.12)' : 'rgba(56, 189, 248, 0.12)';
+                    const badgeBorder = isNone ? 'rgba(148, 163, 184, 0.25)' : 'rgba(56, 189, 248, 0.35)';
+                    const badgeColor = isNone ? '#94a3b8' : '#38bdf8';
+                    const badgeText = isNone ? '🌐 Direct' : `[${cCode}] ${cName}`;
+
+                    return `
+                    <div style="display:flex; align-items:center; min-width:125px;">
+                        <span class="badge country-cell-badge" id="cellCountry_${escapeHtml(p.gpm_id)}"
+                            title="Quốc gia của profile (Tự động cập nhật theo IP đã chọn)"
+                            style="font-size:11.5px; font-weight:700; padding:4px 8px; border-radius:6px; background:${badgeBg}; border:1px solid ${badgeBorder}; color:${badgeColor}; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;">
+                            ${badgeText}
+                        </span>
+                    </div>`;
                 })()}
                 </td>
                 <td>${followersDisplay}</td>
@@ -1014,7 +1157,7 @@ function renderGpmProfilesTable() {
                             <button type="button" class="action-dropdown-item" onclick="openEditUsernameModal('${escapeHtml(p.gpm_id)}', '${escapeHtml(p.name)}', '${escapeHtml(p.tiktok_username || '')}', ${followersCount}, '${escapeHtml(p.tiktok_nickname || '')}', '${escapeHtml(p.browser_type || 'gpm')}', '${escapeHtml(plat)}', null, '${escapeHtml((p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE')}'); closeAllActionMenus();">
                                 <i class="fa-solid fa-pen-to-square" style="color:var(--accent-cyan);"></i> Sửa Nick & Chỉ số
                             </button>
-                            <button type="button" class="action-dropdown-item" id="btnActionVpn_${escapeHtml(p.gpm_id)}" onclick="onTableCountryChange('${escapeHtml(p.gpm_id)}', document.getElementById('cellCountry_${escapeHtml(p.gpm_id)}') ? document.getElementById('cellCountry_${escapeHtml(p.gpm_id)}').value : '${escapeHtml((p.country && p.country.toUpperCase() !== 'NONE') ? p.country.toUpperCase() : 'NONE')}'); closeAllActionMenus();">
+                            <button type="button" class="action-dropdown-item" id="btnActionVpn_${escapeHtml(p.gpm_id)}" onclick="onTableIpChange('${escapeHtml(p.gpm_id)}', document.getElementById('cellProxyIp_${escapeHtml(p.gpm_id)}') ? document.getElementById('cellProxyIp_${escapeHtml(p.gpm_id)}').value : ''); closeAllActionMenus();">
                                 <i class="fa-solid fa-shield-halved" style="color:#38bdf8;"></i> Đồng bộ Proxy
                             </button>
                             ${plat === 'youtube' ? (() => {
@@ -1148,6 +1291,7 @@ function renderGpmProfilesTable() {
 
                     return `
                     <tr class="sub-channel-row sub-row-${escapeHtml(p.gpm_id)} ${plat === 'youtube' ? 'youtube-channel' : 'facebook-page'}" style="${isExpanded ? '' : 'display:none;'}">
+                        <td></td>
                         <td style="padding-left: 26px;">
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <i class="fa-solid fa-turn-up fa-rotate-90" style="color:var(--text-muted); opacity:0.6; font-size:11px;"></i>
@@ -1164,6 +1308,7 @@ function renderGpmProfilesTable() {
                             </div>
                         </td>
                         <td style="color:var(--text-muted); font-size:11.5px; opacity:0.7;"><i class="fa-solid fa-arrow-turn-up fa-rotate-90"></i> Cùng nick</td>
+                        <td style="color:var(--text-muted); font-size:11.5px; opacity:0.7;">Cùng nick</td>
                         <td>
                             <div>
                                 <strong style="font-size:13.5px; color:${chEligible ? 'var(--accent-gold)' : 'var(--accent-cyan)'};">
@@ -2752,24 +2897,94 @@ window.closeUploadModal = closeUploadModal;
 window.executeUploadVideo = executeUploadVideo;
 window.stopUploadVideo = stopUploadVideo;
 
+// Thay đổi IP trực tiếp từ ô dropdown trong bảng
+async function onTableIpChange(gpmId, selectedIpKey) {
+    const p = (cachedGpmProfiles || []).find(item => item.gpm_id === gpmId);
+    const ipSel = document.getElementById(`cellProxyIp_${gpmId}`);
+    const countryBadge = document.getElementById(`cellCountry_${gpmId}`);
+
+    if (!selectedIpKey) {
+        if (p) {
+            p.raw_proxy = '';
+            p.country = 'NONE';
+        }
+        if (countryBadge) {
+            countryBadge.textContent = '🌐 Direct';
+            countryBadge.style.background = 'rgba(100, 116, 139, 0.12)';
+            countryBadge.style.borderColor = 'rgba(148, 163, 184, 0.25)';
+            countryBadge.style.color = '#94a3b8';
+        }
+        if (ipSel) {
+            ipSel.style.background = 'rgba(100, 116, 139, 0.15)';
+            ipSel.style.borderColor = 'rgba(148, 163, 184, 0.35)';
+            ipSel.style.color = '#94a3b8';
+        }
+    } else {
+        const item = (cachedProxyPool || []).find(pi => pi.key === selectedIpKey);
+        if (item) {
+            if (p) {
+                p.raw_proxy = item.raw_proxy_url || item.raw_proxy;
+                p.country = item.country;
+            }
+            if (countryBadge) {
+                const cName = item.country_name || (item.country === 'ID' ? 'Indonesia' : (item.country === 'MX' ? 'Mexico' : item.country));
+                countryBadge.textContent = `[${item.country}] ${cName}`;
+                countryBadge.style.background = 'rgba(56, 189, 248, 0.12)';
+                countryBadge.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+                countryBadge.style.color = '#38bdf8';
+            }
+            if (ipSel) {
+                ipSel.style.background = 'rgba(56, 189, 248, 0.12)';
+                ipSel.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                ipSel.style.color = '#38bdf8';
+            }
+        }
+    }
+
+    try {
+        const res = await fetch(`/api/profiles/${encodeURIComponent(gpmId)}/proxy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxy: selectedIpKey || 'NONE' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (countryBadge && data.country) {
+                const cName = data.country === 'ID' ? 'Indonesia' : (data.country === 'MX' ? 'Mexico' : (data.country_name || data.country));
+                countryBadge.textContent = data.country === 'NONE' ? '🌐 Direct' : `[${data.country}] ${cName}`;
+            }
+            if (p && data.proxy_url !== undefined) {
+                p.raw_proxy = data.proxy_url;
+                p.country = data.country;
+            }
+            if (!selectedIpKey) {
+                showToast(`🌐 Đã chuyển profile sang mạng trực tiếp (Direct IP)`, 'info');
+            } else {
+                showToast(`⚡ Đã gán IP ${data.ip || selectedIpKey} (${data.flag || ''} ${data.country || ''}) cho profile!`, 'success');
+            }
+        } else {
+            showToast(data.detail || data.error || 'Lỗi gán proxy', 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi cập nhật proxy: ' + err.message, 'error');
+    }
+}
+
 // Thay đổi quốc gia trực tiếp từ ô dropdown trong bảng
 async function onTableCountryChange(gpmId, newCountry) {
     const cTarget = (newCountry || 'NONE').toUpperCase();
     const p = (cachedGpmProfiles || []).find(item => item.gpm_id === gpmId);
     if (p) p.country = cTarget;
 
-    // Cập nhật style trực tiếp cho ô select ngay lập tức
-    const sel = document.getElementById(`cellCountry_${gpmId}`);
-    if (sel) {
-        const isNone = cTarget === 'NONE';
-        sel.style.background = isNone ? 'rgba(100, 116, 139, 0.15)' : 'rgba(56, 189, 248, 0.12)';
-        sel.style.borderColor = isNone ? 'rgba(148, 163, 184, 0.35)' : 'rgba(56, 189, 248, 0.4)';
-        sel.style.color = isNone ? '#94a3b8' : '#38bdf8';
-    }
+    const countrySel = document.getElementById(`cellCountry_${gpmId}`);
+    const ipSel = document.getElementById(`cellProxyIp_${gpmId}`);
 
-    // Cập nhật text trên nút Đổi VPN trong menu Thao Tác
-    const txtSpan = document.getElementById(`txtActionVpnCountry_${gpmId}`);
-    if (txtSpan) txtSpan.textContent = cTarget === 'NONE' ? 'Direct' : cTarget;
+    if (countrySel) {
+        const isNone = cTarget === 'NONE';
+        countrySel.style.background = isNone ? 'rgba(100, 116, 139, 0.15)' : 'rgba(56, 189, 248, 0.12)';
+        countrySel.style.borderColor = isNone ? 'rgba(148, 163, 184, 0.35)' : 'rgba(56, 189, 248, 0.4)';
+        countrySel.style.color = isNone ? '#94a3b8' : '#38bdf8';
+    }
 
     try {
         const res = await fetch(`/api/profiles/${encodeURIComponent(gpmId)}/country`, {
@@ -2778,19 +2993,26 @@ async function onTableCountryChange(gpmId, newCountry) {
             body: JSON.stringify({ country: cTarget })
         });
         const data = await res.json();
-        const pb = document.getElementById(`proxyBadge_${gpmId}`);
+
         if (cTarget === 'NONE') {
             if (p) p.raw_proxy = '';
-            if (pb) pb.innerHTML = `<i class="fa-solid fa-globe" style="font-size:9px; opacity:0.6;"></i> Direct IP`;
-            showToast(`🌐 Đã gỡ bỏ Proxy cho profile! Trình duyệt sẽ dùng mạng trực tiếp (Direct IP).`, 'info');
-        } else if (data.wireproxy_assigned) {
-            if (p && data.proxy_url) p.raw_proxy = data.proxy_url;
-            if (pb && data.proxy_url) pb.innerHTML = `<i class="fa-solid fa-plug" style="font-size:9px; opacity:0.8;"></i> ${escapeHtml(data.proxy_url.replace('socks5://', ''))}`;
-            if (data.gpm_synced) {
-                showToast(`⚡ Đã đổi sang [${cTarget}] & gán WireGuard SOCKS5 (${data.proxy_url}) vào GPMLogin! (Bấm icon 🔄 Làm mới trên app GPMLogin để thấy proxy)`, 'success');
-            } else {
-                showToast(`⚡ Đã lưu proxy [${cTarget}] (${data.proxy_url})! Hãy mở app GPMLogin và bấm nút "Đồng bộ" để nạp vào profile.`, 'warning');
+            if (ipSel) {
+                ipSel.value = '';
+                ipSel.style.background = 'rgba(100, 116, 139, 0.15)';
+                ipSel.style.borderColor = 'rgba(148, 163, 184, 0.35)';
+                ipSel.style.color = '#94a3b8';
             }
+            showToast(`🌐 Đã gỡ bỏ Proxy cho profile (Direct IP)`, 'info');
+        } else if (data.proxy_url) {
+            if (p) p.raw_proxy = data.proxy_url;
+            const newKey = getProfileIpKey(data.proxy_url);
+            if (ipSel && newKey) {
+                ipSel.value = newKey;
+                ipSel.style.background = 'rgba(56, 189, 248, 0.12)';
+                ipSel.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                ipSel.style.color = '#38bdf8';
+            }
+            showToast(`⚡ Đã đổi quốc gia sang [${cTarget}] & gán IP ${newKey || data.proxy_url}!`, 'success');
         } else {
             showToast(`✅ Đã lưu quốc gia [${cTarget}] cho profile!`, 'success');
         }
@@ -2798,16 +3020,312 @@ async function onTableCountryChange(gpmId, newCountry) {
         showToast('Lỗi lưu quốc gia: ' + err.message, 'error');
     }
 }
-window.onTableCountryChange = onTableCountryChange;
 
-// Đồng bộ proxy WireGuard cho Profile (không mở trình duyệt, không làm phiền)
-async function triggerProtonVpn(gpmId, country, btn) {
-    const cTarget = (country || 'NONE').toUpperCase();
-    await onTableCountryChange(gpmId, cTarget);
+// ==========================================
+// QUẢN LÝ CHECKBOX MULTI-PAGE & BULK ACTIONS
+// ==========================================
+
+function toggleSelectProfile(gpmId, isChecked) {
+    if (isChecked) {
+        selectedProfileIds.add(gpmId);
+    } else {
+        selectedProfileIds.delete(gpmId);
+    }
+    // Cập nhật giao diện thanh tác vụ hàng loạt & header checkbox
+    syncSelectionUiState();
 }
-window.triggerProtonVpn = triggerProtonVpn;
 
-// Quản lý WireGuard VPN Modal
+function toggleSelectAllCurrentPageGpm(isChecked) {
+    const checkboxes = document.querySelectorAll('.gpm-profile-checkbox');
+    checkboxes.forEach(cb => {
+        const gid = cb.getAttribute('data-gpm-id');
+        cb.checked = isChecked;
+        if (gid) {
+            if (isChecked) selectedProfileIds.add(gid);
+            else selectedProfileIds.delete(gid);
+        }
+    });
+    syncSelectionUiState();
+}
+
+function selectAllFilteredGpmProfiles() {
+    const list = getCurrentlyFilteredGpmProfiles();
+    list.forEach(p => {
+        if (p.gpm_id) selectedProfileIds.add(p.gpm_id);
+    });
+    // Check lại tất cả checkbox đang hiển thị trên trang hiện tại
+    document.querySelectorAll('.gpm-profile-checkbox').forEach(cb => {
+        cb.checked = true;
+    });
+    syncSelectionUiState();
+    showToast(`✅ Đã chọn tất cả ${selectedProfileIds.size} tài khoản qua mọi trang!`, 'info');
+}
+
+function clearGpmProfileSelection() {
+    selectedProfileIds.clear();
+    document.querySelectorAll('.gpm-profile-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    const chkAll = document.getElementById('chkGpmSelectAll');
+    if (chkAll) {
+        chkAll.checked = false;
+        chkAll.indeterminate = false;
+    }
+    syncSelectionUiState();
+}
+
+function syncSelectionUiState() {
+    const bulkBar = document.getElementById('gpmBulkActionBar');
+    const badge = document.getElementById('selectedProfilesCountBadge');
+    const totalAcross = document.getElementById('totalFilterableCount');
+    const chkAll = document.getElementById('chkGpmSelectAll');
+
+    const filtered = getCurrentlyFilteredGpmProfiles();
+    if (totalAcross) totalAcross.textContent = filtered.length;
+
+    const size = selectedProfileIds.size;
+    if (badge) badge.textContent = `Đã chọn: ${size} profile`;
+
+    if (bulkBar) {
+        bulkBar.style.display = size > 0 ? 'flex' : 'none';
+    }
+
+    if (chkAll) {
+        const pageCheckboxes = Array.from(document.querySelectorAll('.gpm-profile-checkbox'));
+        if (pageCheckboxes.length > 0) {
+            const allChecked = pageCheckboxes.every(cb => cb.checked);
+            const someChecked = pageCheckboxes.some(cb => cb.checked);
+            chkAll.checked = allChecked;
+            chkAll.indeterminate = !allChecked && someChecked;
+        } else {
+            chkAll.checked = false;
+            chkAll.indeterminate = false;
+        }
+    }
+}
+
+function updateBulkActionBar(filteredList, pagedList) {
+    syncSelectionUiState();
+}
+
+function getCurrentlyFilteredGpmProfiles() {
+    const filterGroup = document.getElementById('filterGpmGroup')?.value || 'ALL';
+    const filterCampaign = document.getElementById('filterGpmCampaign')?.value || 'ALL';
+    const filterCountry = (document.getElementById('filterGpmCountry')?.value || 'ALL').toUpperCase();
+    const filterIp = document.getElementById('filterGpmIp')?.value || 'ALL';
+    const filterBeta = document.getElementById('filterGpmBeta')?.value || 'ALL';
+    const filterCreatorProgram = document.getElementById('filterGpmCreatorProgram')?.value || 'ALL';
+    const filterFlop = document.getElementById('filterGpmFlop')?.value || 'ALL';
+    const keyword = (document.getElementById('searchGpmKeyword') ? document.getElementById('searchGpmKeyword').value : '').trim().toLowerCase();
+
+    return (cachedGpmProfiles || []).filter(p => {
+        if ((p.platform || 'tiktok').toLowerCase() !== 'tiktok') return false;
+        if (filterGroup !== 'ALL') {
+            const grp = getProfileGroupName(p).trim().toLowerCase();
+            if (filterGroup === 'UNGROUPED') {
+                if (grp) return false;
+            } else {
+                if (grp !== filterGroup.toLowerCase()) return false;
+            }
+        }
+        if (filterCampaign !== 'ALL') {
+            const cList = (p.campaign_names || []).concat(p.campaign_name ? [p.campaign_name] : []);
+            if (filterCampaign === 'UNASSIGNED') {
+                if (cList.length > 0) return false;
+            } else {
+                if (!cList.some(cn => (cn || '').trim().toLowerCase() === filterCampaign.toLowerCase())) return false;
+            }
+        }
+        if (filterCountry !== 'ALL') {
+            const pCountry = (p.country || '').toUpperCase();
+            if (filterCountry === 'NONE') {
+                if (pCountry && pCountry !== 'NONE') return false;
+            } else {
+                if (pCountry !== filterCountry) return false;
+            }
+        }
+        if (filterBeta === 'ELIGIBLE' && !isProfileEligible(p)) return false;
+        if (filterBeta === 'INELIGIBLE' && isProfileEligible(p)) return false;
+        if (keyword) {
+            const matchName = (p.name || '').toLowerCase().includes(keyword);
+            const matchUsername = (p.tiktok_username || '').toLowerCase().includes(keyword);
+            const matchProxy = (p.raw_proxy || '').toLowerCase().includes(keyword);
+            if (!matchName && !matchUsername && !matchProxy) return false;
+        }
+        return true;
+    });
+}
+
+// ==========================================
+// MODAL GÁN PROXY / IP HÀNG LOẠT
+// ==========================================
+
+function openBulkAssignProxyModal() {
+    if (selectedProfileIds.size === 0) {
+        showToast('Vui lòng tích chọn ít nhất 1 tài khoản để gán IP hàng loạt!', 'warning');
+        return;
+    }
+    const modal = document.getElementById('bulkAssignProxyModal');
+    if (!modal) return;
+    const cntEl = document.getElementById('bulkModalSelectedCount');
+    if (cntEl) cntEl.textContent = selectedProfileIds.size;
+
+    const totalEl = document.getElementById('bulkIpTotalAvailable');
+    if (totalEl) totalEl.textContent = `${(cachedProxyPool || []).length} IP khả dụng`;
+
+    const btnSubmit = document.getElementById('btnSubmitBulkProxy');
+    if (btnSubmit) {
+        btnSubmit.innerHTML = `<i class="fa-solid fa-check"></i> Xác Nhận Gán Cho ${selectedProfileIds.size} Nick`;
+    }
+
+    // Nạp danh sách IP vào dropdown
+    const ipSel = document.getElementById('bulkSelectIp');
+    if (ipSel) {
+        const directOpt = `<option value="DIRECT">🌐 Direct (Mạng Trực Tiếp - Không Dùng Proxy)</option>`;
+        const proxyOpts = (cachedProxyPool || []).map(p => {
+            const statusTag = p.status === 'blocked' ? ' [Bị Chặn]' : '';
+            const countryName = p.country_name || p.country;
+            const city = p.city ? ` - ${p.city}` : '';
+            return `<option value="${p.key}">[${p.country}] ${p.key} (${countryName}${city})${statusTag}</option>`;
+        }).join('');
+
+        ipSel.innerHTML = directOpt + proxyOpts;
+        // Nếu có IP trong pool thì chọn IP đầu tiên, nếu không thì chọn DIRECT
+        if (cachedProxyPool && cachedProxyPool.length > 0) {
+            ipSel.value = cachedProxyPool[0].key;
+        } else {
+            ipSel.value = 'DIRECT';
+        }
+    }
+
+    updateBulkIpPreview(ipSel ? ipSel.value : 'DIRECT');
+    modal.style.display = 'flex';
+}
+
+function closeBulkAssignProxyModal() {
+    const modal = document.getElementById('bulkAssignProxyModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function updateBulkIpPreview(key) {
+    const cntryEl = document.getElementById('bulkPreviewCountry');
+    const cityEl = document.getElementById('bulkPreviewCity');
+    const statEl = document.getElementById('bulkPreviewStatus');
+    const assignEl = document.getElementById('bulkPreviewAssigned');
+
+    if (key === 'DIRECT' || !key) {
+        if (cntryEl) cntryEl.innerHTML = '🌐 Direct IP (Không Proxy)';
+        if (cityEl) cityEl.textContent = 'Mạng LAN / Internet Máy Tính';
+        if (statEl) statEl.innerHTML = '<span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;">Trực tiếp</span>';
+        const directCount = (cachedGpmProfiles || []).filter(p => !p.raw_proxy || p.raw_proxy === '' || p.country === 'NONE').length;
+        if (assignEl) assignEl.textContent = `${directCount} tài khoản`;
+        return;
+    }
+
+    const item = (cachedProxyPool || []).find(p => p.key === key);
+    if (!item) return;
+
+    if (cntryEl) {
+        const flag = item.flag || '🌐';
+        const cname = item.country_name || item.country;
+        cntryEl.innerHTML = `${flag} <strong>${cname}</strong> <span style="color:var(--text-muted); font-size:11px;">(${item.country})</span>`;
+    }
+    if (cityEl) {
+        cityEl.textContent = item.city || 'Chưa xác định';
+    }
+    if (statEl) {
+        if (item.status === 'blocked') {
+            statEl.innerHTML = '<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Bị chặn</span>';
+        } else {
+            const ping = item.latency_ms ? ` (${item.latency_ms}ms)` : '';
+            statEl.innerHTML = `<span class="badge" style="background:rgba(34,197,94,0.15); color:#4ade80;"><i class="fa-solid fa-circle-check"></i> Sẵn sàng${ping}</span>`;
+        }
+    }
+    if (assignEl) {
+        assignEl.textContent = `${item.assigned_profiles || 0} tài khoản đang dùng`;
+    }
+}
+
+async function executeBulkAssignProxy() {
+    if (selectedProfileIds.size === 0) {
+        showToast('Chưa chọn tài khoản nào!', 'warning');
+        return;
+    }
+    const selectedIp = document.getElementById('bulkSelectIp')?.value || 'DIRECT';
+    const isDirect = selectedIp === 'DIRECT';
+    const mode = isDirect ? 'direct' : 'specific_ip';
+    const target_value = isDirect ? '' : selectedIp;
+
+    const btn = document.getElementById('btnSubmitBulkProxy');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gán IP...';
+    }
+
+    try {
+        const res = await fetch('/api/gpm/bulk-assign-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gpm_ids: Array.from(selectedProfileIds),
+                mode: mode,
+                target_value: target_value
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`✅ ${data.message || 'Đã gán IP thành công!'}`, 'success');
+            closeBulkAssignProxyModal();
+            await loadProxyPool();
+            await loadGpmProfiles();
+        } else {
+            showToast(data.detail || data.error || 'Lỗi gán IP hàng loạt', 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi kết nối: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml || '<i class="fa-solid fa-check"></i> Xác Nhận Gán IP';
+        }
+    }
+}
+
+async function bulkRemoveProxyDirect() {
+    if (selectedProfileIds.size === 0) {
+        showToast('Vui lòng chọn ít nhất 1 tài khoản để gỡ proxy!', 'warning');
+        return;
+    }
+    if (!confirm(`Bạn có chắc chắn muốn gỡ bỏ proxy cho ${selectedProfileIds.size} tài khoản đã chọn?\nCác tài khoản này sẽ chuyển về dùng mạng trực tiếp (Direct IP).`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/gpm/bulk-assign-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gpm_ids: Array.from(selectedProfileIds),
+                mode: 'direct'
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`🌐 Đã chuyển ${data.assigned || selectedProfileIds.size} tài khoản về mạng trực tiếp (Direct IP)!`, 'info');
+            await loadGpmProfiles();
+        } else {
+            showToast(data.detail || data.error || 'Lỗi gỡ proxy', 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi: ' + err.message, 'error');
+    }
+}
+
+// ==========================================
+// QUẢN LÝ MODAL IP PROXY POOL & STATUS
+// ==========================================
+
 async function openWireguardStatusModal() {
     const modal = document.getElementById('wireguardStatusModal');
     if (modal) modal.style.display = 'flex';
@@ -2822,110 +3340,203 @@ function closeWireguardStatusModal() {
 async function loadWireguardStatus() {
     const tableBody = document.getElementById('wireguardProxyTableBody');
     const summarySpan = document.getElementById('wireguardActiveSummary');
+    const badgesDiv = document.getElementById('proxySummaryBadges');
+    const footerInfo = document.getElementById('wireguardModalFooterInfo');
     if (!tableBody) return;
 
     try {
-        const res = await fetch('/api/vpn/wireproxy/status?_t=' + Date.now());
+        const res = await fetch('/api/proxy/summary?_t=' + Date.now());
         const data = await res.json();
-        const proxies = data.active_proxies || {};
-        const configFiles = data.config_files || [];
-        const countries = Object.keys(proxies);
+        cachedProxySummary = data;
+        const proxies = data.proxies || [];
+        cachedProxyPool = proxies;
+        cachedProxyCountries = data.countries || [];
+
+        const total = data.total_proxies || 0;
+        const active = data.active_count || 0;
+        const blocked = data.blocked_count || 0;
 
         if (summarySpan) {
-            summarySpan.innerHTML = `<span style="color:#22c55e;">${countries.length} cổng đang hoạt động</span> (${configFiles.length} file .conf)`;
+            summarySpan.innerHTML = `<strong>${total} IP</strong> trong kho`;
         }
-
-        if (countries.length === 0) {
-            if (configFiles.length === 0) {
-                tableBody.innerHTML = `
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
-                            <i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
-                            Chưa có file WireGuard <code>.conf</code> nào trong thư mục <code>data/vpn_configs/</code>.<br>
-                            Bấm <strong>"Mở Thư Mục Config"</strong> và thả các file tải từ Proton VPN vào đây!
-                        </td>
-                    </tr>
-                `;
-            } else {
-                tableBody.innerHTML = `
-                    <tr>
-                        <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
-                            <i class="fa-solid fa-folder-open text-warning" style="font-size:24px; margin-bottom:8px; display:block;"></i>
-                            Tìm thấy <strong>${configFiles.length} file .conf</strong> nhưng các cổng proxy chưa được kích hoạt.<br>
-                            Bấm nút <strong style="color:var(--accent-cyan);"><i class="fa-solid fa-arrows-rotate"></i> "Quét Lại"</strong> ở phía trên để kích hoạt tất cả các cổng!
-                        </td>
-                    </tr>
-                `;
-            }
-            return;
-        }
-
-        const countryNamesMap = {
-            'US': 'Hoa Kỳ (US)',
-            'GB': 'Anh (GB)',
-            'DE': 'Đức (DE)',
-            'FR': 'Pháp (FR)',
-            'JP': 'Nhật Bản (JP)',
-            'KR': 'Hàn Quốc (KR)',
-            'CA': 'Canada (CA)',
-            'AU': 'Úc (AU)',
-            'SG': 'Singapore (SG)',
-            'NL': 'Hà Lan (NL)',
-            'MX': 'Mexico (MX)',
-            'ID': 'Indonesia (ID)',
-            'MY': 'Malaysia (MY)',
-            'PH': 'Philippines (PH)',
-            'VN': 'Việt Nam (VN)'
-        };
-
-        let rowsHtml = '';
-        for (const proxyId of Object.keys(proxies)) {
-            const item = proxies[proxyId];
-            const countryCode = (item.country || 'US').toUpperCase();
-            const flag = item.flag || (window.flagMap && window.flagMap[countryCode]) || '🌐';
-            const countryDisplayName = countryNamesMap[countryCode] || countryCode;
-            const placeName = item.place || 'Default';
-            const isListening = item.is_listening;
-            const statusBadge = isListening
-                ? `<span style="display:inline-flex; align-items:center; gap:6px; background:rgba(34,197,94,0.15); color:#22c55e; border: 1px solid rgba(34,197,94,0.3); padding:4px 10px; border-radius:12px; font-weight:700; font-size:11.5px; white-space:nowrap;"><i class="fa-solid fa-circle" style="font-size:7px;"></i> Hoạt Động</span>`
-                : `<span style="display:inline-flex; align-items:center; gap:6px; background:rgba(239,68,68,0.15); color:#ef4444; border: 1px solid rgba(239,68,68,0.3); padding:4px 10px; border-radius:12px; font-weight:700; font-size:11.5px; white-space:nowrap;"><i class="fa-solid fa-circle" style="font-size:7px;"></i> Mất Kết Nối</span>`;
-
-            rowsHtml += `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 12px 16px; font-weight:600; color:#fff; vertical-align: middle;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:18px;">${flag}</span>
-                            <div>
-                                <div style="font-weight:700; color:#fff; font-size:13px;">${countryDisplayName}</div>
-                                <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">📍 ${placeName}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td style="padding: 12px 16px; font-family: monospace; font-size: 13px; color: var(--accent-cyan); font-weight:600; vertical-align: middle; white-space: nowrap;">
-                        <i class="fa-solid fa-plug" style="font-size:11px; margin-right:4px; opacity:0.7;"></i> ${item.proxy_url || `socks5://127.0.0.1:${item.port}`}
-                    </td>
-                    <td style="padding: 12px 16px; color: var(--text-muted); font-size: 12px; font-family: monospace; vertical-align: middle;">
-                        <span class="vpn-config-filename" style="border: none !important; background: transparent !important; padding: 0 !important; font-family: monospace; font-size: 12px; color: var(--text-muted); box-shadow: none !important;">${item.source_file}</span>
-                    </td>
-                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle;">
-                        ${statusBadge}
-                    </td>
-                    <td style="padding: 12px 16px; text-align: center; vertical-align: middle; white-space: nowrap;">
-                        <div style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-                            <button type="button" class="btn btn-sm has-tooltip" onclick="testWireguardCountry('${proxyId}', this)" data-tooltip="Kiểm tra IP" title="Kiểm tra IP" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.12); color: #f59e0b; cursor: pointer;">
-                                <i class="fa-solid fa-bolt text-warning" style="font-size: 13px;"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-danger has-tooltip" onclick="deleteWireguardConfig('${proxyId}', '${item.source_file}')" data-tooltip="Xoá Proxy" title="Xoá Proxy" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; background: #ef4444 !important; border: 1px solid #dc2626 !important; color: #ffffff !important; cursor: pointer;">
-                                <i class="fa-solid fa-trash-can" style="font-size: 12px; color: #ffffff !important;"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
+        if (badgesDiv) {
+            badgesDiv.innerHTML = `
+                <span class="badge" style="background:rgba(34,197,94,0.18); color:#4ade80; border:1px solid rgba(34,197,94,0.3); font-size:11.5px; font-weight:700;">
+                    <i class="fa-solid fa-circle-check"></i> ${active} Hoạt Động
+                </span>
+                ${blocked > 0 ? `
+                <span class="badge" style="background:rgba(239,68,68,0.18); color:#f87171; border:1px solid rgba(239,68,68,0.3); font-size:11.5px; font-weight:700;">
+                    <i class="fa-solid fa-circle-xmark"></i> ${blocked} Bị Chặn
+                </span>` : ''}
+                <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); font-size:11.5px; font-weight:700;">
+                    <i class="fa-solid fa-earth-americas"></i> ${cachedProxyCountries.length} Quốc Gia
+                </span>
             `;
         }
-        tableBody.innerHTML = rowsHtml;
+        if (footerInfo) {
+            footerInfo.textContent = `Tự động nạp từ thư mục data/vpn_configs/ (${total} IP khả dụng)`;
+        }
+
+        renderProxyModalRows(proxies);
     } catch (err) {
-        tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px; color:#ef4444;">Lỗi tải dữ liệu: ${err.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:15px; color:#ef4444;">Lỗi tải dữ liệu: ${err.message}</td></tr>`;
+    }
+}
+
+function renderProxyModalRows(proxies) {
+    const tableBody = document.getElementById('wireguardProxyTableBody');
+    if (!tableBody) return;
+
+    if (!proxies || proxies.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 28px; color: var(--text-muted);">
+                    <i class="fa-solid fa-folder-open" style="font-size:24px; margin-bottom:8px; display:block; opacity:0.5;"></i>
+                    Chưa có IP Proxy nào trong thư mục <code>data/vpn_configs/</code>.<br>
+                    Hãy mở thư mục và thả file <code>Webshare 20 proxies.txt</code> vào đây!
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    let rowsHtml = '';
+    proxies.forEach(item => {
+        const flag = item.flag || '🌐';
+        const cName = item.country_name || item.country || 'Unknown';
+        const city = item.city ? `(${item.city})` : '';
+        const isBlocked = item.status === 'blocked';
+        const isActive = item.status === 'active';
+
+        let statusBadge = '';
+        if (isActive) {
+            statusBadge = `<span class="badge" style="background:rgba(34,197,94,0.15); color:#22c55e; border:1px solid rgba(34,197,94,0.3); font-weight:700; font-size:11px; padding:3px 8px; white-space:nowrap;"><i class="fa-solid fa-circle-check"></i> Hoạt Động</span>`;
+        } else if (isBlocked) {
+            const errTooltip = escapeHtml(item.error_message || 'IP bị lỗi hoặc đóng cổng');
+            statusBadge = `<span class="badge has-tooltip tooltip-top" data-tooltip="${errTooltip}" style="background:rgba(239,68,68,0.18); color:#ef4444; border:1px solid rgba(239,68,68,0.35); font-weight:700; font-size:11px; padding:3px 8px; white-space:nowrap; cursor:pointer;"><i class="fa-solid fa-ban"></i> Bị Chặn</span>`;
+        } else {
+            statusBadge = `<span class="badge" style="background:rgba(148,163,184,0.15); color:#94a3b8; font-weight:600; font-size:11px; padding:3px 8px; white-space:nowrap;"><i class="fa-solid fa-clock"></i> Chưa test</span>`;
+        }
+
+        let latencyHtml = '—';
+        if (item.latency_ms > 0) {
+            const latColor = item.latency_ms < 500 ? '#4ade80' : item.latency_ms < 1200 ? '#fbbf24' : '#f87171';
+            latencyHtml = `<span style="font-weight:700; color:${latColor}; font-family:monospace;">${item.latency_ms} ms</span>`;
+        }
+
+        const assignedCnt = item.assigned_count || 0;
+        const assignBadge = assignedCnt > 0 
+            ? `<span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-weight:700; font-size:11px;">${assignedCnt} nick</span>`
+            : `<span class="text-muted" style="font-size:11px; opacity:0.6;">0 nick</span>`;
+
+        rowsHtml += `
+            <tr id="row-proxy-${escapeHtml(item.key).replace(/[^a-zA-Z0-9_-]/g, '_')}" style="border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+                <td style="padding: 10px 14px; font-family: monospace; font-size: 13px; color: var(--accent-cyan); font-weight:600; vertical-align: middle; white-space: nowrap;">
+                    <i class="fa-solid fa-server" style="font-size:11px; margin-right:5px; opacity:0.7;"></i>
+                    <span>${escapeHtml(item.key)}</span>
+                    <button type="button" class="btn btn-sm" onclick="copyTextToClipboard('${escapeHtml(item.key)}', 'Đã copy IP!')" title="Sao chép IP:Port" style="padding:1px 5px; margin-left:4px; opacity:0.5; background:none; border:none; color:inherit; cursor:pointer;">
+                        <i class="fa-regular fa-copy" style="font-size:11px;"></i>
+                    </button>
+                </td>
+                <td style="padding: 10px 14px; color:#fff; vertical-align: middle; white-space: nowrap;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:16px;">${flag}</span>
+                        <div>
+                            <strong style="font-size:12.5px;">${escapeHtml(cName)} (${escapeHtml(item.country)})</strong>
+                            ${city ? `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(city)}</div>` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td style="padding: 10px 14px; color: var(--text-muted); font-size: 11.5px; vertical-align: middle;">
+                    <span class="badge" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); font-size:10.5px; color:#94a3b8;">
+                        ${item.source_file ? escapeHtml(item.source_file) : 'Static Residential'}
+                    </span>
+                </td>
+                <td style="padding: 10px 14px; text-align: center; vertical-align: middle;">
+                    ${assignBadge}
+                </td>
+                <td style="padding: 10px 14px; text-align: center; vertical-align: middle;">
+                    ${latencyHtml}
+                </td>
+                <td style="padding: 10px 14px; text-align: center; vertical-align: middle;">
+                    ${statusBadge}
+                </td>
+                <td style="padding: 10px 14px; text-align: center; vertical-align: middle; white-space: nowrap;">
+                    <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-top" onclick="testSingleProxyInModal('${escapeHtml(item.key)}', this)" data-tooltip="Kiểm tra kết nối và độ trễ IP này" style="padding:3px 8px; font-size:11px; font-weight:600;">
+                        <i class="fa-solid fa-bolt text-warning"></i> Test
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    tableBody.innerHTML = rowsHtml;
+}
+
+function filterProxiesInModal(keyword) {
+    if (!cachedProxySummary || !cachedProxySummary.proxies) return;
+    const kw = (keyword || '').trim().toLowerCase();
+    if (!kw) {
+        renderProxyModalRows(cachedProxySummary.proxies);
+        return;
+    }
+    const filtered = cachedProxySummary.proxies.filter(p => {
+        return (
+            (p.key || '').toLowerCase().includes(kw) ||
+            (p.country || '').toLowerCase().includes(kw) ||
+            (p.country_name || '').toLowerCase().includes(kw) ||
+            (p.city || '').toLowerCase().includes(kw) ||
+            (p.status || '').toLowerCase().includes(kw)
+        );
+    });
+    renderProxyModalRows(filtered);
+}
+
+async function testSingleProxyInModal(proxyKey, btn) {
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-warning"></i>';
+    }
+
+    try {
+        const res = await fetch(`/api/proxy/test/${encodeURIComponent(proxyKey)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`✅ [${proxyKey}] Hoạt động tốt (${data.country}): ${data.latency_ms}ms`, 'success');
+        } else {
+            showToast(`❌ [${proxyKey}] Bị chặn / Lỗi: ${data.error || 'Timeout'}`, 'warning');
+        }
+        await loadWireguardStatus();
+    } catch (err) {
+        showToast('Lỗi test proxy: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml || '<i class="fa-solid fa-bolt text-warning"></i> Test';
+        }
+    }
+}
+
+async function testAllProxiesInModal(btn) {
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang test...';
+    }
+    showToast('🔄 Đang kiểm tra toàn bộ IP proxy trong kho...', 'info');
+
+    try {
+        const res = await fetch('/api/proxy/test-all?background=false', { method: 'POST' });
+        const data = await res.json();
+        showToast(`✅ Hoàn tất kiểm tra: ${data.active_count || 0} Hoạt Động, ${data.blocked_count || 0} Bị Chặn`, 'success');
+        await loadWireguardStatus();
+    } catch (err) {
+        showToast('Lỗi kiểm tra toàn bộ: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml || '<i class="fa-solid fa-bolt"></i> Kiểm Tra Tất Cả IP';
+        }
     }
 }
 
@@ -2939,71 +3550,36 @@ async function openWireguardFolderOnWindows() {
 }
 
 async function rescanWireguardConfigs(btn) {
-    const button = btn || document.querySelector('#wireguardStatusModal button[onclick*="rescanWireguardConfigs"]');
-    const origHtml = button ? button.innerHTML : '';
-    if (button) {
-        button.disabled = true;
-        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang quét...';
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang quét...';
     }
+    showToast('🔄 Đang nạp lại danh sách file IP proxy và WireGuard...', 'info');
 
-    const tableBody = document.getElementById('wireguardProxyTableBody');
-    if (tableBody) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="5" style="text-align: center; padding: 32px 16px; color: var(--accent-cyan);">
-                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 26px; margin-bottom: 12px; display: block;"></i>
-                    <strong style="font-size: 13.5px;">Đang quét cấu hình WireGuard &amp; kích hoạt các cổng SOCKS5...</strong><br>
-                    <span style="font-size: 12px; color: var(--text-muted); margin-top: 4px; display: inline-block;">Vui lòng đợi giây lát, hệ thống đang đồng bộ và mở cổng proxy</span>
-                </td>
-            </tr>
-        `;
-    }
-
-    showToast('🔄 Đang quét lại các file .conf và khởi động proxy...', 'info');
     try {
-        const res = await fetch('/api/vpn/wireproxy/rescan', { method: 'POST' });
-        const data = await res.json();
-        showToast(`✅ Đã kích hoạt ${data.active_count || 0} cổng WireGuard Proxy!`, 'success');
+        await fetch('/api/proxy/rescan', { method: 'POST' });
+        await fetch('/api/vpn/wireproxy/rescan', { method: 'POST' });
+        showToast('✅ Đã nạp lại toàn bộ file proxy thành công!', 'success');
         await loadWireguardStatus();
+        await loadProxyPool();
     } catch (err) {
-        showToast('Lỗi quét cấu hình: ' + err.message, 'error');
-        if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px; color:#ef4444;">Lỗi quét: ${err.message}</td></tr>`;
-        }
+        showToast('Lỗi quét lại: ' + err.message, 'error');
     } finally {
-        if (button) {
-            button.disabled = false;
-            button.innerHTML = origHtml || '<i class="fa-solid fa-arrows-rotate"></i> Quét Lại';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml || '<i class="fa-solid fa-arrows-rotate"></i> Quét Lại File';
         }
     }
 }
 
 async function testWireguardCountry(country, btn) {
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-warning" style="font-size: 12px;"></i>';
-    }
-    try {
-        const res = await fetch(`/api/vpn/wireproxy/test/${encodeURIComponent(country)}`, { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-            showToast(`✅ [${country}] IP: ${data.ip} (${data.latency_ms}ms)`, 'success');
-        } else {
-            showToast(`⚠️ [${country}] Kiểm tra thất bại: ${data.error || 'Timeout'}`, 'warning');
-        }
-    } catch (err) {
-        showToast('Lỗi kiểm tra proxy: ' + err.message, 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-bolt text-warning" style="font-size: 13px;"></i>';
-        }
-    }
+    testSingleProxyInModal(country, btn);
 }
 
 async function deleteWireguardConfig(proxyId, sourceFile) {
     const fileName = sourceFile || proxyId;
-    if (!confirm(`Bạn có chắc muốn xoá file proxy "${fileName}" không?\nFile cấu hình và cổng proxy này sẽ được xoá vĩnh viễn.`)) {
+    if (!confirm(`Bạn có chắc muốn xoá file proxy "${fileName}" không?`)) {
         return;
     }
     try {
@@ -3020,9 +3596,26 @@ async function deleteWireguardConfig(proxyId, sourceFile) {
     }
 }
 
+// Window exports
+window.onTableIpChange = onTableIpChange;
+window.onTableCountryChange = onTableCountryChange;
+window.onFilterCountryChange = onFilterCountryChange;
+window.populateDynamicIpFilters = populateDynamicIpFilters;
+window.toggleSelectProfile = toggleSelectProfile;
+window.toggleSelectAllCurrentPageGpm = toggleSelectAllCurrentPageGpm;
+window.selectAllFilteredGpmProfiles = selectAllFilteredGpmProfiles;
+window.clearGpmProfileSelection = clearGpmProfileSelection;
+window.openBulkAssignProxyModal = openBulkAssignProxyModal;
+window.closeBulkAssignProxyModal = closeBulkAssignProxyModal;
+window.updateBulkIpPreview = updateBulkIpPreview;
+window.executeBulkAssignProxy = executeBulkAssignProxy;
+window.bulkRemoveProxyDirect = bulkRemoveProxyDirect;
 window.openWireguardStatusModal = openWireguardStatusModal;
 window.closeWireguardStatusModal = closeWireguardStatusModal;
 window.loadWireguardStatus = loadWireguardStatus;
+window.filterProxiesInModal = filterProxiesInModal;
+window.testSingleProxyInModal = testSingleProxyInModal;
+window.testAllProxiesInModal = testAllProxiesInModal;
 window.openWireguardFolderOnWindows = openWireguardFolderOnWindows;
 window.rescanWireguardConfigs = rescanWireguardConfigs;
 window.testWireguardCountry = testWireguardCountry;

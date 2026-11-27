@@ -303,15 +303,22 @@ class TikTokUploader:
                     _row_inv = _cur_inv.fetchone()
                     _conn_inv.close()
                     _is_invisible = _row_inv["value"].lower() in ("true", "1", "yes") if _row_inv and _row_inv["value"] else True
-                    if _is_invisible:
-                        _pages = context.pages or [context.new_page()]
-                        if _pages:
-                            _cdp = context.new_cdp_session(_pages[0])
-                            _win = _cdp.send("Browser.getWindowForTarget")
-                            if _win and "windowId" in _win:
+                    _pages = context.pages or [context.new_page()]
+                    if _pages:
+                        _cdp = context.new_cdp_session(_pages[0])
+                        _win = _cdp.send("Browser.getWindowForTarget")
+                        if _win and "windowId" in _win:
+                            if _is_invisible:
                                 _cdp.send("Browser.setWindowBounds", {
                                     "windowId": _win["windowId"],
                                     "bounds": {"left": -3200, "top": -3200, "width": 1280, "height": 800, "windowState": "normal"}
+                                })
+                            else:
+                                from backend.modules.gpm_client import grid_window_manager
+                                gx, gy, gw, gh = grid_window_manager.allocate_slot(gpm_profile_id)
+                                _cdp.send("Browser.setWindowBounds", {
+                                    "windowId": _win["windowId"],
+                                    "bounds": {"left": gx, "top": gy, "width": gw, "height": gh, "windowState": "normal"}
                                 })
                 except Exception as _cdp_e:
                     logger.debug(f"CDP setWindowBounds non-critical: {_cdp_e}")
@@ -714,6 +721,15 @@ class TikTokUploader:
 
                 if close_browser_on_finish and browser:
                     try:
+                        # Khôi phục toạ độ hiển thị chuẩn trước khi đóng để lần sau mở thủ công không bị lệch ra ngoài màn hình
+                        try:
+                            if _cdp and _win and "windowId" in _win:
+                                _cdp.send("Browser.setWindowBounds", {
+                                    "windowId": _win["windowId"],
+                                    "bounds": {"left": 100, "top": 60, "width": 1280, "height": 800, "windowState": "normal"}
+                                })
+                        except Exception:
+                            pass
                         log_event("INFO", f"🔒 [AUTO-CLOSE] Đang đóng trình duyệt profile {gpm_profile_id} sau khi đăng hoàn tất...")
                         browser.close()
                     except Exception as b_close_err:
@@ -735,6 +751,11 @@ class TikTokUploader:
                 from backend.modules.tiktok_tracker import set_profile_busy
                 if not ('multi_uploader' in str(type(self))):
                     set_profile_busy(gpm_profile_id, False)
+            except Exception:
+                pass
+            try:
+                from backend.modules.gpm_client import grid_window_manager
+                grid_window_manager.release_slot(gpm_profile_id)
             except Exception:
                 pass
             # Chỉ tắt browser nếu caller yêu cầu đóng (mặc định giữ lại để không ngắt phiên làm việc của user)

@@ -3549,6 +3549,71 @@
                         Nếu chiến dịch không chỉ định riêng, hệ thống sẽ tự động dùng mốc toàn cục này.</small>
                 </div>
 
+                <!-- Cấu Hình Thư Mục Tải Về & Render Mặc Định (Toàn Cục) -->
+                <div class="form-group full-width"
+                    style="background: rgba(0, 242, 254, 0.04); padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.22); margin-top: 10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                        <label style="font-weight:700; margin:0; font-size:13px; color:#fff;">
+                            <i class="fa-solid fa-folder-tree text-cyan"></i> Thư Mục Video Mặc Định Toàn Cục
+                        </label>
+                        <span class="badge badge-cyan" style="font-size:10.5px; font-weight:700;">AppData / Roaming</span>
+                    </div>
+                    <small class="form-hint" style="margin-top:0; margin-bottom:12px; color:var(--text-muted); line-height:1.4;">
+                        Đường dẫn mặc định cho việc tải video và render 9:16. Mọi chiến dịch tạo mới hoặc không chọn thư mục riêng sẽ tự động trỏ về đường dẫn này.
+                    </small>
+
+                    <!-- Thư mục Tải về (Download Dir) -->
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size:12px; font-weight:600; color:var(--text-primary); margin-bottom:5px; display:block;">
+                            <i class="fa-solid fa-cloud-arrow-down text-blue"></i> Thư Mục Tải Về Mặc Định (Download):
+                        </label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="modalDefaultDownloadDir" class="input-field"
+                                placeholder="AppData/Roaming/ClipFlow/downloads"
+                                style="flex:1; font-size:12.5px; font-weight:500;">
+                            <button type="button" class="btn btn-secondary has-tooltip tooltip-top"
+                                onclick="browseFolderForInput('modalDefaultDownloadDir')"
+                                data-tooltip="Chọn thư mục tải video trên máy tính"
+                                style="flex-shrink:0; height:38px; padding:0 14px; display:flex; align-items:center; gap:6px;">
+                                <i class="fa-solid fa-folder-open text-cyan"></i> Duyệt...
+                            </button>
+                        </div>
+                        <small class="form-hint" style="font-size:11px; margin-top:3px;">
+                            Lưu video gốc MP4 tải về từ YouTube. Mặc định: <code>%APPDATA%/ClipFlow/downloads</code>
+                        </small>
+                    </div>
+
+                    <!-- Thư mục Render (Render Dir) -->
+                    <div>
+                        <label style="font-size:12px; font-weight:600; color:var(--text-primary); margin-bottom:5px; display:block;">
+                            <i class="fa-solid fa-wand-magic-sparkles text-purple"></i> Thư Mục Render 9:16 Mặc Định (Rendered):
+                        </label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="text" id="modalDefaultRenderDir" class="input-field"
+                                placeholder="AppData/Roaming/ClipFlow/rendered"
+                                style="flex:1; font-size:12.5px; font-weight:500;">
+                            <button type="button" class="btn btn-secondary has-tooltip tooltip-top"
+                                onclick="browseFolderForInput('modalDefaultRenderDir')"
+                                data-tooltip="Chọn thư mục render trên máy tính"
+                                style="flex-shrink:0; height:38px; padding:0 14px; display:flex; align-items:center; gap:6px;">
+                                <i class="fa-solid fa-folder-open text-purple"></i> Duyệt...
+                            </button>
+                        </div>
+                        <small class="form-hint" style="font-size:11px; margin-top:3px;">
+                            Lưu video dọc 9:16 sau khi biên tập xong để chờ đăng. Mặc định: <code>%APPDATA%/ClipFlow/rendered</code>
+                        </small>
+                    </div>
+
+                    <!-- Nút khôi phục mặc định AppData -->
+                    <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                        <button type="button" class="btn btn-xs btn-ghost text-muted"
+                            onclick="resetModalFoldersToAppData()"
+                            style="font-size:11px; text-decoration:underline; cursor:pointer;">
+                            <i class="fa-solid fa-rotate-left"></i> Đặt lại đường dẫn mặc định AppData
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Số luồng tải lên song song (Concurrent Upload Workers) -->
                 <div class="form-group full-width"
                     style="background: rgba(168, 85, 247, 0.05); padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(168, 85, 247, 0.2);">

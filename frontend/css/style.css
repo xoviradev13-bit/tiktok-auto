@@ -1362,8 +1362,6 @@ select.input-field:focus {
 #ytChannelsTable td:first-child:not([colspan]),
 #videoLibraryTable th:first-child,
 #videoLibraryTable td:first-child:not([colspan]),
-#gpmProfilesTable th:first-child,
-#gpmProfilesTable td:first-child:not([colspan]),
 #savedChannelsTable th:first-child,
 #savedChannelsTable td:first-child:not([colspan]),
 #audioSearchTable th:first-child,
@@ -1378,9 +1376,46 @@ select.input-field:focus {
     box-shadow: 4px 0 10px rgba(0, 0, 0, 0.35);
 }
 
+/* Specific dual sticky columns for gpmProfilesTable: Col 1 (Checkbox) & Col 2 (Profile Name) */
+#gpmProfilesTable th:first-child,
+#gpmProfilesTable td:first-child:not([colspan]) {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    background: #0f1422 !important;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#gpmProfilesTable th:first-child {
+    z-index: 9;
+    background: #111726 !important;
+}
+
+#gpmProfilesTable th:nth-child(2),
+#gpmProfilesTable td:nth-child(2):not([colspan]) {
+    position: sticky;
+    left: 44px;
+    z-index: 6;
+    background: #0f1422 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.35);
+}
+
+#gpmProfilesTable th:nth-child(2) {
+    z-index: 9;
+    background: #111726 !important;
+}
+
+#gpmProfilesTable tbody tr:hover td:first-child,
+#gpmProfilesTable tbody tr:hover td:nth-child(2) {
+    background: #161f33 !important;
+}
+
 #ytChannelsTable th:first-child,
 #videoLibraryTable th:first-child,
-#gpmProfilesTable th:first-child,
 #savedChannelsTable th:first-child,
 #audioSearchTable th:first-child,
 #localTracksTable th:first-child {
@@ -7782,12 +7817,12 @@ body.light-mode #campaignLogsContainer {
     border: 1px solid #e2e8f0 !important;
 }
 
-body.light-mode #campaignLogsContainer > div:first-child {
+body.light-mode #campaignLogsContainer>div:first-child {
     background: #f1f5f9 !important;
     border-bottom: 1px solid #e2e8f0 !important;
 }
 
-body.light-mode #campaignLogsContainer > div:first-child span {
+body.light-mode #campaignLogsContainer>div:first-child span {
     color: #0f172a !important;
 }
 
@@ -7868,4 +7903,3 @@ body.light-mode .camp-video-card:hover {
 body.light-mode .camp-video-title {
     color: #0f172a !important;
 }
-

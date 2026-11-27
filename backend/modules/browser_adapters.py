@@ -23,7 +23,7 @@ class BaseBrowserAdapter(ABC):
         pass
 
     @abstractmethod
-    def start_profile(self, profile_id: str, invisible: Optional[bool] = None) -> Optional[str]:
+    def start_profile(self, profile_id: str, invisible: Optional[bool] = None, grid_slot: Optional[int] = None) -> Optional[str]:
         """
         Khởi động profile và trả về chuỗi kết nối CDP 
         (dạng '127.0.0.1:port' hoặc 'ws://...') cho Playwright kết nối
@@ -55,8 +55,8 @@ class GPMAdapter(BaseBrowserAdapter):
     def list_profiles(self) -> List[Dict[str, Any]]:
         return self.client.get_profiles()
 
-    def start_profile(self, profile_id: str, invisible: Optional[bool] = None) -> Optional[str]:
-        return self.client.start_profile(profile_id, invisible=invisible)
+    def start_profile(self, profile_id: str, invisible: Optional[bool] = None, grid_slot: Optional[int] = None) -> Optional[str]:
+        return self.client.start_profile(profile_id, invisible=invisible, grid_slot=grid_slot)
 
     def stop_profile(self, profile_id: str) -> bool:
         return self.client.stop_profile(profile_id)
@@ -119,9 +119,9 @@ class UnifiedBrowserManager:
     def get_all_profiles(self) -> List[Dict[str, Any]]:
         return self.get_selected_profiles()
 
-    def start_profile(self, profile_id: str, browser_type: Optional[str] = None, invisible: Optional[bool] = None) -> Optional[str]:
+    def start_profile(self, profile_id: str, browser_type: Optional[str] = None, invisible: Optional[bool] = None, grid_slot: Optional[int] = None) -> Optional[str]:
         adapter = self.get_adapter("gpm")
-        return adapter.start_profile(profile_id, invisible=invisible) if adapter else None
+        return adapter.start_profile(profile_id, invisible=invisible, grid_slot=grid_slot) if adapter else None
 
     def stop_profile(self, profile_id: str, browser_type: Optional[str] = None) -> bool:
         adapter = self.get_adapter("gpm")

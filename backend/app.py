@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from backend.config import (
     BASE_DIR, FRONTEND_DIR, LOGO_DIR, SERVER_HOST, SERVER_PORT, save_env_config,
     YOUTUBE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY, OPENAI_API_KEY, GPM_API_BASE_URL,
-    MUSIC_DIR, DOWNLOADS_DIR, RENDERED_DIR
+    MUSIC_DIR, DOWNLOADS_DIR, RENDERED_DIR, DEFAULT_DOWNLOADS_DIR, DEFAULT_RENDERED_DIR
 )
 from backend.database import get_connection, log_event, log_campaign_event
 from backend.modules.gpm_client import gpm_client
@@ -263,6 +263,15 @@ class ConnectProtonVpnRequest(BaseModel):
 class BatchAssignCountryRequest(BaseModel):
     gpm_ids: List[str]
     country: str
+
+class AssignProfileProxyRequest(BaseModel):
+    proxy: str
+    auto_update_country: Optional[bool] = True
+
+class BulkAssignProxyRequest(BaseModel):
+    gpm_ids: List[str]
+    mode: str = "round_robin"  # "round_robin" | "specific_ip" | "by_country" | "direct"
+    target_value: Optional[str] = ""
 
 class UpdateProfileCountryRequest(BaseModel):
     country: str
@@ -2534,7 +2543,15 @@ def list_campaigns():
         ORDER BY cp.id DESC
     ''')
     rows = [dict(r) for r in cursor.fetchall()]
+    cursor.execute("SELECT key, value FROM settings WHERE key IN ('default_download_dir', 'default_render_dir')")
+    s_map = dict(cursor.fetchall())
     conn.close()
+
+    appdata_dl = str(DEFAULT_DOWNLOADS_DIR).replace("\\", "/")
+    appdata_rd = str(DEFAULT_RENDERED_DIR).replace("\\", "/")
+    global_dl = (s_map.get("default_download_dir") or appdata_dl).replace("\\", "/")
+    global_rd = (s_map.get("default_render_dir") or appdata_rd).replace("\\", "/")
+
     for r in rows:
         # Parse channel_ids
         ch_list = []
@@ -2559,10 +2576,21 @@ def list_campaigns():
             gpm_list = [r["gpm_profile_id"]]
         r["gpm_profile_ids_list"] = gpm_list
         r["gpm_count"] = len(gpm_list)
-        if r.get("download_dir") in ("data/downloads", str(DOWNLOADS_DIR)):
-            r["download_dir"] = ""
-        if r.get("render_dir") in ("data/rendered", str(RENDERED_DIR)):
-            r["render_dir"] = ""
+
+        # Tự động trỏ về thư mục mặc định toàn cục trừ khi người dùng đã tùy chỉnh thư mục riêng
+        raw_dl = (r.get("download_dir") or "").strip()
+        if not raw_dl or raw_dl in ("data/downloads", str(DOWNLOADS_DIR), "default"):
+            r["download_dir"] = global_dl
+            r["is_custom_download_dir"] = False
+        else:
+            r["is_custom_download_dir"] = True
+
+        raw_rd = (r.get("render_dir") or "").strip()
+        if not raw_rd or raw_rd in ("data/rendered", str(RENDERED_DIR), "default"):
+            r["render_dir"] = global_rd
+            r["is_custom_render_dir"] = False
+        else:
+            r["is_custom_render_dir"] = True
     return rows
 
 def sanitize_campaign_schedule(raw_str: Optional[str]) -> str:
@@ -2804,10 +2832,36 @@ def get_campaign(campaign_id: int):
     elif r.get("gpm_profile_id"):
         gpm_list = [r["gpm_profile_id"]]
     r["gpm_profile_ids_list"] = gpm_list
-    if not r.get("download_dir") or r.get("download_dir") == "data/downloads":
-        r["download_dir"] = str(DOWNLOADS_DIR)
-    if not r.get("render_dir") or r.get("render_dir") == "data/rendered":
-        r["render_dir"] = str(RENDERED_DIR)
+
+    # Lấy cấu hình thư mục mặc định toàn cục
+    try:
+        conn_s = get_connection()
+        cur_s = conn_s.cursor()
+        cur_s.execute("SELECT key, value FROM settings WHERE key IN ('default_download_dir', 'default_render_dir')")
+        s_map = dict(cur_s.fetchall())
+        conn_s.close()
+    except Exception:
+        s_map = {}
+
+    appdata_dl = str(DEFAULT_DOWNLOADS_DIR).replace("\\", "/")
+    appdata_rd = str(DEFAULT_RENDERED_DIR).replace("\\", "/")
+    global_dl = (s_map.get("default_download_dir") or appdata_dl).replace("\\", "/")
+    global_rd = (s_map.get("default_render_dir") or appdata_rd).replace("\\", "/")
+
+    raw_dl = (r.get("download_dir") or "").strip()
+    if not raw_dl or raw_dl in ("data/downloads", str(DOWNLOADS_DIR), "default"):
+        r["download_dir"] = global_dl
+        r["is_custom_download_dir"] = False
+    else:
+        r["is_custom_download_dir"] = True
+
+    raw_rd = (r.get("render_dir") or "").strip()
+    if not raw_rd or raw_rd in ("data/rendered", str(RENDERED_DIR), "default"):
+        r["render_dir"] = global_rd
+        r["is_custom_render_dir"] = False
+    else:
+        r["is_custom_render_dir"] = True
+
     return r
 
 @app.put("/api/campaigns/{campaign_id}")
@@ -4297,24 +4351,32 @@ def update_profile_country(gpm_id: str, req: UpdateProfileCountryRequest):
     conn.commit()
     conn.close()
 
-    wireproxy_assigned = False
-    wireproxy_url = None
+    proxy_assigned = False
+    proxy_url = None
     gpm_synced = False
     try:
+        from backend.modules.proxy_pool import proxy_pool_manager
         from backend.modules.wireproxy_manager import wireproxy_manager
+
         if cleaned_country and cleaned_country != "NONE":
-            wireproxy_url = wireproxy_manager.get_proxy_for_country(cleaned_country)
-            if wireproxy_url:
-                wireproxy_assigned = True
+            # Ưu tiên lấy từ kho IP Proxy tĩnh (Webshare / Datacenter)
+            item = proxy_pool_manager.get_proxy_for_country(cleaned_country)
+            if item:
+                proxy_url = item.raw_proxy_url
+            else:
+                proxy_url = wireproxy_manager.get_proxy_for_country(cleaned_country)
+
+            if proxy_url:
+                proxy_assigned = True
                 conn = get_connection()
                 c = conn.cursor()
-                c.execute("UPDATE gpm_profiles SET raw_proxy = ? WHERE gpm_id = ?", (wireproxy_url, gpm_id))
+                c.execute("UPDATE gpm_profiles SET raw_proxy = ? WHERE gpm_id = ?", (proxy_url, gpm_id))
                 conn.commit()
                 conn.close()
 
-                if gpm_client.update_profile_proxy(gpm_id, wireproxy_url):
+                if gpm_client.update_profile_proxy(gpm_id, proxy_url):
                     gpm_synced = True
-                    log_event("INFO", f"⚡ Đã tự động gán proxy WireGuard ({wireproxy_url}) cho GPM profile {gpm_id}")
+                    log_event("INFO", f"⚡ Đã tự động gán proxy ({proxy_url}) cho GPM profile {gpm_id}")
         elif cleaned_country == "NONE" or not cleaned_country:
             conn = get_connection()
             c = conn.cursor()
@@ -4326,17 +4388,71 @@ def update_profile_country(gpm_id: str, req: UpdateProfileCountryRequest):
             gpm_synced = True
             log_event("INFO", f"🌐 Đã gỡ bỏ proxy cho GPM profile {gpm_id} (Dùng Direct IP)")
     except Exception as e:
-        log_event("WARNING", f"Lỗi gán proxy WireGuard: {e}")
+        log_event("WARNING", f"Lỗi gán proxy: {e}")
 
     log_event("INFO", f"Đã cập nhật quốc gia {cleaned_country} cho GPM profile {gpm_id}")
     return {
         "status": "success",
         "gpm_id": gpm_id,
         "country": cleaned_country,
-        "wireproxy_assigned": wireproxy_assigned,
+        "wireproxy_assigned": proxy_assigned,
         "gpm_synced": gpm_synced,
-        "proxy_url": wireproxy_url
+        "proxy_url": proxy_url
     }
+
+# --- CÁC ENDPOINT QUẢN LÝ IP PROXY POOL MỚI (Webshare, Static Residential) ---
+
+@app.get("/api/proxy/summary")
+def get_proxy_summary():
+    from backend.modules.proxy_pool import proxy_pool_manager
+    return proxy_pool_manager.get_summary()
+
+@app.get("/api/proxy/countries")
+def get_proxy_countries():
+    from backend.modules.proxy_pool import proxy_pool_manager
+    return proxy_pool_manager.get_available_countries()
+
+@app.post("/api/proxy/test-all")
+def test_all_proxies_endpoint(background: bool = True):
+    from backend.modules.proxy_pool import proxy_pool_manager
+    return proxy_pool_manager.test_all_proxies(background=background)
+
+@app.post("/api/proxy/test/{proxy_key:path}")
+def test_single_proxy_endpoint(proxy_key: str):
+    from backend.modules.proxy_pool import proxy_pool_manager
+    return proxy_pool_manager.test_single_proxy(proxy_key)
+
+@app.post("/api/proxy/rescan")
+def rescan_proxies_endpoint():
+    from backend.modules.proxy_pool import proxy_pool_manager
+    count = proxy_pool_manager.reload_from_files()
+    summary = proxy_pool_manager.get_summary()
+    return {
+        "status": "success",
+        "total_loaded": count,
+        "summary": summary
+    }
+
+@app.put("/api/profiles/{gpm_id}/proxy")
+@app.post("/api/profiles/{gpm_id}/proxy")
+def set_profile_proxy(gpm_id: str, req: AssignProfileProxyRequest):
+    from backend.modules.proxy_pool import proxy_pool_manager
+    res = proxy_pool_manager.assign_proxy_to_profile(gpm_id, req.proxy)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Lỗi gán proxy"))
+    return res
+
+@app.post("/api/gpm/bulk-assign-proxy")
+def bulk_assign_proxies_endpoint(req: BulkAssignProxyRequest):
+    from backend.modules.proxy_pool import proxy_pool_manager
+    res = proxy_pool_manager.bulk_assign_proxies(
+        gpm_ids=req.gpm_ids,
+        mode=req.mode or "round_robin",
+        target_value=req.target_value or ""
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Lỗi gán proxy hàng loạt"))
+    return res
 
 @app.post("/api/vpn/wireproxy/batch-assign")
 def batch_assign_wireproxy(req: BatchAssignCountryRequest):
@@ -4344,6 +4460,7 @@ def batch_assign_wireproxy(req: BatchAssignCountryRequest):
     if not country:
         raise HTTPException(status_code=400, detail="Mã quốc gia không được để trống")
 
+    from backend.modules.proxy_pool import proxy_pool_manager
     from backend.modules.wireproxy_manager import wireproxy_manager
 
     conn = get_connection()
@@ -4353,7 +4470,16 @@ def batch_assign_wireproxy(req: BatchAssignCountryRequest):
     assigned_proxies = []
 
     for gid in req.gpm_ids:
-        proxy_url = wireproxy_manager.get_proxy_for_country(country) if country != "NONE" else ""
+        proxy_url = None
+        if country != "NONE":
+            item = proxy_pool_manager.get_proxy_for_country(country)
+            if item:
+                proxy_url = item.raw_proxy_url
+            else:
+                proxy_url = wireproxy_manager.get_proxy_for_country(country)
+        else:
+            proxy_url = ""
+
         cursor.execute("UPDATE gpm_profiles SET country = ?, raw_proxy = ? WHERE gpm_id = ?", (country, proxy_url, gid))
         success_count += 1
         if proxy_url or country == "NONE":
@@ -4377,13 +4503,17 @@ def batch_assign_wireproxy(req: BatchAssignCountryRequest):
 @app.get("/api/vpn/wireproxy/status")
 def get_wireproxy_status():
     from backend.modules.wireproxy_manager import wireproxy_manager
+    from backend.modules.proxy_pool import proxy_pool_manager
     from backend.config import VPN_CONFIGS_DIR
     configs = [f.name for f in VPN_CONFIGS_DIR.glob("*.conf")]
+    txt_configs = [f.name for f in VPN_CONFIGS_DIR.glob("*.txt")]
     return {
         "active_proxies": wireproxy_manager.get_status(),
         "config_files": configs,
+        "txt_config_files": txt_configs,
         "config_folder": str(VPN_CONFIGS_DIR),
-        "total_configs": len(configs)
+        "total_configs": len(configs) + len(txt_configs),
+        "proxy_pool": proxy_pool_manager.get_summary()
     }
 
 @app.post("/api/vpn/wireproxy/rescan")
@@ -5239,6 +5369,8 @@ class UpdateSchedulerSettingsRequest(BaseModel):
     max_parallel_uploads: Optional[int] = 1
     rss_concurrent_workers: Optional[int] = 15
     profile_sync_concurrent_workers: Optional[int] = 3
+    download_dir: Optional[str] = None
+    render_dir: Optional[str] = None
 
 @app.get("/api/settings/defaults")
 def get_default_settings():
@@ -5248,9 +5380,13 @@ def get_default_settings():
     cursor.execute("SELECT key, value FROM settings")
     settings_dict = dict(cursor.fetchall())
     conn.close()
+
+    appdata_dl = str(DEFAULT_DOWNLOADS_DIR).replace("\\", "/")
+    appdata_rd = str(DEFAULT_RENDERED_DIR).replace("\\", "/")
+
     return {
-        "download_dir": settings_dict.get("default_download_dir", str(DOWNLOADS_DIR)),
-        "render_dir": settings_dict.get("default_render_dir", str(RENDERED_DIR)),
+        "download_dir": (settings_dict.get("default_download_dir") or appdata_dl).replace("\\", "/"),
+        "render_dir": (settings_dict.get("default_render_dir") or appdata_rd).replace("\\", "/"),
         "scheduler_running": settings_dict.get("scheduler_running", "1") == "1",
         "scheduler_interval_minutes": int(settings_dict.get("scheduler_interval_minutes", getattr(scheduler, "rss_interval_minutes", 15))),
         "upload_interval_seconds": int(settings_dict.get("upload_interval_seconds", getattr(scheduler, "upload_interval_seconds", 60))),
@@ -5269,8 +5405,14 @@ def get_scheduler_settings():
     cursor.execute("SELECT key, value FROM settings")
     settings_dict = dict(cursor.fetchall())
     conn.close()
+
+    appdata_dl = str(DEFAULT_DOWNLOADS_DIR).replace("\\", "/")
+    appdata_rd = str(DEFAULT_RENDERED_DIR).replace("\\", "/")
+
     return {
         "status": "success",
+        "download_dir": (settings_dict.get("default_download_dir") or appdata_dl).replace("\\", "/"),
+        "render_dir": (settings_dict.get("default_render_dir") or appdata_rd).replace("\\", "/"),
         "interval_minutes": int(settings_dict.get("scheduler_interval_minutes", getattr(scheduler, "rss_interval_minutes", 15))),
         "upload_interval_seconds": int(settings_dict.get("upload_interval_seconds", getattr(scheduler, "upload_interval_seconds", 60))),
         "auto_download": settings_dict.get("auto_download", "1") == "1",
@@ -5357,6 +5499,22 @@ def update_scheduler_settings(req: UpdateSchedulerSettingsRequest):
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('rss_concurrent_workers', ?)", (str(req.rss_concurrent_workers),))
         if req.profile_sync_concurrent_workers is not None:
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('profile_sync_concurrent_workers', ?)", (str(req.profile_sync_concurrent_workers),))
+        if req.download_dir is not None:
+            clean_dl = req.download_dir.strip().replace("\\", "/")
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_download_dir', ?)", (clean_dl,))
+            if clean_dl:
+                try:
+                    os.makedirs(clean_dl, exist_ok=True)
+                except Exception:
+                    pass
+        if req.render_dir is not None:
+            clean_rd = req.render_dir.strip().replace("\\", "/")
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('default_render_dir', ?)", (clean_rd,))
+            if clean_rd:
+                try:
+                    os.makedirs(clean_rd, exist_ok=True)
+                except Exception:
+                    pass
         conn.commit()
         conn.close()
     except Exception as e:

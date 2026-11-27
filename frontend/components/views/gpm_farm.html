@@ -9,8 +9,9 @@
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <button class="btn btn-secondary" id="btnWireguardStatusModal" onclick="openWireguardStatusModal()"
                     style="display:flex; align-items:center; gap:6px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08);"
-                    title="Quản lý cổng WireGuard VPN cho dàn Profile">
-                    <i class="fa-solid fa-shield-halved text-cyan"></i> <span id="wireguardBtnText">WireGuard VPN</span>
+                    title="Quản lý danh sách IP Proxy và WireGuard cho dàn Profile">
+                    <i class="fa-solid fa-network-wired text-cyan"></i> <span id="wireguardBtnText">Quản Lý IP
+                        Proxy</span>
                 </button>
                 <button class="btn btn-secondary" id="btnFollowerSchedulerModal" onclick="openFollowerSchedulerModal()"
                     style="display:flex; align-items:center; gap:6px;" title="Cài đặt lịch quét định kỳ dữ liệu TikTok">
@@ -131,7 +132,8 @@
 
                     <!-- Filter Campaign -->
                     <div class="sort-control">
-                        <label for="filterGpmCampaign"><i class="fa-solid fa-bullhorn text-pink"></i> Chiến Dịch:</label>
+                        <label for="filterGpmCampaign"><i class="fa-solid fa-bullhorn text-pink"></i> Chiến
+                            Dịch:</label>
                         <select id="filterGpmCampaign" class="custom-select" style="min-width: 155px;"
                             onchange="renderGpmProfilesTable()">
                             <option value="ALL" selected>Tất cả chiến dịch</option>
@@ -143,24 +145,18 @@
                         <label for="filterGpmCountry"><i class="fa-solid fa-earth-americas text-cyan"></i> Quốc
                             Gia:</label>
                         <select id="filterGpmCountry" class="custom-select" style="min-width: 145px;"
-                            onchange="renderGpmProfilesTable()">
+                            onchange="onFilterCountryChange()">
                             <option value="ALL" selected>Tất cả quốc gia</option>
-                            <option value="US">🇺🇸 Hoa Kỳ (US)</option>
-                            <option value="GB">🇬🇧 Anh (GB)</option>
-                            <option value="DE">🇩🇪 Đức (DE)</option>
-                            <option value="FR">🇫🇷 Pháp (FR)</option>
-                            <option value="JP">🇯🇵 Nhật Bản (JP)</option>
-                            <option value="KR">🇰🇷 Hàn Quốc (KR)</option>
-                            <option value="CA">🇨🇦 Canada (CA)</option>
-                            <option value="AU">🇦🇺 Úc (AU)</option>
-                            <option value="SG">🇸🇬 Singapore (SG)</option>
-                            <option value="NL">🇳🇱 Hà Lan (NL)</option>
-                            <option value="MX">🇲🇽 Mexico (MX)</option>
-                            <option value="ID">🇮🇩 Indonesia (ID)</option>
-                            <option value="MY">🇲🇾 Malaysia (MY)</option>
-                            <option value="PH">🇵🇭 Philippines (PH)</option>
-                            <option value="VN">🇻🇳 Việt Nam (VN)</option>
                             <option value="NONE">🌐 Không dùng Proxy (Direct)</option>
+                        </select>
+                    </div>
+
+                    <!-- Filter IP Proxy -->
+                    <div class="sort-control">
+                        <label for="filterGpmIp"><i class="fa-solid fa-server text-cyan"></i> IP Proxy:</label>
+                        <select id="filterGpmIp" class="custom-select" style="min-width: 165px;"
+                            onchange="renderGpmProfilesTable()">
+                            <option value="ALL" selected>Tất cả IP</option>
                         </select>
                     </div>
 
@@ -235,12 +231,48 @@
             </div>
         </div>
 
+        <!-- BĂNG THAO TÁC HÀNG LOẠT (BULK ACTIONS BAR) -->
+        <div id="gpmBulkActionBar"
+            style="display:none; margin: 12px 0 6px 0; padding: 10px 16px; background: linear-gradient(90deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98)); border: 1px solid rgba(56, 189, 248, 0.45); border-radius: var(--radius-md); box-shadow: 0 4px 18px rgba(0,0,0,0.4); align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span class="badge badge-info" id="selectedProfilesCountBadge"
+                    style="font-size: 13px; padding: 6px 12px; font-weight: 700;">Đã chọn: 0</span>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="selectAllFilteredGpmProfiles()"
+                    id="btnSelectAllAcrossPages"
+                    title="Chọn toàn bộ tài khoản phù hợp với bộ lọc hiện tại trên tất cả các trang">
+                    <i class="fa-solid fa-check-double text-cyan"></i> Chọn tất cả (<span
+                        id="totalFilterableCount">0</span>) qua mọi trang
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="clearGpmProfileSelection()"
+                    title="Bỏ chọn tất cả profile">
+                    <i class="fa-solid fa-xmark text-danger"></i> Bỏ chọn
+                </button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-sm btn-primary" onclick="openBulkAssignProxyModal()"
+                    style="font-weight: 700; background: linear-gradient(135deg, #0284c7, #2563eb); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-network-wired"></i> Gán IP Proxy Hàng Loạt
+                </button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="bulkRemoveProxyDirect()"
+                    style="font-weight: 600; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-globe"></i> Gỡ Proxy (Direct IP)
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive mt-3">
             <table class="data-table" id="gpmProfilesTable">
                 <thead>
                     <tr>
+                        <th
+                            style="width: 44px; min-width: 44px; max-width: 44px; text-align: center; vertical-align: middle; padding: 10px 4px;">
+                            <input type="checkbox" id="chkGpmSelectAll"
+                                onchange="toggleSelectAllCurrentPageGpm(this.checked)"
+                                title="Chọn tất cả profile trên trang này"
+                                style="cursor:pointer; width:16px; height:16px; accent-color: var(--accent-cyan, #38bdf8); vertical-align: middle;">
+                        </th>
                         <th class="sortable" id="th-gpm-name" onclick="handleGpmHeaderSort('name')"
-                            title="Bấm để sắp xếp theo Tên Profile" style="min-width: 140px;">
+                            title="Bấm để sắp xếp theo Tên Profile" style="min-width: 170px;">
                             Tên Profile <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-group_name" onclick="handleGpmHeaderSort('group_name')"
@@ -252,12 +284,17 @@
                             title="Bấm để sắp xếp theo Account Username" style="min-width: 150px;">
                             Account Username <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
+                        <th class="sortable" id="th-gpm-raw_proxy" onclick="handleGpmHeaderSort('raw_proxy')"
+                            title="Bấm để sắp xếp theo Địa chỉ IP Proxy" style="min-width: 175px;">
+                            Địa Chỉ IP (Proxy) <i class="fa-solid fa-sort sort-icon"></i>
+                        </th>
                         <th class="sortable" id="th-gpm-country" onclick="handleGpmHeaderSort('country')"
-                            title="Bấm để sắp xếp theo Quốc Gia VPN" style="min-width: 165px;">
-                            Quốc Gia VPN <i class="fa-solid fa-sort sort-icon"></i>
+                            title="Bấm để sắp xếp theo Quốc Gia" style="min-width: 155px;">
+                            Quốc Gia <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-followers_count"
-                            onclick="handleGpmHeaderSort('followers_count')" title="Bấm để sắp xếp theo Follower" style="min-width: 100px;">
+                            onclick="handleGpmHeaderSort('followers_count')" title="Bấm để sắp xếp theo Follower"
+                            style="min-width: 100px;">
                             Followers <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-total_views" onclick="handleGpmHeaderSort('total_views')"
@@ -278,7 +315,8 @@
                             Creator Program <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-flop_status" onclick="handleGpmHeaderSort('flop_status')"
-                            title="Bấm để sắp xếp theo Tình trạng Kênh (Flop / 0-view / Kẹt 200v / Khỏe)" style="min-width: 125px;">
+                            title="Bấm để sắp xếp theo Tình trạng Kênh (Flop / 0-view / Kẹt 200v / Khỏe)"
+                            style="min-width: 125px;">
                             Hiệu Suất / Flop <i class="fa-solid fa-sort sort-icon"></i>
                         </th>
                         <th class="sortable" id="th-gpm-last_checked" onclick="handleGpmHeaderSort('last_checked')"
@@ -290,7 +328,7 @@
                 </thead>
                 <tbody id="gpmTableBody">
                     <tr>
-                        <td colspan="12" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
+                        <td colspan="14" class="text-center py-4 text-muted">Chưa có profile nào. Hãy ấn
                             "Đồng Bộ" để nạp dữ liệu!</td>
                     </tr>
                 </tbody>

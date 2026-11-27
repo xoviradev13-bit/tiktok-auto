@@ -1277,6 +1277,11 @@ async function loadSchedulerSettings() {
         const minCooldown = data.min_account_cooldown_minutes || 60;
 
         // Populate Modal Fields
+        const mDl = document.getElementById('modalDefaultDownloadDir');
+        if (mDl && data.download_dir) mDl.value = data.download_dir;
+        const mRd = document.getElementById('modalDefaultRenderDir');
+        if (mRd && data.render_dir) mRd.value = data.render_dir;
+
         const mInterval = document.getElementById('modalSchedulerInterval');
         if (mInterval) {
             mInterval.value = interval;
@@ -1371,6 +1376,8 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         maxParallelUploads = Math.max(1, Math.min(20, parseInt(document.getElementById('modalMaxParallelUploads')?.value || 1, 10)));
         rssConcurrentWorkers = Math.max(1, Math.min(50, parseInt(document.getElementById('modalRssConcurrentWorkers')?.value || document.getElementById('settingRssConcurrentWorkers')?.value || 15, 10)));
         profileSyncConcurrentWorkers = Math.max(1, Math.min(10, parseInt(document.getElementById('schedProfileSyncConcurrentWorkers')?.value || document.getElementById('modalProfileSyncConcurrentWorkers')?.value || document.getElementById('settingProfileSyncConcurrentWorkers')?.value || 3, 10)));
+        const modalDlDir = document.getElementById('modalDefaultDownloadDir')?.value?.trim();
+        const modalRdDir = document.getElementById('modalDefaultRenderDir')?.value?.trim();
     } else {
         intervalInput = document.getElementById('settingSchedulerInterval');
         uploadInput = document.getElementById('settingUploadInterval');
@@ -1446,6 +1453,9 @@ async function saveSchedulerSettings(btn, fromModal = true) {
         profile_sync_concurrent_workers: profileSyncConcurrentWorkers
     };
 
+    if (modalDlDir !== undefined) payload.download_dir = modalDlDir;
+    if (modalRdDir !== undefined) payload.render_dir = modalRdDir;
+
     try {
         const res = await fetch('/api/settings/scheduler', {
             method: 'POST',
@@ -1458,6 +1468,18 @@ async function saveSchedulerSettings(btn, fromModal = true) {
             if (fromModal) {
                 closeSchedulerSettingsModal();
             }
+
+            // Tự động đồng bộ ngay vào các ô thư mục của modal tạo chiến dịch mới nếu đang mở
+            const campDl = document.getElementById('campaignDownloadDir');
+            const campRd = document.getElementById('campaignRenderDir');
+            if (campDl && payload.download_dir) campDl.value = payload.download_dir;
+            if (campRd && payload.render_dir) campRd.value = payload.render_dir;
+
+            // Làm mới danh sách chiến dịch nếu tab chiến dịch đang hiển thị
+            if (typeof loadCampaigns === 'function') {
+                try { loadCampaigns(); } catch (_) { }
+            }
+
             // Sync values to both modal and tab
             await loadSchedulerSettings();
             // Refresh pipeline banner status immediately
@@ -1982,3 +2004,20 @@ window.applyMinDurationState = applyMinDurationState;
 window.onToggleFormatCheckbox = onToggleFormatCheckbox;
 window.handleAspectRatioChange = handleAspectRatioChange;
 window.handleSplitSourceChange = handleSplitSourceChange;
+
+async function resetModalFoldersToAppData() {
+    try {
+        const res = await fetch('/api/settings/defaults');
+        if (res.ok) {
+            const def = await res.json();
+            const mDl = document.getElementById('modalDefaultDownloadDir');
+            const mRd = document.getElementById('modalDefaultRenderDir');
+            if (mDl && def.download_dir) mDl.value = def.download_dir;
+            if (mRd && def.render_dir) mRd.value = def.render_dir;
+            showToast('Đã đặt lại đường dẫn thư mục về AppData mặc định', 'info');
+        }
+    } catch (e) {
+        console.error('Lỗi reset folder AppData:', e);
+    }
+}
+window.resetModalFoldersToAppData = resetModalFoldersToAppData;
