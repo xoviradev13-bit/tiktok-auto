@@ -43,6 +43,9 @@ async function loadSavedChannels(btn) {
 
         populateSavedCountryFilterOptions(cachedSavedChannels);
         renderSavedChannelsTable();
+        if (btn && typeof showToast === 'function') {
+            showToast(`✅ Đã làm mới ${total} kênh theo dõi!`);
+        }
     } catch (err) {
         console.error('Lỗi khi tải kênh đã lưu:', err);
         showToast('Lỗi khi tải danh sách kênh đã lưu: ' + err.message, true);

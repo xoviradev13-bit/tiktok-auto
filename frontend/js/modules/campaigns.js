@@ -71,7 +71,64 @@ async function exportPipelineVideosCsv() {
     downloadCsv(`tien_trinh_pipeline_video_${dateStr}.csv`, rows);
 }
 
-async function loadPipelineStatus() {
+async function clearPipelineQueue(btn) {
+    if (!confirm('Bạn có chắc chắn muốn XÓA TOÀN BỘ video đang chờ đăng trong hàng đợi?\n\n- Toàn bộ tác vụ chờ đăng sẽ bị hủy.\n- Các video thành phẩm đã render 9:16 sẽ được giải phóng và đưa trở lại trạng thái sẵn sàng để các chiến dịch có thể phân phối lại từ đầu.')) {
+        return;
+    }
+
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang xóa...</span>';
+    }
+    if (typeof showToast === 'function') {
+        showToast('Đang xóa sạch hàng đợi và cập nhật trạng thái video...', 'info');
+    }
+
+    try {
+        const res = await fetch('/api/pipeline/clear-queue', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.detail || data.message || 'Lỗi từ máy chủ');
+        }
+        if (typeof showToast === 'function') {
+            showToast(data.message || '✅ Đã xóa sạch hàng đợi thành công!');
+        }
+        await loadPipelineStatus(false);
+    } catch (err) {
+        console.error('Lỗi khi xóa hàng đợi:', err);
+        if (typeof showToast === 'function') {
+            showToast('Lỗi xóa hàng đợi: ' + err.message, true);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            btn.innerHTML = origHtml;
+        }
+    }
+}
+window.clearPipelineQueue = clearPipelineQueue;
+
+async function loadPipelineStatus(isManual = false) {
+    const btn = document.getElementById('btnRefreshPipelineQueue') || (isManual && window.event && window.event.target ? window.event.target.closest('button') : null);
+    const icon = document.getElementById('iconRefreshPipelineQueue') || (btn ? btn.querySelector('i.fa-rotate, i.fa-spin') : null);
+
+    if (isManual) {
+        if (btn) {
+            btn.disabled = true;
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.7';
+        }
+        if (icon) icon.classList.add('fa-spin');
+        if (typeof showToast === 'function') {
+            showToast('Đang làm mới tiến trình hàng đợi 4 công đoạn...', 'info');
+        }
+    }
+
     try {
         const res = await fetch('/api/pipeline/status');
         const data = await res.json();
@@ -195,8 +252,28 @@ async function loadPipelineStatus() {
 
         // 4. Kanban Columns
         renderKanbanPipeline(recent, data.recent_upload_tasks || []);
+
+        if (isManual && typeof showToast === 'function') {
+            const upTasks = data.recent_upload_tasks || [];
+            const schedCount = upTasks.filter(t => t.status === 'queued' || t.status === 'processing' || t.status === 'failed').length;
+            const renCount = data.video_stats ? data.video_stats.rendered : 0;
+            const upCount = data.video_stats ? data.video_stats.uploaded : 0;
+            showToast(`✅ Đã làm mới hàng đợi: ${schedCount} video chờ đăng, ${renCount} đã render, ${upCount} đã đăng!`);
+        }
     } catch (err) {
         console.error('Lỗi khi tải trạng thái pipeline:', err);
+        if (isManual && typeof showToast === 'function') {
+            showToast('Lỗi khi làm mới hàng đợi: ' + err.message, true);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+        }
+        if (icon) {
+            setTimeout(() => icon.classList.remove('fa-spin'), 400);
+        }
     }
 }
 
@@ -416,9 +493,11 @@ function renderCampaignCard(c) {
         ? '<span class="badge badge-green" title="Lấp đầy các khung giờ song song cho toàn bộ nick có Proxy riêng"><i class="fa-solid fa-bolt"></i> Song Song Giờ Vàng (Proxy Riêng)</span>'
         : (c.distribution_mode === 'round_robin'
             ? '<span class="badge badge-cyan" title="Chống trùng: chia vòng tròn clip"><i class="fa-solid fa-arrows-spin"></i> Round-Robin (Không trùng)</span>'
-            : (c.distribution_mode === 'equal_random'
-                ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
-                : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>'));
+            : (c.distribution_mode === 'single_best'
+                ? '<span class="badge badge-gold" title="Ưu tiên nick có điểm uy tín và follower cao nhất"><i class="fa-solid fa-star"></i> Điểm Uy Tín Cao Nhất</span>'
+                : (c.distribution_mode === 'equal_random' || c.distribution_mode === 'random'
+                    ? '<span class="badge badge-purple"><i class="fa-solid fa-shuffle"></i> Ngẫu Nhiên</span>'
+                    : '<span class="badge badge-gold"><i class="fa-solid fa-bullhorn"></i> Đăng Toàn Bộ</span>')));
 
     let freqBadge = '';
     let freqText = 'Mỗi ngày';
@@ -692,14 +771,56 @@ function changeCampaignsPageSize(size) {
     filterAndRenderCampaigns();
 }
 
-async function loadCampaigns() {
+async function loadCampaigns(btnOrManual = false) {
+    let btn = null;
+    let icon = null;
+    let isManual = Boolean(btnOrManual);
+
+    if (btnOrManual instanceof HTMLElement) {
+        btn = btnOrManual;
+        icon = btn.querySelector('i.fa-rotate, i.fa-spin');
+        isManual = true;
+    } else if (btnOrManual === true) {
+        btn = document.getElementById('btnRefreshCampaigns');
+        icon = document.getElementById('iconRefreshCampaigns') || (btn ? btn.querySelector('i.fa-rotate, i.fa-spin') : null);
+    }
+
+    if (isManual) {
+        if (btn) {
+            btn.disabled = true;
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.7';
+        }
+        if (icon) icon.classList.add('fa-spin');
+        if (typeof showToast === 'function') {
+            showToast('Đang làm mới danh sách chiến dịch...', 'info');
+        }
+    }
+
     try {
         const res = await fetch('/api/campaigns');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const campaigns = await res.json();
         cachedCampaigns = campaigns;
         filterAndRenderCampaigns();
+
+        if (isManual && typeof showToast === 'function') {
+            showToast(`✅ Đã làm mới danh sách: ${campaigns.length} chiến dịch!`);
+        }
     } catch (err) {
         console.error('Lỗi nạp chiến dịch:', err);
+        if (isManual && typeof showToast === 'function') {
+            showToast('Lỗi tải chiến dịch: ' + err.message, true);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+        }
+        if (icon) {
+            setTimeout(() => icon.classList.remove('fa-spin'), 400);
+        }
     }
 }
 

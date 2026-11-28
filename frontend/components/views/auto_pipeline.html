@@ -104,8 +104,8 @@
                 <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
-                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
+                <button class="btn btn-sm btn-secondary has-tooltip" id="btnRefreshCampaigns" onclick="loadCampaigns(this)"
+                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate" id="iconRefreshCampaigns"></i> <span>Làm Mới</span></button>
                 <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
                     data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến
                     Dịch</button>

@@ -478,8 +478,8 @@ class GPMClient:
                 if not target_proxy and country and country != "NONE":
                     from backend.modules.wireproxy_manager import wireproxy_manager
                     target_proxy = wireproxy_manager.get_proxy_for_country(country) or ""
-                if target_proxy:
-                    self.update_profile_proxy(profile_id, target_proxy)
+                # Luôn đồng bộ proxy (kể cả rỗng "" để gỡ proxy cũ nếu profile chuyển sang Direct)
+                self.update_profile_proxy(profile_id, target_proxy)
         except Exception:
             pass
 

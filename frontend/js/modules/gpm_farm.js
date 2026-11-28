@@ -3263,16 +3263,20 @@ async function executeBulkAssignProxy() {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang gán IP...';
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
     try {
         const res = await fetch('/api/gpm/bulk-assign-proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
                 gpm_ids: Array.from(selectedProfileIds),
                 mode: mode,
                 target_value: target_value
             })
         });
+        clearTimeout(timeoutId);
         const data = await res.json();
         if (data.success) {
             showToast(`✅ ${data.message || 'Đã gán IP thành công!'}`, 'success');

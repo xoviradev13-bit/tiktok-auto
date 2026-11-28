@@ -337,9 +337,9 @@
                         lịch đăng</span>
                 </div>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="loadVideoLibraryTable()"
-                style="height: 32px; font-size: 12px; padding: 0 12px;">
-                <i class="fa-solid fa-rotate"></i> Làm Mới Danh Sách
+            <button class="btn btn-secondary btn-sm" id="btnRefreshVideoLib" onclick="loadVideoLibraryTable(true)"
+                style="height: 32px; font-size: 12px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-rotate" id="iconRefreshVideoLib"></i> <span>Làm Mới Danh Sách</span>
             </button>
         </div>
 
@@ -1364,8 +1364,8 @@
                 <p class="panel-sub">Mỗi chiến dịch kết nối: Kênh YouTube &rarr; Mẫu Edit &rarr; Dàn Nick nhận bài</p>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <button class="btn btn-sm btn-secondary has-tooltip" onclick="loadCampaigns()"
-                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate"></i> Làm Mới</button>
+                <button class="btn btn-sm btn-secondary has-tooltip" id="btnRefreshCampaigns" onclick="loadCampaigns(this)"
+                    data-tooltip="Làm mới danh sách chiến dịch"><i class="fa-solid fa-rotate" id="iconRefreshCampaigns"></i> <span>Làm Mới</span></button>
                 <button class="btn btn-sm btn-primary has-tooltip tooltip-left" onclick="openNewCampaignModal()"
                     data-tooltip="Tạo chiến dịch tự động hóa mới"><i class="fa-solid fa-plus"></i> Thêm Chiến
                     Dịch</button>
@@ -2060,12 +2060,16 @@
                         <div style="display:flex; gap:8px; align-items:center;">
                             <button class="btn btn-sm btn-primary" onclick="triggerProcessUploads()"><i
                                     class="fa-solid fa-paper-plane"></i> Đăng Ngay Hàng Đợi</button>
+                            <button class="btn btn-sm btn-outline-danger has-tooltip" id="btnClearPipelineQueue" onclick="clearPipelineQueue(this)"
+                                data-tooltip="Xóa toàn bộ video đang chờ trong hàng đợi để phân phối lại từ đầu">
+                                <i class="fa-solid fa-trash-can"></i> <span>Xóa Hàng Đợi</span>
+                            </button>
                             <button class="btn btn-sm btn-secondary has-tooltip" onclick="triggerManualCleanup(this)"
                                 data-tooltip="Dọn dẹp các file MP4 của video đã đăng thành công">
                                 <i class="fa-solid fa-broom text-cyan"></i> Dọn File Đã Đăng
                             </button>
-                            <button class="btn btn-sm btn-secondary" onclick="loadPipelineStatus()"><i
-                                    class="fa-solid fa-rotate"></i> Làm Mới</button>
+                            <button class="btn btn-sm btn-secondary" id="btnRefreshPipelineQueue" onclick="loadPipelineStatus(true)"><i
+                                    class="fa-solid fa-rotate" id="iconRefreshPipelineQueue"></i> <span>Làm Mới</span></button>
                         </div>
                     </div>
 
@@ -2524,7 +2528,7 @@
                                 <i class="fa-solid fa-file-csv" style="color:var(--accent-cyan);"></i> Xuất CSV
                             </button>
                             <button type="button" class="btn btn-sm btn-secondary has-tooltip tooltip-left"
-                                onclick="loadAiUsageStats()"
+                                onclick="loadAiUsageStats(this)"
                                 data-tooltip="Tải lại số liệu token, chi phí & nhật ký AI mới nhất">
                                 <i class="fa-solid fa-arrows-rotate"></i> Làm Mới Dữ Liệu
                             </button>
@@ -2810,7 +2814,7 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <div id="fileLogActionButtons" style="display: inline-flex; gap: 8px; align-items: center;">
-                                <button class="btn btn-sm btn-secondary" onclick="loadFileLogs()"><i
+                                <button class="btn btn-sm btn-secondary" onclick="loadFileLogs(this)"><i
                                         class="fa-solid fa-rotate"></i> Làm Mới</button>
                                 <button class="btn btn-sm btn-primary has-tooltip" onclick="downloadLogFile()"
                                     data-tooltip="Chọn thư mục và lưu file log (.log) ra máy tính">
@@ -2893,7 +2897,7 @@
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <span style="font-size: 13px; color: var(--text-muted);">20 sự kiện hệ thống gần nhất được
                                 lưu vào bảng SQLite system_logs</span>
-                            <button class="btn btn-sm btn-secondary" onclick="loadDashboardStats()"><i
+                            <button class="btn btn-sm btn-secondary" onclick="loadDashboardStats(this)"><i
                                     class="fa-solid fa-rotate"></i> Làm mới</button>
                         </div>
                         <div class="log-terminal" id="logTerminal" style="height: 480px; overflow-y: auto;">

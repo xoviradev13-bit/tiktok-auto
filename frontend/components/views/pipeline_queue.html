@@ -9,12 +9,16 @@
                         <div style="display:flex; gap:8px; align-items:center;">
                             <button class="btn btn-sm btn-primary" onclick="triggerProcessUploads()"><i
                                     class="fa-solid fa-paper-plane"></i> Đăng Ngay Hàng Đợi</button>
+                            <button class="btn btn-sm btn-outline-danger has-tooltip" id="btnClearPipelineQueue" onclick="clearPipelineQueue(this)"
+                                data-tooltip="Xóa toàn bộ video đang chờ trong hàng đợi để phân phối lại từ đầu">
+                                <i class="fa-solid fa-trash-can"></i> <span>Xóa Hàng Đợi</span>
+                            </button>
                             <button class="btn btn-sm btn-secondary has-tooltip" onclick="triggerManualCleanup(this)"
                                 data-tooltip="Dọn dẹp các file MP4 của video đã đăng thành công">
                                 <i class="fa-solid fa-broom text-cyan"></i> Dọn File Đã Đăng
                             </button>
-                            <button class="btn btn-sm btn-secondary" onclick="loadPipelineStatus()"><i
-                                    class="fa-solid fa-rotate"></i> Làm Mới</button>
+                            <button class="btn btn-sm btn-secondary" id="btnRefreshPipelineQueue" onclick="loadPipelineStatus(true)"><i
+                                    class="fa-solid fa-rotate" id="iconRefreshPipelineQueue"></i> <span>Làm Mới</span></button>
                         </div>
                     </div>
 

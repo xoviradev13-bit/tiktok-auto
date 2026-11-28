@@ -725,174 +725,210 @@ def check_gpm_health():
 @app.post("/api/gpm/sync")
 def sync_gpm_profiles():
     """Đồng bộ toàn bộ danh sách profile từ trình duyệt Antidetect đã chọn (GPM, AdsPower, Dolphin, GenLogin) vào database"""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
     from backend.modules.browser_adapters import browser_manager
-    active_browser = browser_manager.get_active_browser()
-    profiles = browser_manager.get_selected_profiles()
-    is_live_from_app = bool(profiles)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    if not profiles:
-        # Fallback: chỉ đọc profile CỦA ĐÚNG trình duyệt đang chọn, tránh ghi đè nhầm browser_type
-        fallback_type = active_browser if active_browser not in ('auto', '') else 'gpm'
-        cursor.execute("SELECT gpm_id, name, raw_proxy, browser_type FROM gpm_profiles WHERE browser_type = ?", (fallback_type,))
-        db_profiles = cursor.fetchall()
-        if db_profiles:
-            profiles = [{"id": p["gpm_id"], "name": p["name"], "raw_proxy": p["raw_proxy"], "browser_type": p["browser_type"]} for p in db_profiles]
-        else:
-            conn.close()
-            return {"status": "warning", "message": f"Không tìm thấy profile nào từ trình duyệt {active_browser.upper()} (hoặc ứng dụng chưa bật)", "synced": 0}
-
-    # Không giới hạn số lượng tài khoản (Hỗ trợ 1.000+ profile không cần license key)
-    active_gpm_ids = set()
-    synced = 0
-    for p in profiles:
-        active_gpm_ids.add(p["id"])
-        b_type = p.get("browser_type") or (active_browser if active_browser != "auto" else "gpm")
-        g_id = str(p.get("group_id") or p.get("groupId") or "").strip()
-        g_name = str(p.get("group_name") or p.get("groupName") or p.get("group") or "").strip()
-        cursor.execute('''
-        INSERT INTO gpm_profiles (gpm_id, name, raw_proxy, browser_type, group_id, group_name)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(gpm_id) DO UPDATE SET
-            name = excluded.name,
-            raw_proxy = excluded.raw_proxy,
-            browser_type = COALESCE(NULLIF(excluded.browser_type, ''), gpm_profiles.browser_type, 'gpm'),
-            group_id = COALESCE(NULLIF(excluded.group_id, ''), gpm_profiles.group_id, ''),
-            group_name = COALESCE(NULLIF(excluded.group_name, ''), gpm_profiles.group_name, '')
-        ''', (p["id"], p.get("name") or p["id"], p.get("raw_proxy", ""), b_type, g_id, g_name))
-        synced += 1
-
-    removed_count = 0
-    if is_live_from_app and active_gpm_ids:
-        # Chỉ xóa profile thuộc đúng trình duyệt đang đồng bộ, không xóa nhầm profile của trình duyệt khác
-        if active_browser == "auto":
-            cursor.execute("SELECT gpm_id, name, browser_type FROM gpm_profiles")
-        else:
-            cursor.execute("SELECT gpm_id, name, browser_type FROM gpm_profiles WHERE browser_type = ? OR browser_type IS NULL OR browser_type = ''", (active_browser,))
-        
-        for db_p in cursor.fetchall():
-            if db_p["gpm_id"] not in active_gpm_ids:
-                cursor.execute("DELETE FROM gpm_profiles WHERE gpm_id = ?", (db_p["gpm_id"],))
-                cursor.execute("DELETE FROM profile_channels WHERE gpm_id = ?", (db_p["gpm_id"],))
-                removed_count += 1
-                log_event("INFO", f"Tự động gỡ bỏ profile '{db_p['name']}' ({db_p['gpm_id']}) do đã bị xóa trên {active_browser.upper()}.")
-
-    conn.commit()
-    conn.close()
-
-    # Tự động đồng bộ Proxy WireGuard đã lưu trong ClipFlow sang ứng dụng GPMLogin
     try:
-        from backend.modules.wireproxy_manager import wireproxy_manager
-        conn_proxy = get_connection()
-        cur_proxy = conn_proxy.cursor()
-        cur_proxy.execute("SELECT gpm_id, country, raw_proxy FROM gpm_profiles WHERE country != '' AND country != 'NONE'")
-        proxy_profiles = cur_proxy.fetchall()
-        conn_proxy.close()
+        active_browser = browser_manager.get_active_browser()
+        profiles = browser_manager.get_selected_profiles()
+        is_live_from_app = bool(profiles)
 
-        for pp in proxy_profiles:
-            gid = pp["gpm_id"]
-            cntry = (pp["country"] or "").upper()
-            desired_proxy = pp["raw_proxy"] or wireproxy_manager.get_proxy_for_country(cntry)
-            if desired_proxy:
-                gpm_client.update_profile_proxy(gid, desired_proxy)
-    except Exception as sync_p_err:
-        log_event("WARNING", f"Lỗi đồng bộ proxy tự động sang GPMLogin: {sync_p_err}")
+        conn = get_connection()
+        cursor = conn.cursor()
+        removed_logs = []
 
-    # Tự động cập nhật TikTok Handle (Username) & Profile Name (Nickname) từ local cookies (ZeroRAM cho GPM / CDP cho GenLogin)
-    tt_synced = 0
-    if active_gpm_ids and (
-        (is_gpm_reader_available() and active_browser in ['gpm', 'auto']) or
-        active_browser == 'genlogin'
-    ):
         try:
-            from concurrent.futures import ThreadPoolExecutor
-            def sync_single_cookie(pid):
-                try:
-                    res = fetch_account_info_from_gpm(pid)
+            if not profiles:
+                # Fallback: chỉ đọc profile CỦA ĐÚNG trình duyệt đang chọn, tránh ghi đè nhầm browser_type
+                fallback_type = active_browser if active_browser not in ('auto', '') else 'gpm'
+                cursor.execute("SELECT gpm_id, name, raw_proxy, browser_type FROM gpm_profiles WHERE browser_type = ?", (fallback_type,))
+                db_profiles = cursor.fetchall()
+                if db_profiles:
+                    profiles = [{"id": p["gpm_id"], "name": p["name"], "raw_proxy": p["raw_proxy"], "browser_type": p["browser_type"]} for p in db_profiles]
+                else:
+                    return {"status": "warning", "message": f"Không tìm thấy profile nào từ trình duyệt {active_browser.upper()} (hoặc ứng dụng chưa bật)", "synced": 0}
 
-                    if res.get("found") and res.get("is_logged_in"):
-                        plat = res.get("platform", "tiktok")
-                        if plat == "tiktok":
-                            metrics_tracker.update_profile_stats(
-                                gpm_id=pid,
-                                followers=res.get("followers", 0),
-                                total_views=res.get("views_7d", 0),
-                                username=res.get("username") or "",
-                                nickname=res.get("nickname") or "",
-                                tiktok_uid=res.get("tiktok_uid") or res.get("user_id") or "",
-                                sec_uid=res.get("sec_uid") or ""
-                            )
-                        else:
-                            conn_p = get_connection()
-                            cur_p = conn_p.cursor()
-                            cur_p.execute("""
-                                UPDATE gpm_profiles SET
-                                    platform = ?,
-                                    channel_handle = COALESCE(NULLIF(?, ''), channel_handle),
-                                    fb_page_id = COALESCE(NULLIF(?, ''), fb_page_id),
-                                    tiktok_username = COALESCE(NULLIF(?, ''), tiktok_username),
-                                    tiktok_nickname = COALESCE(NULLIF(?, ''), tiktok_nickname),
-                                    tiktok_uid = COALESCE(NULLIF(?, ''), tiktok_uid),
-                                    status = 'active',
-                                    status_reason = ?
-                                WHERE gpm_id = ?
-                            """, (
-                                plat,
-                                res.get("channel_handle") or (res.get("username") if plat == 'youtube' else ''),
-                                res.get("fb_page_id") or (res.get("username") if plat == 'facebook' else ''),
-                                res.get("username") or "",
-                                res.get("nickname") or "",
-                                res.get("user_id") or "",
-                                res.get("message") or "Đã kết nối phiên đăng nhập",
-                                pid
-                            ))
-                            conn_p.commit()
-                            conn_p.close()
-                            # Đồng bộ tất cả kênh/trang con (YouTube channels, Facebook pages)
-                            try:
-                                from backend.modules.gpm_profile_reader import sync_profile_channels
-                                sync_profile_channels(pid)
-                            except Exception:
-                                pass
-                        account_health.update_health_status(pid, "active", "")
-                        return True
-                    elif res.get("source") == "no_session" or (res.get("found") and not res.get("is_logged_in")):
-                        account_health.update_health_status(pid, "unlogged", res.get("message") or "Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập")
-                except Exception:
-                    pass
-                return False
+            # Không giới hạn số lượng tài khoản (Hỗ trợ 1.000+ profile) - dùng executemany tối ưu tốc độ
+            active_gpm_ids = set()
+            live_proxy_map = {}
+            upsert_rows = []
+            for p in profiles:
+                pid = p["id"]
+                active_gpm_ids.add(pid)
+                live_proxy_map[pid] = (p.get("raw_proxy") or "").strip()
+                b_type = p.get("browser_type") or (active_browser if active_browser != "auto" else "gpm")
+                g_id = str(p.get("group_id") or p.get("groupId") or "").strip()
+                g_name = str(p.get("group_name") or p.get("groupName") or p.get("group") or "").strip()
+                upsert_rows.append((pid, p.get("name") or pid, p.get("raw_proxy", ""), b_type, g_id, g_name))
 
-            # Tối ưu đa luồng linh hoạt: từ 16 đến 32 luồng để quét cực nhanh cho hàng trăm / hàng nghìn profiles
-            max_workers = min(32, max(8, len(active_gpm_ids) // 10))
-            with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                results = list(ex.map(sync_single_cookie, list(active_gpm_ids)))
-                tt_synced = sum(1 for r in results if r)
-        except Exception as tt_err:
-            log_event("WARNING", f"Lỗi đồng bộ chi tiết TikTok từ cookie: {tt_err}")
+            cursor.executemany('''
+            INSERT INTO gpm_profiles (gpm_id, name, raw_proxy, browser_type, group_id, group_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(gpm_id) DO UPDATE SET
+                name = excluded.name,
+                raw_proxy = CASE
+                    WHEN COALESCE(gpm_profiles.raw_proxy, '') != '' OR COALESCE(NULLIF(gpm_profiles.country, 'NONE'), '') != ''
+                    THEN gpm_profiles.raw_proxy
+                    ELSE excluded.raw_proxy
+                END,
+                browser_type = COALESCE(NULLIF(excluded.browser_type, ''), gpm_profiles.browser_type, 'gpm'),
+                group_id = COALESCE(NULLIF(excluded.group_id, ''), gpm_profiles.group_id, ''),
+                group_name = COALESCE(NULLIF(excluded.group_name, ''), gpm_profiles.group_name, '')
+            ''', upsert_rows)
+            synced = len(upsert_rows)
 
-    browser_title = active_browser.upper() if active_browser != "auto" else "Trình Duyệt"
-    msg = f"Đã đồng bộ {synced} profile từ {browser_title}"
-    if tt_synced > 0:
-        msg += f" (đã cập nhật thông tin TikTok của {tt_synced} profile)"
-    if removed_count > 0:
-        msg += f" (đã gỡ bỏ {removed_count} profile không còn tồn tại)"
-    log_event("INFO", msg)
-    try:
-        from backend.modules.gpm_profile_reader import propagate_linked_profile_channels
-        propagate_linked_profile_channels()
-    except Exception:
-        pass
-    return {
-        "status": "success",
-        "synced": synced,
-        "tiktok_synced": tt_synced,
-        "removed": removed_count,
-        "limit_reached": False,
-        "max_allowed_profiles": 999999,
-        "message": msg
-    }
+            removed_count = 0
+            if is_live_from_app and active_gpm_ids:
+                if active_browser == "auto":
+                    cursor.execute("SELECT gpm_id, name, browser_type FROM gpm_profiles")
+                else:
+                    cursor.execute("SELECT gpm_id, name, browser_type FROM gpm_profiles WHERE browser_type = ? OR browser_type IS NULL OR browser_type = ''", (active_browser,))
+
+                to_remove = [db_p for db_p in cursor.fetchall() if db_p["gpm_id"] not in active_gpm_ids]
+                for db_p in to_remove:
+                    cursor.execute("DELETE FROM gpm_profiles WHERE gpm_id = ?", (db_p["gpm_id"],))
+                    cursor.execute("DELETE FROM profile_channels WHERE gpm_id = ?", (db_p["gpm_id"],))
+                    removed_count += 1
+                    removed_logs.append(f"Tự động gỡ bỏ profile '{db_p['name']}' ({db_p['gpm_id']}) do đã bị xóa trên {active_browser.upper()}.")
+
+            conn.commit()
+        finally:
+            conn.close()
+
+        for rm_msg in removed_logs:
+            try:
+                log_event("INFO", rm_msg)
+            except Exception:
+                pass
+
+        # Tự động đồng bộ Proxy đã lưu trong ClipFlow sang ứng dụng GPMLogin (chỉ gọi API cho profile bị lệch proxy)
+        try:
+            from backend.modules.wireproxy_manager import wireproxy_manager
+            from backend.modules.gpm_client import to_gpm_proxy_format
+            conn_proxy = get_connection()
+            cur_proxy = conn_proxy.cursor()
+            cur_proxy.execute("SELECT gpm_id, country, raw_proxy FROM gpm_profiles WHERE country != '' AND country != 'NONE'")
+            proxy_profiles = cur_proxy.fetchall()
+            conn_proxy.close()
+
+            proxy_sync_tasks = []
+            for pp in proxy_profiles:
+                gid = pp["gpm_id"]
+                cntry = (pp["country"] or "").upper()
+                desired_proxy = pp["raw_proxy"] or wireproxy_manager.get_proxy_for_country(cntry)
+                if desired_proxy:
+                    desired_gpm = to_gpm_proxy_format(desired_proxy)
+                    if live_proxy_map.get(gid, "") != desired_gpm:
+                        proxy_sync_tasks.append((gid, desired_proxy))
+
+            if proxy_sync_tasks:
+                with ThreadPoolExecutor(max_workers=min(10, len(proxy_sync_tasks))) as p_ex:
+                    list(p_ex.map(lambda item: gpm_client.update_profile_proxy(item[0], item[1]), proxy_sync_tasks))
+        except Exception as sync_p_err:
+            log_event("WARNING", f"Lỗi đồng bộ proxy tự động sang GPMLogin: {sync_p_err}")
+
+        # Tự động cập nhật TikTok Handle (Username) & Profile Name (Nickname) từ local cookies (ZeroRAM cho GPM / CDP cho GenLogin)
+        tt_synced = 0
+        if active_gpm_ids and (
+            (is_gpm_reader_available() and active_browser in ['gpm', 'auto']) or
+            active_browser == 'genlogin'
+        ):
+            try:
+                db_write_lock = threading.Lock()
+
+                def sync_single_cookie(pid):
+                    try:
+                        res = fetch_account_info_from_gpm(pid)
+
+                        if res.get("found") and res.get("is_logged_in"):
+                            plat = res.get("platform", "tiktok")
+                            with db_write_lock:
+                                if plat == "tiktok":
+                                    metrics_tracker.update_profile_stats(
+                                        gpm_id=pid,
+                                        followers=res.get("followers", 0),
+                                        total_views=res.get("views_7d", 0),
+                                        username=res.get("username") or "",
+                                        nickname=res.get("nickname") or "",
+                                        tiktok_uid=res.get("tiktok_uid") or res.get("user_id") or "",
+                                        sec_uid=res.get("sec_uid") or ""
+                                    )
+                                else:
+                                    conn_p = get_connection()
+                                    cur_p = conn_p.cursor()
+                                    cur_p.execute("""
+                                        UPDATE gpm_profiles SET
+                                            platform = ?,
+                                            channel_handle = COALESCE(NULLIF(?, ''), channel_handle),
+                                            fb_page_id = COALESCE(NULLIF(?, ''), fb_page_id),
+                                            tiktok_username = COALESCE(NULLIF(?, ''), tiktok_username),
+                                            tiktok_nickname = COALESCE(NULLIF(?, ''), tiktok_nickname),
+                                            tiktok_uid = COALESCE(NULLIF(?, ''), tiktok_uid),
+                                            status = 'active',
+                                            status_reason = ?
+                                        WHERE gpm_id = ?
+                                    """, (
+                                        plat,
+                                        res.get("channel_handle") or (res.get("username") if plat == 'youtube' else ''),
+                                        res.get("fb_page_id") or (res.get("username") if plat == 'facebook' else ''),
+                                        res.get("username") or "",
+                                        res.get("nickname") or "",
+                                        res.get("user_id") or "",
+                                        res.get("message") or "Đã kết nối phiên đăng nhập",
+                                        pid
+                                    ))
+                                    conn_p.commit()
+                                    conn_p.close()
+                                    try:
+                                        from backend.modules.gpm_profile_reader import sync_profile_channels
+                                        sync_profile_channels(pid)
+                                    except Exception:
+                                        pass
+                                account_health.update_health_status(pid, "active", "")
+                            return True
+                        elif res.get("source") == "no_session" or (res.get("found") and not res.get("is_logged_in")):
+                            with db_write_lock:
+                                account_health.update_health_status(pid, "unlogged", res.get("message") or "Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập")
+                    except Exception:
+                        pass
+                    return False
+
+                # Đọc cookie song song tối đa 16 luồng, ghi SQLite tuần tự qua lock tránh database is locked
+                max_workers = min(16, max(4, len(active_gpm_ids) // 15))
+                with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                    results = list(ex.map(sync_single_cookie, list(active_gpm_ids)))
+                    tt_synced = sum(1 for r in results if r)
+            except Exception as tt_err:
+                log_event("WARNING", f"Lỗi đồng bộ chi tiết TikTok từ cookie: {tt_err}")
+
+        browser_title = active_browser.upper() if active_browser != "auto" else "Trình Duyệt"
+        msg = f"Đã đồng bộ {synced} profile từ {browser_title}"
+        if tt_synced > 0:
+            msg += f" (đã cập nhật thông tin TikTok của {tt_synced} profile)"
+        if removed_count > 0:
+            msg += f" (đã gỡ bỏ {removed_count} profile không còn tồn tại)"
+        try:
+            log_event("INFO", msg)
+        except Exception:
+            pass
+        try:
+            from backend.modules.gpm_profile_reader import propagate_linked_profile_channels
+            propagate_linked_profile_channels()
+        except Exception:
+            pass
+        return {
+            "status": "success",
+            "synced": synced,
+            "tiktok_synced": tt_synced,
+            "removed": removed_count,
+            "limit_reached": False,
+            "max_allowed_profiles": 999999,
+            "message": msg
+        }
+    except Exception as e:
+        logger.exception(f"Lỗi sync_gpm_profiles: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "detail": f"Lỗi đồng bộ profiles: {str(e)}"})
 
 @app.get("/api/gpm/profiles")
 def list_gpm_profiles():
@@ -2316,6 +2352,56 @@ def trigger_process_uploads(bg_tasks: BackgroundTasks):
     bg_tasks.add_task(_run_upload)
     return {"status": "success", "message": "Đã kích hoạt kiểm tra và đăng hàng đợi upload"}
 
+@app.post("/api/pipeline/clear-queue")
+def clear_pipeline_queue():
+    """
+    Xóa toàn bộ các video đang chờ trong hàng đợi đăng (upload_tasks),
+    giải phóng và đưa các video thành phẩm trở lại trạng thái sẵn sàng để phân phối lại từ đầu.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Lấy danh sách video_id của các task đang chờ hoặc thất bại trong hàng đợi
+        cursor.execute("SELECT id, video_id, gpm_profile_id, status FROM upload_tasks WHERE status IN ('queued', 'processing', 'failed')")
+        queued_tasks = cursor.fetchall()
+        cleared_count = len(queued_tasks)
+
+        if cleared_count == 0:
+            return {"status": "success", "message": "Hàng đợi đăng bài hiện đang trống, không có video nào cần xóa.", "cleared_count": 0}
+
+        affected_video_ids = list({r["video_id"] for r in queued_tasks if r["video_id"]})
+
+        # 2. Xóa các task chưa hoàn thành khỏi upload_tasks (bảo tồn lịch sử task status = 'completed' đã đăng thành công)
+        cursor.execute("DELETE FROM upload_tasks WHERE status IN ('queued', 'processing', 'failed')")
+
+        # 3. Đưa video trở lại trạng thái 'rendered' hoặc 'downloaded' tương ứng để có thể phân phối lại
+        for v_id in affected_video_ids:
+            cursor.execute("SELECT id, download_path, rendered_path FROM videos WHERE id = ?", (v_id,))
+            v_row = cursor.fetchone()
+            if v_row:
+                ren_p = v_row["rendered_path"]
+                dl_p = v_row["download_path"]
+                if ren_p and os.path.exists(ren_p):
+                    cursor.execute("UPDATE videos SET status = 'rendered' WHERE id = ?", (v_id,))
+                elif dl_p and os.path.exists(dl_p):
+                    cursor.execute("UPDATE videos SET status = 'downloaded' WHERE id = ?", (v_id,))
+                else:
+                    cursor.execute("UPDATE videos SET status = 'draft' WHERE id = ?", (v_id,))
+
+        conn.commit()
+        log_event("WARNING", f"[PIPELINE QUEUE] Đã xóa toàn bộ hàng đợi: Giải phóng {cleared_count} tác vụ để phân phối lại từ đầu.")
+        return {
+            "status": "success",
+            "message": f"Đã xóa thành công {cleared_count} video khỏi hàng đợi đăng! Các video đã được đưa về trạng thái sẵn sàng để phân phối lại.",
+            "cleared_count": cleared_count
+        }
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Lỗi khi xóa hàng đợi upload: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi khi xóa hàng đợi: {str(e)}")
+    finally:
+        conn.close()
+
 @app.post("/api/pipeline/scan-all")
 def scan_all_channels_pipeline(bg_tasks: BackgroundTasks):
     check_active_license("Quét Toàn Bộ Kênh")
@@ -3379,12 +3465,35 @@ def test_run_campaign(campaign_id: int, bg_tasks: BackgroundTasks):
                         )
                         total_found = 1
 
+            # Tự động lấy video từ kho (Backlog Feed) bù vào hàng đợi cho kín lịch các nick
+            try:
+                from backend.modules.distributor import distributor
+                backlog_count = distributor.distribute_campaign_backlog(camp)
+                if backlog_count > 0:
+                    log_campaign_event(campaign_id, "SUCCESS", "schedule", f"Đã tự động lấy {backlog_count} video từ kho (từ mới đến cũ) bù vào hàng đợi theo đúng khung giờ.")
+            except Exception as e_backlog:
+                log_campaign_event(campaign_id, "WARNING", "schedule", f"Lỗi bù video từ kho: {str(e_backlog)}")
+
             log_campaign_event(campaign_id, "SUCCESS", "scan", f"Hoàn tất quét & xử lý chiến dịch '{camp['name']}': tổng cộng {total_found} video.")
         except Exception as e:
             log_campaign_event(campaign_id, "ERROR", "scan", f"Lỗi khi chạy quét chiến dịch: {str(e)}")
 
     bg_tasks.add_task(_do_campaign_scan)
     return {"status": "success", "message": f"Đang kích hoạt quét và kiểm tra chạy thử cho chiến dịch '{camp['name']}'..."}
+
+@app.post("/api/campaigns/{campaign_id}/distribute-backlog")
+def distribute_campaign_backlog_endpoint(campaign_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM campaigns WHERE id = ?", (campaign_id,))
+    camp = cursor.fetchone()
+    conn.close()
+    if not camp:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chiến dịch")
+    camp = dict(camp)
+    from backend.modules.distributor import distributor
+    scheduled_count = distributor.distribute_campaign_backlog(camp)
+    return {"status": "success", "scheduled_count": scheduled_count}
 
 @app.post("/api/campaigns/{campaign_id}/stop")
 def stop_campaign(campaign_id: int):
@@ -3825,7 +3934,9 @@ def list_videos(sync: bool = True):
         except Exception:
             pass
 
-    return rows
+    # Studio Biên Tập chỉ hiển thị các video còn file vật lý trên đĩa (hoặc file gốc hoặc file render)
+    valid_rows = [r for r in rows if r.get("has_raw") or r.get("has_rendered")]
+    return valid_rows
 
 @app.get("/api/video/stream/{video_id}")
 def stream_video(video_id: int, type: str = "auto", part: int = 1):
@@ -5585,34 +5696,67 @@ _browse_folder_lock = threading.Lock()
 
 @app.post("/api/utils/browse-folder")
 def browse_folder():
-    """Mở duy nhất 1 hộp thoại chọn thư mục Windows hiện đại trong <0.1s, không mở 2 modal."""
+    """Mở duy nhất 1 hộp thoại chọn thư mục Windows hiện đại (không phụ thuộc tkinter để chạy ổn định trong bản .exe)."""
     if not _browse_folder_lock.acquire(blocking=False):
         return {"status": "busy", "message": "Hộp thoại chọn thư mục đang được mở!"}
 
     selected_path = ""
     try:
-        def _ask():
-            nonlocal selected_path
+        if sys.platform == "win32":
+            import subprocess
+            ps_script = (
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "$owner = New-Object System.Windows.Forms.Form; "
+                "$owner.TopMost = $true; "
+                "$dlg = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                "$dlg.Description = 'Chon thu muc luu tru video ClipFlow'; "
+                "$dlg.UseDescriptionForTitle = $true; "
+                "$dlg.ShowNewFolderButton = $true; "
+                "if ($dlg.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { "
+                "Write-Output $dlg.SelectedPath }; "
+                "$owner.Dispose()"
+            )
             try:
-                import tkinter as tk
-                from tkinter import filedialog
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes("-topmost", True)
-                root.focus_force()
-                path = filedialog.askdirectory(
-                    title="Chọn thư mục lưu trữ video ClipFlow",
-                    mustexist=False
+                res = subprocess.run(
+                    ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=300,
+                    creationflags=subprocess.CREATE_NO_WINDOW
                 )
-                root.destroy()
-                if path:
-                    selected_path = path
-            except Exception as e:
-                logger.warning(f"Lỗi mở dialog chọn thư mục: {e}")
+                out = (res.stdout or "").strip()
+                if out:
+                    selected_path = out.splitlines()[-1].strip()
+            except Exception as ps_err:
+                logger.warning(f"Lỗi mở Windows FolderBrowserDialog: {ps_err}")
 
-        t = threading.Thread(target=_ask, daemon=True)
-        t.start()
-        t.join(timeout=300)
+        if not selected_path:
+            # Fallback sang tkinter nếu không phải Windows hoặc chạy môi trường dev có tkinter
+            def _ask_tk():
+                nonlocal selected_path
+                try:
+                    import tkinter as tk
+                    from tkinter import filedialog
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.attributes("-topmost", True)
+                    root.focus_force()
+                    path = filedialog.askdirectory(
+                        title="Chọn thư mục lưu trữ video ClipFlow",
+                        mustexist=False
+                    )
+                    root.destroy()
+                    if path:
+                        selected_path = path
+                except Exception:
+                    pass
+
+            if sys.platform != "win32":
+                t = threading.Thread(target=_ask_tk, daemon=True)
+                t.start()
+                t.join(timeout=300)
     finally:
         _browse_folder_lock.release()
 

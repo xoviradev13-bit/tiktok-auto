@@ -1087,8 +1087,16 @@ function startTopbarClock() {
 }
 
 // 1. Dashboard Stats (skips polling when window/tab is in background)
-async function loadDashboardStats() {
-    if (document.hidden) return;
+async function loadDashboardStats(btn = null) {
+    if (document.hidden && !btn) return;
+    const isManual = Boolean(btn && btn instanceof HTMLElement);
+    const origHtml = isManual ? btn.innerHTML : '';
+    if (isManual) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang tải...</span>';
+    }
     try {
         const res = await fetch('/api/dashboard/stats');
         const data = await res.json();
@@ -1163,6 +1171,19 @@ async function loadDashboardStats() {
         }
     } catch (err) {
         console.error('Error fetching stats:', err);
+        if (isManual && typeof showToast === 'function') {
+            showToast('❌ Không thể làm mới số liệu: ' + (err.message || err), 'error');
+        }
+    } finally {
+        if (isManual) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            btn.innerHTML = origHtml;
+            if (typeof showToast === 'function') {
+                showToast('✅ Đã làm mới số liệu và nhật ký hệ thống!');
+            }
+        }
     }
 }
 
@@ -3451,7 +3472,7 @@ async function syncGPMProfiles(btn) {
             if (typeof loadGpmProfiles === 'function') loadGpmProfiles();
             if (typeof loadDashboardStats === 'function') loadDashboardStats();
         } else {
-            const errMsg = data.message || 'Không thể đồng bộ profiles';
+            const errMsg = data.message || data.detail || 'Không thể đồng bộ profiles';
             showToast(errMsg, true);
             if (syncProgressContainer) syncProgressContainer.style.display = 'none';
         }

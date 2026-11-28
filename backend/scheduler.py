@@ -410,6 +410,22 @@ class BackgroundScheduler:
                         )
                         if total_new > 0:
                             log_event("INFO", f"[RSS WORKER] Đã quét chu kỳ ({self.rss_interval_minutes}p): phát hiện và tải về {total_new} video mới qua RSS.")
+                        
+                        # Tự động kiểm tra và bù video từ kho vào hàng đợi cho tất cả các chiến dịch đang bật
+                        try:
+                            from backend.database import get_connection
+                            from backend.modules.distributor import distributor
+                            c_conn = get_connection()
+                            c_cur = c_conn.cursor()
+                            c_cur.execute("SELECT * FROM campaigns WHERE is_active = 1")
+                            active_camps = [dict(r) for r in c_cur.fetchall()]
+                            c_conn.close()
+                            for camp in active_camps:
+                                sch_cnt = distributor.distribute_campaign_backlog(camp)
+                                if sch_cnt > 0:
+                                    log_event("INFO", f"[CAMPAIGN AUTO-FEED] Chiến dịch '{camp.get('name')}': Đã tự động lên lịch {sch_cnt} video từ kho lưu trữ.")
+                        except Exception as e_feed:
+                            log_event("WARNING", f"[CAMPAIGN AUTO-FEED] Lỗi khi tự động bù video từ kho: {str(e_feed)}")
                     except Exception as e:
                         log_event("WARNING", f"[RSS WORKER] Lỗi quét RSS: {str(e)}")
                 last_rss_check = time.time()

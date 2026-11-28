@@ -65,6 +65,8 @@ a = Analysis(
         'backend.modules.yt_monitor',
         'backend.modules.tiktok_tracker',
         'backend.modules.diagnostics',
+        'backend.modules.proxy_pool',
+        'backend.modules.browser_adapters',
         'pyarmor_runtime_000000',
     ],
     hookspath=[],

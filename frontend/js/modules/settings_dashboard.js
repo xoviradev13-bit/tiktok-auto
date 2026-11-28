@@ -914,10 +914,21 @@ function renderAiLogsTable() {
     }).join('');
 }
 
-async function loadAiUsageStats() {
+async function loadAiUsageStats(btn = null) {
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang tải...</span>';
+    }
+    if (btn && typeof showToast === 'function') {
+        showToast('Đang cập nhật số liệu token & chi phí AI...', 'info');
+    }
+
     try {
         const res = await fetch('/api/ai/usage');
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const stats = data.stats || {};
         const allowedAi = ['deepseek', 'gemini', 'openai'];
@@ -1008,8 +1019,21 @@ async function loadAiUsageStats() {
 
         // Bảng Nhật Ký Lượt Gọi Gần Nhất (áp dụng filter và sort)
         renderAiLogsTable();
+        if (btn && typeof showToast === 'function') {
+            showToast('✅ Đã làm mới số liệu sử dụng AI thành công!');
+        }
     } catch (e) {
         console.error('Lỗi nạp thống kê AI usage:', e);
+        if (btn && typeof showToast === 'function') {
+            showToast('Lỗi làm mới thống kê AI: ' + e.message, true);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            btn.innerHTML = origHtml;
+        }
     }
 }
 

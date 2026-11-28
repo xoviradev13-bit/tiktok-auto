@@ -34,7 +34,8 @@ CRITICAL_MODULES = [
     "tiktok_uploader.py",
     "tiktok_tracker.py",
     "engagement_bot.py",
-    "ai_video_engine.py"
+    "ai_video_engine.py",
+    "proxy_pool.py"
 ]
 
 def obfuscate_all_core_modules():

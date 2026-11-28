@@ -124,6 +124,9 @@ async function loadChannelGroups(btn) {
         syncGroupDropdowns();
 
         renderChannelGroups();
+        if (btn && typeof showToast === 'function') {
+            showToast(`✅ Đã làm mới ${cachedChannelGroups.length} nhóm kênh!`);
+        }
     } catch (err) {
         console.error('Lỗi tải nhóm kênh:', err);
         showToast('Lỗi khi tải danh sách nhóm kênh: ' + err.message, true);

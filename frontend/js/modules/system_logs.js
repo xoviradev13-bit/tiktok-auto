@@ -35,7 +35,16 @@ function switchLogsSubTab(subtab) {
     }
 }
 
-async function loadFileLogs() {
+async function loadFileLogs(btn = null) {
+    const isManual = Boolean(btn && btn instanceof HTMLElement);
+    const origHtml = isManual ? btn.innerHTML : '';
+    if (isManual) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Đang tải...</span>';
+    }
+
     const terminal = document.getElementById('fileLogTerminal');
     const metaInfo = document.getElementById('fileLogMetaInfo');
     const dateSelect = document.getElementById('fileLogDateSelect');
@@ -102,11 +111,25 @@ async function loadFileLogs() {
         if (chkScroll && chkScroll.checked) {
             terminal.scrollTop = terminal.scrollHeight;
         }
+
+        if (isManual && typeof showToast === 'function') {
+            showToast('✅ Đã làm mới nhật ký file log!');
+        }
     } catch (err) {
         terminal.innerHTML = `<div class="enhanced-log-entry lvl-error">
             <span class="log-lvl-badge">ERROR</span>
             <div class="log-msg">Không thể đọc file log từ máy chủ: ${escapeHtml(err.message)}</div>
         </div>`;
+        if (isManual && typeof showToast === 'function') {
+            showToast('Lỗi nạp file log: ' + err.message, true);
+        }
+    } finally {
+        if (isManual && btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            btn.innerHTML = origHtml;
+        }
     }
 }
 

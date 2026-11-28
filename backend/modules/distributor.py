@@ -1,3 +1,4 @@
+import os
 import json
 import random
 from datetime import datetime, timedelta
@@ -171,7 +172,8 @@ class ContentDistributor:
         part_number: int = 1,
         force_profile_id: Optional[int] = None,
         variant_tag: str = "",
-        hook_copy: str = ""
+        hook_copy: str = "",
+        target_date_only: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Gán video đã render vào hàng đợi upload của chiến dịch:
@@ -262,10 +264,11 @@ class ContentDistributor:
                     break
 
         if not chosen_profile:
-            today_prefix = datetime.now().strftime("%Y-%m-%d")
+            today_prefix = target_date_only if target_date_only else datetime.now().strftime("%Y-%m-%d")
             all_p_ids = [p["id"] for p in profiles]
             counts_map = {p["id"]: 0 for p in profiles}
             completed_map = {p["id"]: 0 for p in profiles}
+            queue_map = {p["id"]: 0 for p in profiles}
 
             from backend.database import get_linked_profile_ids
             # Đếm số lượng video hôm nay gộp theo tất cả browser profile cùng nick (GPMLogin + GenLogin)
@@ -284,75 +287,120 @@ class ContentDistributor:
                 """, (*linked, f"{today_prefix}%"))
                 completed_map[p["id"]] = cursor.fetchone()[0]
 
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM upload_tasks
+                    WHERE gpm_profile_id IN ({ph}) AND status IN ('queued', 'processing')
+                """, tuple(linked))
+                queue_map[p["id"]] = cursor.fetchone()[0]
+
+            random_delay = campaign.get("random_delay_minutes", 10)
+
             if mode == "parallel_slots":
                 # Chế độ "Lấp Đầy Khung Giờ Song Song" (Mỗi nick có Proxy IP riêng):
-                # Tìm profile có slot đăng khả dụng sớm nhất trong ngày
-                schedule_str = campaign.get("post_schedule") or "07:00, 11:45, 17:30, 20:30"
-                random_delay = campaign.get("random_delay_minutes", 10)
-                camp_min = campaign.get("min_post_interval_minutes")
-                min_interval = int(camp_min) if (camp_min and int(camp_min) > 0) else self.get_global_min_interval(cursor=cursor)
-
+                # Tìm profile có slot đăng khả dụng sớm nhất (ưu tiên hôm nay trước, rồi mới sang ngày mai)
                 candidate_eval = []
                 for p in profiles:
-                    # Bỏ qua nếu nick đã đạt daily_limit của hôm nay
-                    if completed_map.get(p["id"], 0) >= daily_limit:
-                        continue
+                    p_sched, p_limit, p_min_int = self._get_effective_schedule_params(campaign, p["id"], cursor=cursor)
                     next_time_str = self._calculate_next_post_time(
-                        schedule_str,
+                        p_sched,
                         random_delay,
                         profile_id=p["id"],
                         cursor=cursor,
-                        min_interval_minutes=min_interval,
+                        min_interval_minutes=p_min_int,
                         earliest_allowed_time=None,
-                        enforce_farm_stagger=False
+                        enforce_farm_stagger=False,
+                        daily_limit=p_limit,
+                        target_date_only=target_date_only
                     )
-                    candidate_eval.append((next_time_str, counts_map.get(p["id"], 0), p))
+                    if next_time_str:
+                        candidate_eval.append((next_time_str, counts_map.get(p["id"], 0), queue_map.get(p["id"], 0), p))
 
                 if candidate_eval:
-                    # Ưu tiên: 1) Slot sớm nhất, 2) Nick có ít clip hôm nay nhất
-                    candidate_eval.sort(key=lambda x: (x[0], x[1]))
-                    chosen_profile = candidate_eval[0][2]
+                    # Ưu tiên: 1) Slot sớm nhất (hôm nay trước, rồi sang ngày mai), 2) Nick có ít clip hôm nay nhất, 3) Ít task chờ nhất
+                    candidate_eval.sort(key=lambda x: (x[0], x[1], x[2]))
+                    chosen_profile = candidate_eval[0][3]
+                elif target_date_only:
+                    # Toàn bộ profile đã lấp đầy ngày target_date_only
+                    conn.close()
+                    return None
+            elif mode == "single_best":
+                # Chế độ "Ưu Tiên Nick Điểm Uy Tín Cao Nhất":
+                # Sắp xếp các nick theo điểm uy tín giảm dần (Followers, Views, Kiếm tiền Beta, Không flop, Trạng thái Active)
+                def get_profile_score(p):
+                    status = (p.get("status") or "active").lower()
+                    if status != "active":
+                        return -999999
+                    followers = int(p.get("followers_count") or 0)
+                    views = int(p.get("total_views") or 0)
+                    is_cp = 10000 if (p.get("creator_program") == "active" or p.get("eligible_10k")) else 0
+                    is_breakout = 5000 if p.get("is_breakout") else 0
+                    is_flop = -5000 if (p.get("flop_status") == "flopped") else 0
+                    return (followers * 2) + (views // 1000) + is_cp + is_breakout + is_flop
+
+                best_profiles = sorted(profiles, key=get_profile_score, reverse=True)
+                for p in best_profiles:
+                    p_sched, p_limit, p_min_int = self._get_effective_schedule_params(campaign, p["id"], cursor=cursor)
+                    if counts_map.get(p["id"], 0) < p_limit and completed_map.get(p["id"], 0) < p_limit:
+                        t_check = self._calculate_next_post_time(
+                            p_sched,
+                            random_delay,
+                            profile_id=p["id"],
+                            cursor=cursor,
+                            min_interval_minutes=p_min_int,
+                            daily_limit=p_limit,
+                            target_date_only=target_date_only
+                        )
+                        if t_check:
+                            chosen_profile = p
+                            break
             elif mode == "random":
-                random.shuffle(profiles)
-                for p in profiles:
-                    if completed_map.get(p["id"], 0) < daily_limit:
-                        chosen_profile = p
-                        break
+                # Chế độ "Ngẫu nhiên": chọn ngẫu nhiên nick chưa đủ bài trên ngày mục tiêu
+                random_candidates = list(profiles)
+                random.shuffle(random_candidates)
+                for p in random_candidates:
+                    p_sched, p_limit, p_min_int = self._get_effective_schedule_params(campaign, p["id"], cursor=cursor)
+                    if counts_map.get(p["id"], 0) < p_limit and completed_map.get(p["id"], 0) < p_limit:
+                        t_check = self._calculate_next_post_time(
+                            p_sched,
+                            random_delay,
+                            profile_id=p["id"],
+                            cursor=cursor,
+                            min_interval_minutes=p_min_int,
+                            daily_limit=p_limit,
+                            target_date_only=target_date_only
+                        )
+                        if t_check:
+                            chosen_profile = p
+                            break
             else:
-                # Round-Robin: sắp xếp theo profile có ít video hôm nay nhất
-                scored = sorted([(counts_map.get(p["id"], 0), p) for p in profiles], key=lambda x: x[0])
-                for cnt, p in scored:
-                    if cnt < daily_limit and completed_map.get(p["id"], 0) < daily_limit:
-                        chosen_profile = p
-                        break
+                # Chế độ "Xoay vòng (Round-Robin)": sắp xếp theo nick có ít video trên ngày này nhất, sau đó đến ít task chờ nhất
+                scored = sorted([(counts_map.get(p["id"], 0), queue_map.get(p["id"], 0), p) for p in profiles], key=lambda x: (x[0], x[1]))
+                for cnt, q_cnt, p in scored:
+                    p_sched, p_limit, p_min_int = self._get_effective_schedule_params(campaign, p["id"], cursor=cursor)
+                    if cnt < p_limit and completed_map.get(p["id"], 0) < p_limit:
+                        t_check = self._calculate_next_post_time(
+                            p_sched,
+                            random_delay,
+                            profile_id=p["id"],
+                            cursor=cursor,
+                            min_interval_minutes=p_min_int,
+                            daily_limit=p_limit,
+                            target_date_only=target_date_only
+                        )
+                        if t_check:
+                            chosen_profile = p
+                            break
 
         if not chosen_profile:
-            # Nếu tất cả đã chạm giới hạn hôm nay, gán cho profile ít việc nhất và lên lịch cho ngày mai
-            chosen_profile = profiles[0]
+            if target_date_only:
+                conn.close()
+                return None
+            # Nếu tất cả đã chạm giới hạn hôm nay, gán cho profile có ít task trong hàng đợi nhất để gối đầu sang ngày mai
+            scored_queue = sorted([(queue_map.get(p["id"], 0), p) for p in profiles], key=lambda x: x[0])
+            chosen_profile = scored_queue[0][1]
 
-        # Tính toán scheduled_time (tái sử dụng cursor tránh mở connection mới)
-        # Tính toán giai đoạn tài khoản (Warm-up Ngày 1-3 vs Tăng tốc Ngày 4-14):
-        from backend.modules.account_warmup import account_warmup
-        growth_info = account_warmup.get_profile_growth_stage(chosen_profile["id"])
-        is_warmup_mode = campaign.get("warmup_mode") == 1 or campaign.get("auto_pacing")
-
-        if is_warmup_mode and growth_info["stage"] == "warmup":
-            # Giai doan 1: Ngay 1 - 3 (Khoa chat khung gio vang de nuoi nick)
-            schedule_str = "11:30, 19:30"
-            daily_limit = min(campaign.get("daily_limit") or 2, 2)
-            min_interval = 240
-        elif is_warmup_mode and growth_info["stage"] == "acceleration":
-            # Giai doan 2: Ngay 4 - 14 (Khung gio tang toc theo chum Part)
-            schedule_str = "07:00, 11:45, 17:30, 20:30"
-            daily_limit = min(campaign.get("daily_limit") or 4, 4)
-            min_interval = 120
-        else:
-            # Giai doan 3: Sau ngay 14 (Tai khoan da on dinh truong thanh)
-            # HOAC Chien dich khong bat warmup: Su dung 100% Cau Hinh "Khung Gio Dang Bai" tren UI!
-            schedule_str = campaign.get("post_schedule") or "07:00, 11:45, 17:30, 20:30"
-            daily_limit = campaign.get("daily_limit") or self.default_daily_limit
-            camp_min = campaign.get("min_post_interval_minutes")
-            min_interval = int(camp_min) if (camp_min and int(camp_min) > 0) else self.get_global_min_interval(cursor=cursor)
+        # Tính toán scheduled_time theo giai đoạn tài khoản (Warm-up Ngày 1-3 vs Tăng tốc Ngày 4-14)
+        schedule_str, daily_limit, min_interval = self._get_effective_schedule_params(campaign, chosen_profile["id"], cursor=cursor)
 
         # Đảm bảo tuần tự Part tuyệt đối: Part 2 phải xếp lịch SAU Part 1 ít nhất min_interval
         earliest_allowed = None
@@ -377,8 +425,13 @@ class ContentDistributor:
             cursor=cursor,
             min_interval_minutes=min_interval,
             earliest_allowed_time=earliest_allowed,
-            enforce_farm_stagger=(mode != "parallel_slots")
+            enforce_farm_stagger=(mode != "parallel_slots"),
+            daily_limit=daily_limit,
+            target_date_only=target_date_only
         )
+        if not scheduled_time:
+            conn.close()
+            return None
 
         # Áp dụng Gap 2: Account Persona Styling & Hashtag Permutation
         persona_title, persona_tags = self.format_account_persona_caption(
@@ -422,6 +475,29 @@ class ContentDistributor:
             "part_number": part_number
         }
 
+    def _get_effective_schedule_params(self, campaign: Dict[str, Any], profile_id: int, cursor=None):
+        """Trả về (schedule_str, daily_limit, min_interval) hiệu lực cho profile theo giai đoạn Warm-up."""
+        from backend.modules.account_warmup import account_warmup
+        growth_info = account_warmup.get_profile_growth_stage(profile_id)
+        is_warmup_mode = campaign.get("warmup_mode") == 1 or campaign.get("auto_pacing")
+        user_schedule = (campaign.get("post_schedule") or "").strip()
+
+        if is_warmup_mode and growth_info["stage"] == "warmup":
+            schedule_str = user_schedule if user_schedule else "11:30, 19:30"
+            daily_limit = min(campaign.get("daily_limit") or 2, 2)
+            min_interval = 240
+        elif is_warmup_mode and growth_info["stage"] == "acceleration":
+            schedule_str = user_schedule if user_schedule else "07:00, 11:45, 17:30, 20:30"
+            daily_limit = min(campaign.get("daily_limit") or 4, 4)
+            min_interval = 120
+        else:
+            schedule_str = user_schedule if user_schedule else "07:00, 11:45, 17:30, 20:30"
+            daily_limit = campaign.get("daily_limit") or self.default_daily_limit
+            camp_min = campaign.get("min_post_interval_minutes")
+            min_interval = int(camp_min) if (camp_min and int(camp_min) > 0) else self.get_global_min_interval(cursor=cursor)
+
+        return schedule_str, daily_limit, min_interval
+
     def _calculate_next_post_time(
         self, 
         schedule_str: str, 
@@ -430,8 +506,10 @@ class ContentDistributor:
         cursor = None,
         min_interval_minutes: int = 60,
         earliest_allowed_time: Optional[datetime] = None,
-        enforce_farm_stagger: bool = True
-    ) -> str:
+        enforce_farm_stagger: bool = True,
+        daily_limit: int = 3,
+        target_date_only: Optional[str] = None
+    ) -> Optional[str]:
         """
         Tìm slot giờ đăng tiếp theo gần nhất từ danh sách post_schedule.
         Đảm bảo TUYỆT ĐỐI không bao giờ đăng quá gần nhau trên cùng 1 tài khoản (giãn cách tối thiểu min_interval_minutes, mặc định 60 phút).
@@ -455,8 +533,8 @@ class ContentDistributor:
         if earliest_allowed_time and earliest_allowed_time > min_valid_threshold:
             min_valid_threshold = earliest_allowed_time
 
-        # Tạo candidate slots cho 7 ngày liên tiếp để luôn có đủ slot an toàn không bị chen lấn
-        for day_offset in range(7):
+        # Tạo candidate slots cho 30 ngày liên tiếp để luôn có đủ slot an toàn (gối đầu liên tục)
+        for day_offset in range(30):
             base_date = now + timedelta(days=day_offset)
             for s in slots:
                 try:
@@ -467,8 +545,8 @@ class ContentDistributor:
                     jitter = random.randint(-abs(random_delay_minutes), abs(random_delay_minutes))
                     t_slot_jittered = t_slot + timedelta(minutes=jitter)
 
-                    # Phải sau mốc hợp lệ tối thiểu và không rơi vào khung giờ chết ban đêm (00:00 - 06:45)
-                    if t_slot_jittered >= min_valid_threshold and not (0 <= t_slot_jittered.hour < 6):
+                    # Phải sau mốc hợp lệ tối thiểu (giữ nguyên mọi khung giờ do người dùng tự cài đặt, kể cả 01:00)
+                    if t_slot_jittered >= min_valid_threshold:
                         candidates.append(t_slot_jittered)
                 except Exception:
                     pass
@@ -478,7 +556,7 @@ class ContentDistributor:
         # Kiểm tra lịch sử và lịch trình của profile để tránh trùng hoặc quá gần giờ đăng
         existing_times = []
         farm_scheduled_times = []
-        min_farm_stagger_seconds = 12 * 60  # Giãn cách tối thiểu 12 phút giữa 2 tài khoản bất kỳ trong farm
+        min_farm_stagger_seconds = 2 * 60  # Giãn cách 2 phút giữa các tài khoản để tránh mở trình duyệt cùng lúc gây nghẽn CPU
 
         if profile_id:
             local_conn = None
@@ -544,19 +622,38 @@ class ContentDistributor:
                     except Exception:
                         pass
 
-        # Tìm slot đầu tiên thỏa mãn:
-        # a) Cách xa bài của chính tài khoản này >= min_interval_seconds
-        # b) Nếu enforce_farm_stagger: Cách xa bài của các tài khoản khác trong Farm >= min_farm_stagger_seconds
-        for cand in candidates:
-            account_safe = not any(abs((cand - ext).total_seconds()) < min_interval_seconds for ext in existing_times)
-            farm_safe = not enforce_farm_stagger or not any(abs((cand - fext).total_seconds()) < min_farm_stagger_seconds for fext in farm_scheduled_times)
-            if account_safe and farm_safe:
-                return cand.strftime("%Y-%m-%d %H:%M:%S")
+        # Duyệt từng ngày một (Hôm nay -> Ngày mai -> Ngày mốt...)
+        # Đảm bảo nguyên tắc TUYỆT ĐỐI: Lấp đầy hôm nay cho tất cả các nick trước, khi hôm nay kín mới gối sang ngày mai
+        for day_offset in range(30):
+            day_candidates = [c for c in candidates if (c.date() - now.date()).days == day_offset]
+            if not day_candidates:
+                continue
 
-        # Fallback: Nếu lịch dày đặc, chọn slot thỏa mãn giãn cách của chính tài khoản này
-        for cand in candidates:
-            if not any(abs((cand - ext).total_seconds()) < min_interval_seconds for ext in existing_times):
-                return cand.strftime("%Y-%m-%d %H:%M:%S")
+            cand_date_str = day_candidates[0].strftime("%Y-%m-%d")
+            if target_date_only and cand_date_str != target_date_only:
+                continue
+
+            day_count = sum(1 for ext in existing_times if ext.strftime("%Y-%m-%d") == cand_date_str)
+            if daily_limit and day_count >= daily_limit:
+                continue
+
+            # Bước 1: Tìm slot trên ngày này vừa an toàn tài khoản vừa giãn cách farm (tránh mở trình duyệt cùng phút)
+            for cand in day_candidates:
+                account_safe = not any(abs((cand - ext).total_seconds()) < min_interval_seconds for ext in existing_times)
+                farm_safe = not enforce_farm_stagger or not any(abs((cand - fext).total_seconds()) < min_farm_stagger_seconds for fext in farm_scheduled_times)
+                if account_safe and farm_safe:
+                    return cand.strftime("%Y-%m-%d %H:%M:%S")
+
+            # Bước 2: Nếu ngày này nick chưa đủ daily_limit nhưng farm đông:
+            # Ưu tiên LẤP ĐẦY NGÀY NÀY (thỏa mãn giãn cách tài khoản) thay vì bị đẩy sang ngày mai
+            for cand in day_candidates:
+                account_safe = not any(abs((cand - ext).total_seconds()) < min_interval_seconds for ext in existing_times)
+                if account_safe:
+                    return cand.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Nếu chỉ định target_date_only mà ngày đó đã đầy/hết slot hợp lệ:
+        if target_date_only:
+            return None
 
         # Fallback an toàn: Lấy mốc thời gian lớn nhất, cộng thêm min_interval_minutes
         ref_times = [now] + existing_times
@@ -565,5 +662,172 @@ class ContentDistributor:
         reference_time = max(ref_times)
         safe_fallback = reference_time + timedelta(minutes=min_interval_minutes)
         return safe_fallback.strftime("%Y-%m-%d %H:%M:%S")
+
+    def distribute_campaign_backlog(
+        self,
+        campaign: Dict[str, Any],
+        max_items: Optional[int] = None
+    ) -> int:
+        """
+        Tự động lấy video đã render có sẵn trong kho (Backlog Feed) để bù vào hàng đợi đăng:
+        1. Lấy đúng các kênh nguồn thuộc chiến dịch (campaign.channel_ids).
+        2. Sắp xếp từ MỚI ĐẾN CŨ (v.id DESC, v.created_at DESC).
+        3. Kiểm tra file rendered_path trên đĩa, nếu mất file thì reset status='draft'.
+        4. Bỏ qua video đã có task trong upload_tasks (chưa đăng hoặc đã đăng).
+        5. Lấp đầy khung giờ HÔM NAY trước cho tất cả các profile của chiến dịch.
+           Khi hôm nay đã đầy mới gối đầu sang ngày mai, ngày mốt...
+        6. Đảm bảo mỗi video chỉ gán cho 1 nick duy nhất, không trùng lặp.
+        """
+        camp_id = campaign.get("id")
+        if not camp_id:
+            return 0
+
+        if campaign.get("auto_upload") == 0:
+            return 0
+
+        # Lấy danh sách channel_ids của chiến dịch
+        ch_ids = []
+        try:
+            raw_ch = campaign.get("channel_ids")
+            if isinstance(raw_ch, list):
+                ch_ids = [str(c).strip() for c in raw_ch if str(c).strip()]
+            elif isinstance(raw_ch, str):
+                ch_ids = json.loads(raw_ch)
+        except Exception:
+            pass
+
+        if not ch_ids and campaign.get("channel_id"):
+            ch_ids = [str(campaign.get("channel_id")).strip()]
+
+        if not ch_ids:
+            return 0
+
+        backlog_videos = []
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            ph = ",".join("?" for _ in ch_ids)
+            query = f"""
+                SELECT v.id, v.title, v.rendered_path, v.ai_tags, v.created_at, v.channel_id
+                FROM videos v
+                WHERE v.channel_id IN ({ph})
+                  AND v.status = 'rendered'
+                  AND v.rendered_path IS NOT NULL AND v.rendered_path != ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM upload_tasks ut
+                      WHERE ut.video_id = v.id AND ut.status IN ('queued', 'processing', 'completed')
+                  )
+                ORDER BY v.id DESC
+            """
+            cursor.execute(query, tuple(ch_ids))
+            backlog_videos = [dict(r) for r in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        if not backlog_videos:
+            return 0
+
+        # Xác định ngày mục tiêu cần lấp đầy:
+        # Tìm ngày sớm nhất còn slot trống để lấp đầy (Hôm nay -> nếu hôm nay đã kín thì Ngày mai...)
+        # Đảm bảo CHỈ LẤP ĐẦY ĐÚNG 1 NGÀY NÀY, các ngày sau để trống hoàn toàn để ưu tiên cho video mới tải về
+        now = datetime.now()
+        clean_gpm_ids = []
+        gpm_ids = []
+        try:
+            raw_gpm = campaign.get("gpm_profile_ids")
+            if isinstance(raw_gpm, list): gpm_ids = raw_gpm
+            elif isinstance(raw_gpm, str) and raw_gpm.strip(): gpm_ids = json.loads(raw_gpm)
+        except Exception:
+            pass
+        if not gpm_ids and campaign.get("gpm_profile_id"):
+            gpm_ids = [campaign["gpm_profile_id"]]
+        
+        for gid in (gpm_ids or []):
+            try: clean_gpm_ids.append(int(gid))
+            except Exception: pass
+
+        target_date = None
+        random_delay = campaign.get("random_delay_minutes", 10)
+        for day_offset in range(30):
+            check_date = (now + timedelta(days=day_offset)).strftime("%Y-%m-%d")
+            for gid in clean_gpm_ids:
+                p_sched, p_limit, p_min_int = self._get_effective_schedule_params(campaign, gid)
+                slot_t = self._calculate_next_post_time(
+                    p_sched,
+                    random_delay,
+                    profile_id=gid,
+                    min_interval_minutes=p_min_int,
+                    enforce_farm_stagger=False,
+                    daily_limit=p_limit,
+                    target_date_only=check_date
+                )
+                if slot_t and slot_t.startswith(check_date):
+                    target_date = check_date
+                    break
+            if target_date:
+                break
+
+        if not target_date:
+            # Tất cả các ngày trong 30 ngày tới đều đã kín lịch
+            return 0
+
+        scheduled_count = 0
+        missing_file_ids = []
+        limit = max_items if (max_items and max_items > 0) else len(backlog_videos)
+
+        try:
+            for row in backlog_videos:
+                if scheduled_count >= limit:
+                    break
+
+                vid_id = row["id"]
+                r_path = row["rendered_path"]
+                title = row["title"] or f"Video #{vid_id}"
+                tags = row["ai_tags"] or ""
+
+                # Kiểm tra file thực tế trên đĩa
+                if not r_path or not os.path.exists(r_path):
+                    missing_file_ids.append(vid_id)
+                    continue
+
+                # Lên lịch phân phối cho video thành phẩm (CHỈ lấp đầy ngày target_date)
+                res = self.schedule_campaign_upload(
+                    video_id=vid_id,
+                    campaign=campaign,
+                    title=title,
+                    tags=tags,
+                    video_path=r_path,
+                    part_number=1,
+                    target_date_only=target_date
+                )
+
+                if res and res.get("task_id"):
+                    scheduled_count += 1
+                else:
+                    # Ngày mục tiêu (target_date) đã kín hoàn toàn cho tất cả các nick!
+                    # Dừng lại ngay, TUYỆT ĐỐI không gối sang ngày sau để dành ngày sau cho video mới
+                    break
+
+            if missing_file_ids:
+                m_conn = get_connection()
+                try:
+                    m_cur = m_conn.cursor()
+                    m_ph = ",".join("?" for _ in missing_file_ids)
+                    m_cur.execute(f"UPDATE videos SET status = 'draft' WHERE id IN ({m_ph})", tuple(missing_file_ids))
+                    m_conn.commit()
+                finally:
+                    m_conn.close()
+
+            if scheduled_count > 0:
+                log_campaign_event(
+                    camp_id,
+                    "SUCCESS",
+                    "distribute",
+                    f"⚡ [Bù Video Từ Kho] Đã tự động bốc {scheduled_count} video thành phẩm có sẵn trong kho (từ mới đến cũ) lấp kín các khung giờ ngày {target_date}. Ngày tiếp theo được để trống để ưu tiên video mới tải về!"
+                )
+        except Exception as e:
+            log_campaign_event(camp_id, "ERROR", "distribute", f"Lỗi khi bốc video từ kho bù vào hàng đợi: {str(e)}")
+
+        return scheduled_count
 
 distributor = ContentDistributor()

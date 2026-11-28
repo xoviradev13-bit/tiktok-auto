@@ -28,7 +28,7 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                             <div id="fileLogActionButtons" style="display: inline-flex; gap: 8px; align-items: center;">
-                                <button class="btn btn-sm btn-secondary" onclick="loadFileLogs()"><i
+                                <button class="btn btn-sm btn-secondary" onclick="loadFileLogs(this)"><i
                                         class="fa-solid fa-rotate"></i> Làm Mới</button>
                                 <button class="btn btn-sm btn-primary has-tooltip" onclick="downloadLogFile()"
                                     data-tooltip="Chọn thư mục và lưu file log (.log) ra máy tính">
@@ -111,7 +111,7 @@
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <span style="font-size: 13px; color: var(--text-muted);">20 sự kiện hệ thống gần nhất được
                                 lưu vào bảng SQLite system_logs</span>
-                            <button class="btn btn-sm btn-secondary" onclick="loadDashboardStats()"><i
+                            <button class="btn btn-sm btn-secondary" onclick="loadDashboardStats(this)"><i
                                     class="fa-solid fa-rotate"></i> Làm mới</button>
                         </div>
                         <div class="log-terminal" id="logTerminal" style="height: 480px; overflow-y: auto;">

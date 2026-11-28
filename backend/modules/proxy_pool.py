@@ -579,15 +579,21 @@ class ProxyPoolManager:
         assigned_count = 0
         gpm_synced_count = 0
 
+        sync_tasks: List[Tuple[str, str]] = []
+
         if mode == "direct":
             for gid in gpm_ids:
                 cur.execute("UPDATE gpm_profiles SET raw_proxy = '', country = 'NONE' WHERE gpm_id = ?", (gid,))
                 assigned_count += 1
-                if gpm_client.update_profile_proxy(gid, ""):
-                    gpm_synced_count += 1
+                sync_tasks.append((gid, ""))
             conn.commit()
             conn.close()
-            log_event("INFO", f"🌐 Đã gỡ bỏ Proxy hàng loạt cho {assigned_count} profile.")
+
+            for gid, p_val in sync_tasks:
+                if gpm_client.update_profile_proxy(gid, p_val):
+                    gpm_synced_count += 1
+
+            log_event("INFO", f"🌐 Đã gỡ bỏ Proxy hàng loạt cho {assigned_count} profile (GPM Synced: {gpm_synced_count}).")
             return {
                 "success": True,
                 "mode": mode,
@@ -608,11 +614,15 @@ class ProxyPoolManager:
             for gid in gpm_ids:
                 cur.execute("UPDATE gpm_profiles SET raw_proxy = ?, country = ? WHERE gpm_id = ?", (p_str, cntry, gid))
                 assigned_count += 1
-                if gpm_client.update_profile_proxy(gid, p_str):
-                    gpm_synced_count += 1
+                sync_tasks.append((gid, p_str))
             conn.commit()
             conn.close()
-            log_event("INFO", f"⚡ Đã gán IP {item.key} ({cntry}) cho {assigned_count} profile.")
+
+            for gid, p_val in sync_tasks:
+                if gpm_client.update_profile_proxy(gid, p_val):
+                    gpm_synced_count += 1
+
+            log_event("INFO", f"⚡ Đã gán IP {item.key} ({cntry}) cho {assigned_count} profile (GPM Synced: {gpm_synced_count}).")
             return {
                 "success": True,
                 "mode": mode,
@@ -647,15 +657,19 @@ class ProxyPoolManager:
         pool_len = len(pool)
         for idx, gid in enumerate(gpm_ids):
             item = pool[idx % pool_len]
-            p_url = item.raw_proxy_url
+            p_str = item.standard_format
             cntry = item.country
-            cur.execute("UPDATE gpm_profiles SET raw_proxy = ?, country = ? WHERE gpm_id = ?", (p_url, cntry, gid))
+            cur.execute("UPDATE gpm_profiles SET raw_proxy = ?, country = ? WHERE gpm_id = ?", (p_str, cntry, gid))
             assigned_count += 1
-            if gpm_client.update_profile_proxy(gid, p_url):
-                gpm_synced_count += 1
+            sync_tasks.append((gid, p_str))
 
         conn.commit()
         conn.close()
+
+        for gid, p_val in sync_tasks:
+            if gpm_client.update_profile_proxy(gid, p_val):
+                gpm_synced_count += 1
+
         log_event("INFO", f"⚖️ Đã phân bổ đều {pool_len} IP cho {assigned_count} profile (GPM Synced: {gpm_synced_count}).")
         return {
             "success": True,

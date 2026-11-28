@@ -548,24 +548,65 @@ function copyVideoFilePath(path) {
 }
 
 // 5. Quản Lý Danh Sách Video (Video Library Table)
-async function loadVideoLibraryTable() {
+async function loadVideoLibraryTable(isManual = false) {
     const tbody = document.getElementById('videoLibraryTableBody');
-    if (!tbody) return;
+    const btn = document.getElementById('btnRefreshVideoLib') || document.querySelector('button[onclick*="loadVideoLibraryTable"]');
+    const icon = document.getElementById('iconRefreshVideoLib') || (btn ? btn.querySelector('i.fa-rotate') : null);
+
+    if (isManual) {
+        if (btn) {
+            btn.disabled = true;
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.7';
+        }
+        if (icon) {
+            icon.classList.add('fa-spin');
+        }
+        if (typeof showToast === 'function') {
+            showToast('Đang quét và đồng bộ kho video trên ổ cứng...', 'info');
+        }
+    }
+
+    if (tbody && (!allLibraryVideos || allLibraryVideos.length === 0 || isManual)) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:32px; color:var(--text-muted); font-size:12.5px;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:8px; color:var(--accent-cyan); font-size:15px;"></i> Đang đồng bộ và quét kho video trên ổ cứng...</td></tr>`;
+    }
 
     try {
         const res = await fetch('/api/v2/videos/library?limit=300');
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation me-1"></i> Lỗi tải danh sách video: ${escapeHtml(errData.detail || res.statusText)}</td></tr>`;
+            const errMsg = errData.detail || res.statusText || 'Lỗi không xác định';
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-triangle-exclamation me-1"></i> Lỗi tải danh sách video: ${escapeHtml(errMsg)}</td></tr>`;
+            }
+            if (isManual && typeof showToast === 'function') {
+                showToast('Lỗi làm mới thư viện: ' + errMsg, true);
+            }
             return;
         }
         const data = await res.json();
         allLibraryVideos = data.videos || [];
         filterVideoLibrary();
+
+        if (isManual && typeof showToast === 'function') {
+            showToast(`✅ Đã làm mới thư viện: ${allLibraryVideos.length} video sẵn sàng!`);
+        }
     } catch (e) {
         console.error('Lỗi tải video library:', e);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-circle-exclamation me-1"></i> Lỗi kết nối: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444;"><i class="fa-solid fa-circle-exclamation me-1"></i> Lỗi kết nối máy chủ: ${escapeHtml(e.message)}</td></tr>`;
+        }
+        if (isManual && typeof showToast === 'function') {
+            showToast('Lỗi kết nối máy chủ: ' + e.message, true);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+        }
+        if (icon) {
+            setTimeout(() => icon.classList.remove('fa-spin'), 400);
         }
     }
 }
@@ -772,10 +813,25 @@ async function deleteVideoLibraryItem(id) {
     try {
         const res = await fetch(`/api/v2/videos/${id}`, { method: 'DELETE' });
         if (res.ok) {
+            if (typeof showToast === 'function') {
+                showToast(`Đã xóa video #${id} khỏi hệ thống!`);
+            }
             loadVideoLibraryTable();
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.detail || 'Không thể xóa video';
+            if (typeof showToast === 'function') {
+                showToast('Lỗi xóa video: ' + errMsg, true);
+            } else {
+                alert('Lỗi xóa video: ' + errMsg);
+            }
         }
     } catch (e) {
-        alert('Lỗi xóa video: ' + e.message);
+        if (typeof showToast === 'function') {
+            showToast('Lỗi kết nối khi xóa: ' + e.message, true);
+        } else {
+            alert('Lỗi xóa video: ' + e.message);
+        }
     }
 }
 

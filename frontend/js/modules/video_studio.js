@@ -21,9 +21,15 @@ async function loadStudioVideos() {
         document.getElementById('btnFilterRenderedVideos')?.classList.toggle('active', currentStudioFilter === 'rendered');
         renderStudioVideoList();
 
-        // If no active video selected, pick the first video
-        if (!activeStudioVideo && videos.length > 0) {
+        // If active video no longer exists in list, pick the first video or clear
+        const activeStillExists = activeStudioVideo && videos.some(x => x.id === activeStudioVideo.id || (x.yt_video_id && x.yt_video_id === activeStudioVideo.yt_video_id));
+        if ((!activeStudioVideo || !activeStillExists) && videos.length > 0) {
             selectStudioVideo(videos[0].yt_video_id || videos[0].id);
+        } else if (videos.length === 0) {
+            activeStudioVideo = null;
+            const player = document.getElementById('studioVideoPlayer');
+            const source = document.getElementById('studioVideoSource');
+            if (player && source) { source.src = ''; player.load(); }
         }
     } catch (err) {
         console.error('Lỗi nạp video studio:', err);
@@ -116,7 +122,8 @@ function renderStudioVideoList() {
     const badge = document.getElementById('studioVideoCountBadge');
     if (!listEl) return;
 
-    let filtered = cachedVideos;
+    // Chỉ hiển thị các video còn file vật lý trên đĩa (hoặc file gốc hoặc file render)
+    let filtered = cachedVideos.filter(v => v.has_raw || v.has_rendered || (v.rendered_parts && v.rendered_parts.length > 0));
     // 1. Lọc theo quy trình: Chưa Render vs Đã Render 9:16
     if (currentStudioFilter === 'unrendered') {
         filtered = filtered.filter(v => !v.has_rendered && v.status !== 'rendered' && (!v.rendered_parts || v.rendered_parts.length === 0));
